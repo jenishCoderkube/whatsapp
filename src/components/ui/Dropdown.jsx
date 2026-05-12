@@ -38,7 +38,7 @@ export function Dropdown({ trigger, items = [], align = "right", className }) {
             exit={{ opacity: 0, scale: 0.95, y: -5 }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             className={cn(
-              "absolute z-50 mt-2 w-48 rounded-sm bg-white dark:bg-[#233138] py-2 shadow-lg ring-1 ring-black/5 dark:ring-white/5",
+              "absolute z-50 mt-2 w-48 rounded-sm bg-wa-modal py-2 shadow-lg border border-wa-border transition-colors",
               align === "right" ? "right-0" : "left-0",
               className
             )}
@@ -52,7 +52,7 @@ export function Dropdown({ trigger, items = [], align = "right", className }) {
                   if (item.onClick) item.onClick();
                 }}
                 className={cn(
-                  "block w-full px-4 py-2 text-left text-sm text-[#3b4a54] dark:text-[#d1d7db] hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors",
+                  "block w-full px-4 py-2 text-left text-sm text-wa-text hover:bg-wa-hover transition-colors",
                   item.danger && "text-red-500 hover:text-red-600"
                 )}
               >

@@ -13,7 +13,7 @@ export function Loader({ className, size = "md", fullScreen = false }) {
   const spinner = (
     <div
       className={cn(
-        "animate-spin rounded-full border-[#00a884] border-t-transparent",
+        "animate-spin rounded-full border-wa-primary border-t-transparent",
         sizes[size],
         className
       )}
@@ -22,9 +22,9 @@ export function Loader({ className, size = "md", fullScreen = false }) {
 
   if (fullScreen) {
     return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#f0f2f5] dark:bg-[#111b21]">
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-wa-header transition-colors">
         {spinner}
-        <div className="mt-4 text-sm font-medium text-[#667781] dark:text-[#8696a0]">
+        <div className="mt-4 text-sm font-medium text-wa-muted">
           WhatsApp Web Client Initializing...
         </div>
       </div>

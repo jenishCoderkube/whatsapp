@@ -1,5 +1,6 @@
 import React from "react";
 import ReduxProvider from "../redux/ReduxProvider";
+import { ThemeProvider } from "../components/ui/ThemeProvider";
 import "./globals.css";
 
 export const metadata = {
@@ -10,8 +11,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="h-full w-full overflow-hidden bg-[#e3e6e8] dark:bg-[#0c1317] font-sans text-[#111b21] dark:text-[#e9edef] select-none" suppressHydrationWarning>
-        <ReduxProvider>{children}</ReduxProvider>
+      <body className="h-full w-full overflow-hidden bg-wa-app-bg text-wa-text font-sans select-none transition-colors duration-200" suppressHydrationWarning>
+        <ReduxProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </ReduxProvider>
       </body>
     </html>
   );

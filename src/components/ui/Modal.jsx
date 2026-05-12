@@ -42,15 +42,15 @@ export function Modal({ isOpen, onClose, title, children, className }) {
             exit={{ scale: 0.95, opacity: 0, y: 10 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
             className={cn(
-              "relative z-50 w-full max-w-md rounded-md bg-white dark:bg-[#202c33] p-6 shadow-xl ring-1 ring-black/5 dark:ring-white/5",
+              "relative z-50 w-full max-w-md rounded-md bg-wa-modal p-6 shadow-xl border border-wa-border transition-colors duration-200",
               className
             )}
           >
-            <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#222d34] pb-3 mb-4">
-              <h3 className="text-base font-medium text-[#111b21] dark:text-[#e9edef]">{title}</h3>
+            <div className="flex items-center justify-between border-b border-wa-border pb-3 mb-4">
+              <h3 className="text-base font-medium text-wa-text">{title}</h3>
               <button
                 onClick={onClose}
-                className="rounded-full p-1 text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition-colors"
+                className="rounded-full p-1 text-wa-muted hover:bg-wa-hover transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>

@@ -18,7 +18,7 @@ export const Avatar = React.forwardRef(
         <div
           ref={ref}
           className={cn(
-            "relative flex items-center justify-center rounded-full overflow-hidden bg-[#dfe5e7] dark:bg-[#667781] text-white font-semibold",
+            "relative flex items-center justify-center rounded-full overflow-hidden bg-wa-muted text-white font-semibold transition-colors",
             sizes[size],
             className
           )}
@@ -36,7 +36,7 @@ export const Avatar = React.forwardRef(
           {!src ? <span className="absolute">{fallback}</span> : null}
         </div>
         {isOnline ? (
-          <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-[#00a884] ring-2 ring-white dark:ring-[#111b21]" />
+          <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-wa-online ring-2 ring-wa-sidebar transition-colors" />
         ) : null}
       </div>
     );

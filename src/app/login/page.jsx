@@ -49,26 +49,26 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[#f0f2f5] dark:bg-[#111b21] selection:bg-[#00a884]/20 select-none p-4 overflow-hidden relative">
+    <div className="flex h-screen w-full items-center justify-center bg-wa-sidebar selection:bg-wa-primary/20 select-none p-4 overflow-hidden relative transition-colors duration-200">
       {/* Top premium green background header strip mimicking desktop web onboarding */}
-      <div className="absolute top-0 left-0 right-0 h-[222px] bg-[#00a884] hidden md:block z-0" />
+      <div className="absolute top-0 left-0 right-0 h-[222px] bg-wa-primary hidden md:block z-0" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-[#202c33] shadow-2xl border border-black/5 dark:border-white/5 relative z-10 flex flex-col max-h-[90vh] overflow-hidden"
+        className="w-full max-w-md rounded-lg bg-wa-modal shadow-2xl border border-wa-border relative z-10 flex flex-col max-h-[90vh] overflow-hidden transition-colors duration-200"
       >
         <div className="p-6 sm:p-8 overflow-y-auto flex-1">
           {/* Brand presentation */}
           <div className="flex flex-col items-center mb-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00a884] text-white shadow-md mb-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-wa-primary text-white shadow-md mb-3">
               <MessageSquare className="h-7 w-7" />
             </div>
-            <h2 className="text-xl font-medium text-[#111b21] dark:text-[#e9edef]">
+            <h2 className="text-xl font-medium text-wa-text">
               Log in to WhatsApp Web
             </h2>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
+            <p className="text-xs text-wa-muted mt-1">
               Enter your credentials to access your linked conversations
             </p>
           </div>
@@ -88,7 +88,7 @@ export default function LoginPage() {
           {/* Form engine */}
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#54656f] dark:text-[#aebac1] mb-1.5">
+              <label className="block text-xs font-medium text-wa-muted mb-1.5">
                 Email Address
               </label>
               <Input
@@ -102,7 +102,7 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-[#54656f] dark:text-[#aebac1]">
+                <label className="block text-xs font-medium text-wa-muted">
                   Password
                 </label>
                 <Link
@@ -110,7 +110,7 @@ export default function LoginPage() {
                   onClick={() =>
                     alert("Simulated Password Reset sent to email.")
                   }
-                  className="text-xs text-[#00a884] hover:underline"
+                  className="text-xs text-wa-primary hover:underline"
                 >
                   Forgot password?
                 </Link>
@@ -128,7 +128,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21]"
+                  className="absolute right-3 text-wa-muted hover:text-wa-text"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -145,9 +145,9 @@ export default function LoginPage() {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#00a884]"
+                  className="h-4 w-4 rounded accent-wa-primary"
                 />
-                <span className="text-xs text-[#54656f] dark:text-[#aebac1]">
+                <span className="text-xs text-wa-muted">
                   Remember me
                 </span>
               </label>
@@ -164,11 +164,11 @@ export default function LoginPage() {
           </form>
 
           {/* Route transitions redirection */}
-          <div className="mt-6 pt-4 border-t border-[#e9edef] dark:border-[#222d34] text-center text-xs text-[#54656f] dark:text-[#aebac1]">
+          <div className="mt-6 pt-4 border-t border-wa-border text-center text-xs text-wa-muted">
             Don't have an account?{" "}
             <Link
               href="/register"
-              className="text-[#00a884] font-medium hover:underline"
+              className="text-wa-primary font-medium hover:underline"
             >
               Register here
             </Link>

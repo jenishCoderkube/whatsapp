@@ -99,26 +99,26 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[#f0f2f5] dark:bg-[#111b21] selection:bg-[#00a884]/20 select-none p-4 overflow-hidden relative">
+    <div className="flex h-screen w-full items-center justify-center bg-wa-sidebar selection:bg-wa-primary/20 select-none p-4 overflow-hidden relative transition-colors duration-200">
       {/* Top green background header strip */}
-      <div className="absolute top-0 left-0 right-0 h-[222px] bg-[#00a884] hidden md:block z-0" />
+      <div className="absolute top-0 left-0 right-0 h-[222px] bg-wa-primary hidden md:block z-0" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-[#202c33] shadow-2xl border border-black/5 dark:border-white/5 relative z-10 flex flex-col max-h-[90vh] overflow-hidden"
+        className="w-full max-w-md rounded-lg bg-wa-modal shadow-2xl border border-wa-border relative z-10 flex flex-col max-h-[90vh] overflow-hidden transition-colors duration-200"
       >
         <div className="p-6 sm:p-8 overflow-y-auto flex-1">
           {/* Header Title section */}
           <div className="flex flex-col items-center mb-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00a884] text-white shadow-md mb-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-wa-primary text-white shadow-md mb-3">
               <MessageSquare className="h-7 w-7" />
             </div>
-            <h2 className="text-xl font-medium text-[#111b21] dark:text-[#e9edef]">
+            <h2 className="text-xl font-medium text-wa-text">
               Create an Account
             </h2>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
+            <p className="text-xs text-wa-muted mt-1">
               Join WhatsApp Web to instantly message and link contacts
             </p>
           </div>
@@ -156,7 +156,7 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={handleSimulatedUpload}
-                className="text-[11px] text-[#00a884] hover:underline mt-1.5"
+                className="text-[11px] text-wa-primary hover:underline mt-1.5"
               >
                 {avatarPreview
                   ? "Change profile photo"
@@ -165,7 +165,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#54656f] dark:text-[#aebac1] mb-1.5">
+              <label className="block text-xs font-medium text-wa-muted mb-1.5">
                 Full Name
               </label>
               <Input
@@ -178,7 +178,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#54656f] dark:text-[#aebac1] mb-1.5">
+              <label className="block text-xs font-medium text-wa-muted mb-1.5">
                 Email Address
               </label>
               <Input
@@ -191,7 +191,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#54656f] dark:text-[#aebac1] mb-1.5">
+              <label className="block text-xs font-medium text-wa-muted mb-1.5">
                 Password
               </label>
               <div className="relative flex items-center">
@@ -206,7 +206,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21]"
+                  className="absolute right-3 text-wa-muted hover:text-wa-text"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -230,13 +230,13 @@ export default function RegisterPage() {
                               ? "bg-red-500"
                               : strengthScore === 2
                                 ? "bg-amber-500"
-                                : "bg-[#00a884]"
+                                : "bg-wa-primary"
                             : "bg-transparent",
                         )}
                       />
                     ))}
                   </div>
-                  <span className="text-[10px] text-[#667781] dark:text-[#8696a0] mt-1 block">
+                  <span className="text-[10px] text-wa-muted mt-1 block">
                     {strengthScore <= 1
                       ? "Weak password"
                       : strengthScore === 2
@@ -248,7 +248,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#54656f] dark:text-[#aebac1] mb-1.5">
+              <label className="block text-xs font-medium text-wa-muted mb-1.5">
                 Confirm Password
               </label>
               <Input
@@ -267,14 +267,14 @@ export default function RegisterPage() {
                   type="checkbox"
                   checked={termsAccepted}
                   onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded accent-[#00a884] shrink-0"
+                  className="mt-0.5 h-4 w-4 rounded accent-wa-primary shrink-0"
                 />
-                <span className="text-[#54656f] dark:text-[#aebac1] leading-tight">
+                <span className="text-wa-muted leading-tight">
                   I agree to the WhatsApp Web Clone{" "}
                   <Link
                     href="/register"
                     onClick={() => alert("Terms of Service summary.")}
-                    className="text-[#00a884] hover:underline"
+                    className="text-wa-primary hover:underline"
                   >
                     Terms of Service
                   </Link>{" "}
@@ -294,11 +294,11 @@ export default function RegisterPage() {
           </form>
 
           {/* Login navigation router */}
-          <div className="mt-6 pt-4 border-t border-[#e9edef] dark:border-[#222d34] text-center text-xs text-[#54656f] dark:text-[#aebac1]">
+          <div className="mt-6 pt-4 border-t border-wa-border text-center text-xs text-wa-muted">
             Already have an account?{" "}
             <Link
               href="/login"
-              className="text-[#00a884] font-medium hover:underline"
+              className="text-wa-primary font-medium hover:underline"
             >
               Log in here
             </Link>

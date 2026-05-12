@@ -9,9 +9,9 @@ export const Button = React.forwardRef(
       "inline-flex items-center justify-center rounded-sm font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:pointer-events-none select-none";
 
     const variants = {
-      default: "bg-[#00a884] text-white hover:bg-[#008f72] shadow-sm",
-      secondary: "bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] hover:bg-[#e4e7eb] dark:hover:bg-[#2a3942]",
-      ghost: "hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] text-[#54656f] dark:text-[#aebac1]",
+      default: "bg-wa-primary text-white hover:bg-wa-primary-hover shadow-sm",
+      secondary: "bg-wa-header text-wa-text hover:bg-wa-active",
+      ghost: "hover:bg-wa-hover text-wa-muted hover:text-wa-text",
       danger: "bg-red-600 text-white hover:bg-red-700",
     };
 

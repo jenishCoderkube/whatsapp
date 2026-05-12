@@ -39,13 +39,13 @@ export default function ChatPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="fixed inset-0 z-0 flex overflow-hidden bg-[#efeae2] dark:bg-[#0b141a]">
+    <div className="fixed inset-0 z-0 flex overflow-hidden bg-wa-bg transition-colors duration-200">
       {/* Main App Desktop Boundary mimicking actual desktop clients */}
-      <main className="relative flex h-full w-full max-w-[1600px] mx-auto overflow-hidden z-10 bg-[#efeae2] dark:bg-[#0b141a]">
+      <main className="relative flex h-full w-full max-w-[1600px] mx-auto overflow-hidden z-10 bg-wa-bg">
         {/* Left Sidebar column: visible on desktop, conditionally managed on mobile screens */}
         <div
           className={cn(
-            "h-full w-full md:w-[380px] lg:w-[420px] shrink-0 border-r border-[#e9edef] dark:border-[#222d34] bg-white dark:bg-[#111b21]",
+            "h-full w-full md:w-[380px] lg:w-[420px] shrink-0 border-r border-wa-border bg-wa-sidebar transition-colors duration-200",
             mobileScreen === "chat" ? "hidden md:block" : "block",
           )}
         >
@@ -55,7 +55,7 @@ export default function ChatPage() {
         {/* Right Active Conversation Section */}
         <div
           className={cn(
-            "flex-1 flex flex-col h-full relative overflow-hidden bg-[#efeae2] dark:bg-[#0b141a]",
+            "flex-1 flex flex-col h-full relative overflow-hidden bg-wa-bg",
             mobileScreen === "list" ? "hidden md:flex" : "flex",
           )}
         >
@@ -68,7 +68,7 @@ export default function ChatPage() {
               <div className="flex-1 overflow-y-auto px-2 sm:px-6 py-4 wa-chat-bg relative select-text">
                 {/* Secure warning bubble */}
                 <div className="flex justify-center mb-4 select-none">
-                  <span className="bg-[#ffeecd] dark:bg-[#182229] text-[#54656f] dark:text-[#aebac1] text-[11px] sm:text-xs px-3 py-1.5 rounded-md text-center max-w-md shadow-xs">
+                  <span className="bg-wa-encrypted text-wa-muted text-[11px] sm:text-xs px-3 py-1.5 rounded-md text-center max-w-md shadow-xs transition-colors">
                     🔒 Messages and calls are end-to-end encrypted. No one
                     outside of this chat can read or listen to them.
                   </span>

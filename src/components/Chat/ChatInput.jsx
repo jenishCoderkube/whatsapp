@@ -109,10 +109,10 @@ export function ChatInput() {
   };
 
   return (
-    <footer className="relative flex items-end gap-1 sm:gap-2 px-1.5 sm:px-3 py-1.5 sm:py-2.5 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-[#e9edef] dark:border-[#222d34] select-none z-20 w-full shrink-0">
+    <footer className="relative flex items-end gap-1 sm:gap-2 px-1.5 sm:px-3 py-1.5 sm:py-2.5 bg-wa-header border-t border-wa-border select-none z-20 w-full shrink-0 transition-colors duration-200">
       {/* Attachment popout list */}
       {showAttachments && (
-        <div className="absolute bottom-14 left-2 sm:left-4 flex flex-col gap-2 p-2 sm:p-3 bg-white dark:bg-[#233138] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#222d34] animate-fade-in max-w-[calc(100vw-32px)] z-50">
+        <div className="absolute bottom-14 left-2 sm:left-4 flex flex-col gap-2 p-2 sm:p-3 bg-wa-modal rounded-2xl shadow-xl border border-wa-border animate-fade-in max-w-[calc(100vw-32px)] z-50 transition-colors">
           <button
             onClick={() =>
               handleSend(
@@ -121,7 +121,7 @@ export function ChatInput() {
                 "Shared screenshot asset",
               )
             }
-            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#182229] transition-colors text-xs sm:text-sm text-[#111b21] dark:text-[#e9edef] w-full text-left"
+            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
           >
             <span className="p-2 bg-[#bf59cf] rounded-full text-white shrink-0">
               <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -131,7 +131,7 @@ export function ChatInput() {
 
           <button
             onClick={() => handleSend("file", null, "Project-Summary.docx")}
-            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#182229] transition-colors text-xs sm:text-sm text-[#111b21] dark:text-[#e9edef] w-full text-left"
+            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
           >
             <span className="p-2 bg-[#53bdeb] rounded-full text-white shrink-0">
               <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -141,9 +141,9 @@ export function ChatInput() {
         </div>
       )}
 
-      <div className="flex items-center gap-0.5 sm:gap-1 pb-1 sm:pb-1 text-[#54656f] dark:text-[#aebac1] shrink-0">
+      <div className="flex items-center gap-0.5 sm:gap-1 pb-1 sm:pb-1 text-wa-muted shrink-0">
         <button
-          className="p-1.5 sm:p-2 rounded-full hover:bg-[#e4e7eb] dark:hover:bg-[#2a3942] transition-colors"
+          className="p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors"
           title="Emojis"
         >
           <Smile className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -152,8 +152,8 @@ export function ChatInput() {
         <button
           onClick={() => setShowAttachments(!showAttachments)}
           className={cn(
-            "p-1.5 sm:p-2 rounded-full hover:bg-[#e4e7eb] dark:hover:bg-[#2a3942] transition-colors",
-            showAttachments && "bg-[#e4e7eb] dark:bg-[#2a3942] text-[#00a884]",
+            "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors",
+            showAttachments && "bg-wa-active text-wa-primary",
           )}
           title="Attach files"
         >
@@ -169,7 +169,7 @@ export function ChatInput() {
           onChange={(e) => setMessageText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Message"
-          className="w-full resize-none rounded-lg bg-white dark:bg-[#2a3942] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-[#111b21] dark:text-[#e9edef] placeholder:text-[#667781] dark:placeholder:text-[#8696a0] focus:outline-none max-h-24 block leading-normal"
+          className="w-full resize-none rounded-lg bg-wa-input px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-wa-text placeholder:text-wa-muted focus:outline-none max-h-24 block leading-normal transition-colors"
         />
       </div>
 
@@ -177,14 +177,14 @@ export function ChatInput() {
         {messageText.trim() ? (
           <button
             onClick={() => handleSend()}
-            className="p-2 sm:p-2.5 rounded-full bg-[#00a884] text-white hover:bg-[#008f72] transition-colors shadow-sm flex items-center justify-center"
+            className="p-2 sm:p-2.5 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover transition-colors shadow-sm flex items-center justify-center"
             title="Send Message"
           >
             <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-white" />
           </button>
         ) : (
           <button
-            className="p-1.5 sm:p-2 rounded-full text-[#54656f] dark:text-[#aebac1] hover:bg-[#e4e7eb] dark:hover:bg-[#2a3942] transition-colors flex items-center justify-center"
+            className="p-1.5 sm:p-2 rounded-full text-wa-muted hover:bg-wa-active transition-colors flex items-center justify-center"
             title="Voice Message"
           >
             <Mic className="h-4 w-4 sm:h-5 sm:w-5" />

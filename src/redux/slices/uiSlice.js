@@ -23,6 +23,9 @@ const uiSlice = createSlice({
         } else {
           document.documentElement.classList.remove("dark");
         }
+        try {
+          localStorage.setItem("wa_theme", state.theme);
+        } catch (e) {}
       }
     },
     setTheme(state, action) {
@@ -33,6 +36,9 @@ const uiSlice = createSlice({
         } else {
           document.documentElement.classList.remove("dark");
         }
+        try {
+          localStorage.setItem("wa_theme", action.payload);
+        } catch (e) {}
       }
     },
     setProfileOpen(state, action) {
