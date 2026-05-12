@@ -28,7 +28,9 @@ export function ChatInput() {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      if (messageText) {
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 100)}px`;
+      }
     }
   }, [messageText]);
 
@@ -107,7 +109,7 @@ export function ChatInput() {
   };
 
   return (
-    <footer className="relative flex items-end gap-1 sm:gap-2 px-1.5 sm:px-3 py-1.5 sm:py-2.5 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-[#e9edef] dark:border-[#222d34] select-none z-20 w-full">
+    <footer className="relative flex items-end gap-1 sm:gap-2 px-1.5 sm:px-3 py-1.5 sm:py-2.5 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-[#e9edef] dark:border-[#222d34] select-none z-20 w-full shrink-0">
       {/* Attachment popout list */}
       {showAttachments && (
         <div className="absolute bottom-14 left-2 sm:left-4 flex flex-col gap-2 p-2 sm:p-3 bg-white dark:bg-[#233138] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#222d34] animate-fade-in max-w-[calc(100vw-32px)] z-50">
@@ -167,7 +169,7 @@ export function ChatInput() {
           onChange={(e) => setMessageText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Message"
-          className="w-full resize-none rounded-lg bg-white dark:bg-[#2a3942] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-[#111b21] dark:text-[#e9edef] placeholder:text-[#667781] dark:placeholder:text-[#8696a0] focus:outline-none max-h-24 block leading-relaxed"
+          className="w-full resize-none rounded-lg bg-white dark:bg-[#2a3942] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-[#111b21] dark:text-[#e9edef] placeholder:text-[#667781] dark:placeholder:text-[#8696a0] focus:outline-none max-h-24 block leading-normal"
         />
       </div>
 

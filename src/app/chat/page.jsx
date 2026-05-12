@@ -39,9 +39,9 @@ export default function ChatPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#d1d7db] dark:bg-[#0b141a]">
+    <div className="fixed inset-0 z-0 flex overflow-hidden bg-[#efeae2] dark:bg-[#0b141a]">
       {/* Main App Desktop Boundary mimicking actual desktop clients */}
-      <main className="relative flex h-full w-full max-w-[1600px] mx-auto overflow-hidden shadow-2xl z-10 bg-[#efeae2] dark:bg-[#0b141a]">
+      <main className="relative flex h-full w-full max-w-[1600px] mx-auto overflow-hidden z-10 bg-[#efeae2] dark:bg-[#0b141a]">
         {/* Left Sidebar column: visible on desktop, conditionally managed on mobile screens */}
         <div
           className={cn(

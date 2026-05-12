@@ -27,7 +27,7 @@ export function ChatHeader() {
   ];
 
   return (
-    <header className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-[#222d34] select-none z-10">
+    <header className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-[#222d34] select-none z-10 shrink-0">
       <div className="flex items-center gap-3 min-w-0">
         {/* Back navigation support on mobile viewports */}
         <button
