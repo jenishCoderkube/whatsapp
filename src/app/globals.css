@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --wa-bg-light: #efeae2;
+    --wa-bg-dark: #0b141a;
+    --wa-header-light: #f0f2f5;
+    --wa-header-dark: #202c33;
+    --wa-sidebar-light: #ffffff;
+    --wa-sidebar-dark: #111b21;
+    --wa-bubble-in-light: #ffffff;
+    --wa-bubble-in-dark: #202c33;
+    --wa-bubble-out-light: #d9fdd3;
+    --wa-bubble-out-dark: #005c4b;
+    --wa-primary: #00a884;
+    --wa-primary-hover: #008f72;
+    --wa-text-primary-light: #111b21;
+    --wa-text-primary-dark: #e9edef;
+    --wa-text-secondary-light: #667781;
+    --wa-text-secondary-dark: #8696a0;
+    --wa-border-light: #e9edef;
+    --wa-border-dark: #222d34;
+  }
+}
+
+/* Custom Webkit Scrollbar inspired by WhatsApp Web */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(134, 150, 160, 0.2);
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(134, 150, 160, 0.4);
+}
+
+/* Custom premium background for WhatsApp chat area */
+.wa-chat-bg {
+  background-color: var(--wa-bg-light);
+  background-image: radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 0), radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+}
+
+.dark .wa-chat-bg {
+  background-color: var(--wa-bg-dark);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0), radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
