@@ -49,12 +49,22 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, router]);
 
-  // Instantly mark targeted unread sequences as read whenever opening a thread
+  const mobileScreenRef = useRef(mobileScreen);
   useEffect(() => {
-    if (activeChatId && user?.id) {
+    mobileScreenRef.current = mobileScreen;
+  }, [mobileScreen]);
+
+  // Instantly mark targeted unread sequences as read whenever actively viewing a thread
+  useEffect(() => {
+    const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+    const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
+      ? mobileScreen === "chat"
+      : true;
+
+    if (activeChatId && user?.id && isAppVisible && isChatActiveView) {
       messageService.markConversationMessagesAsRead(activeChatId, user.id);
     }
-  }, [activeChatId, user?.id]);
+  }, [activeChatId, user?.id, mobileScreen]);
 
   // Load initial paginated records on chat switch cleanly
   useEffect(() => {
@@ -89,12 +99,28 @@ export default function ChatPage() {
           );
 
           if (!isMine) {
-            messageService.markConversationMessagesAsRead(targetChatId, user.id);
+            const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+            const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
+              ? mobileScreenRef.current === "chat"
+              : true;
+
+            if (isAppVisible && isChatActiveView) {
+              messageService.markConversationMessagesAsRead(targetChatId, user.id);
+            } else {
+              // Message targets thread but app is minimized or list layout is actively displayed on mobile screen
+              dispatch(incrementUnread(targetChatId));
+              if (incomingMsg.id) {
+                messageService.updateStatus(incomingMsg.id, "delivered");
+              }
+            }
           }
         } else {
           // 2. If payload addresses background inactive tab/room:
           if (!isMine) {
             dispatch(incrementUnread(targetChatId));
+            if (incomingMsg.id) {
+              messageService.updateStatus(incomingMsg.id, "delivered");
+            }
           }
         }
 
@@ -152,6 +178,25 @@ export default function ChatPage() {
       realtimeService.disconnectGlobalMessages();
     };
   }, [user?.id, dispatch]);
+
+  // Tab restoration event monitoring sync engine
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible" && activeChatIdRef.current && user?.id) {
+        const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
+          ? mobileScreenRef.current === "chat"
+          : true;
+
+        if (isChatActiveView) {
+          messageService.markConversationMessagesAsRead(activeChatIdRef.current, user.id);
+        }
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }
+  }, [user?.id]);
 
   // Lazy pagination execution when reaching view boundaries
   const handleScroll = async (e) => {

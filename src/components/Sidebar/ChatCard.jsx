@@ -13,7 +13,12 @@ export const ChatCard = React.memo(({ chat }) => {
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
   const typingMap = useAppSelector((state) => state.chat.typingMap[chat.id] || {});
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
-  const latestLoadedMsg = useAppSelector((state) => state.message.messages[chat.id]?.[0]);
+  const messagesList = useAppSelector((state) => state.message.messages[chat.id]);
+
+  // Natively access the LAST element in the chronological array to guarantee the absolute latest message preview displays
+  const latestLoadedMsg = messagesList && messagesList.length > 0 
+    ? messagesList[messagesList.length - 1] 
+    : null;
 
   const isActive = activeChatId === chat.id;
 
@@ -25,17 +30,16 @@ export const ChatCard = React.memo(({ chat }) => {
     dispatch(setMobileScreen("chat"));
   };
 
-  const isOutgoing = latestLoadedMsg
-    ? latestLoadedMsg.senderId === currentUserId
-    : chat.lastMessage?.isOutgoing;
+  // Evaluate final ownership and status keys prioritizing freshly broadcast streaming parameters
+  const isOutgoing = chat.lastMessage?.isOutgoing !== undefined
+    ? chat.lastMessage.isOutgoing
+    : latestLoadedMsg
+    ? (latestLoadedMsg.sender_id || latestLoadedMsg.senderId) === currentUserId
+    : false;
 
-  const status = latestLoadedMsg
-    ? latestLoadedMsg.status
-    : chat.lastMessage?.status;
+  const status = chat.lastMessage?.status || (latestLoadedMsg ? latestLoadedMsg.status : "sent");
 
-  const displayTimestamp = latestLoadedMsg
-    ? latestLoadedMsg.timestamp
-    : chat.lastMessage?.timestamp;
+  const displayTimestamp = chat.lastMessage?.timestamp || (latestLoadedMsg ? latestLoadedMsg.timestamp : "");
 
   const renderStatus = () => {
     if (isPeerTyping) return null;
@@ -54,13 +58,14 @@ export const ChatCard = React.memo(({ chat }) => {
       return <span className="text-wa-primary font-medium italic animate-pulse">Typing...</span>;
     }
 
+    const baseText = chat.lastMessage?.text || (latestLoadedMsg ? latestLoadedMsg.text : "");
     const type = latestLoadedMsg ? latestLoadedMsg.type : "text";
-    const baseText = latestLoadedMsg ? latestLoadedMsg.text : chat.lastMessage?.text;
 
-    if (type === "image") return "📷 Photo";
-    if (type === "video") return "🎥 Video";
-    if (type === "file") return "📎 Document";
-    if (type === "voice") return "🎤 Voice Message";
+    // Dynamic type icon labeling support matching standard WhatsApp lists
+    if (baseText === "📷 Photo" || type === "image") return "📷 Photo";
+    if (baseText === "🎥 Video" || type === "video") return "🎥 Video";
+    if (baseText === "📎 Document" || type === "file") return "📎 Document";
+    if (baseText === "🎤 Voice Message" || type === "voice") return "🎤 Voice Message";
     return baseText || "No messages yet";
   };
 

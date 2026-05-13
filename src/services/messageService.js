@@ -139,6 +139,30 @@ export const messageService = {
         })
         .eq("id", conversationId);
 
+      // Increment unread_count in database for all other conversation members to guarantee true persistence across refresh boundaries
+      try {
+        const { data: peerMembers } = await supabase
+          .from("conversation_members")
+          .select("user_id, unread_count")
+          .eq("conversation_id", conversationId)
+          .neq("user_id", senderId);
+
+        if (peerMembers && peerMembers.length > 0) {
+          for (const member of peerMembers) {
+            await supabase
+              .from("conversation_members")
+              .update({ unread_count: (member.unread_count || 0) + 1 })
+              .eq("conversation_id", conversationId)
+              .eq("user_id", member.user_id);
+          }
+        }
+      } catch (err) {
+        console.warn(
+          "Could not increment remote peer database unread count:",
+          err,
+        );
+      }
+
       return {
         id: newMsg.id,
         text: newMsg.text || "",
@@ -169,8 +193,23 @@ export const messageService = {
           messageId,
         );
       if (!messageId || !isUuid) return;
-      await supabase.from("messages").update({ status }).eq("id", messageId);
-    } catch (e) {}
+
+      const { data: msg } = await supabase
+        .from("messages")
+        .update({ status })
+        .eq("id", messageId)
+        .select("conversation_id")
+        .single();
+
+      if (msg?.conversation_id) {
+        await supabase
+          .from("conversations")
+          .update({ last_message_status: status })
+          .eq("id", msg.conversation_id);
+      }
+    } catch (e) {
+      console.warn("Delivery state update interrupted:", e);
+    }
   },
 
   /**

@@ -70,4 +70,27 @@ export const profileService = {
       // Swallowed safely to preserve real-time client loop stability
     }
   },
+
+  /**
+   * Update editable profile info directly in Supabase profiles table.
+   */
+  async updateProfileData(userId, updates = {}) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      if (!userId || !isUuid) return null;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.warn("Update profile exception:", error);
+      throw error;
+    }
+  },
 };

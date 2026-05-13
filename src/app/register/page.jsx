@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -17,21 +18,34 @@ import { Avatar } from "../../components/ui/Avatar";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { loginStart, registerSuccess, loginFailure } from "../../redux/slices/authSlice";
 import { authService } from "../../services/authService";
+import { storageService } from "../../services/storageService";
 import { cn } from "../../utils/cn";
 
 export default function RegisterPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const loading = useAppSelector((state) => state.auth.loading);
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const user = useAppSelector((state) => state.auth.user);
+
+  // AUTH ROUTE PROTECTION: Redirect already authenticated sessions away from public auth boundaries
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      router.replace("/chat");
+    }
+  }, [isAuthenticated, user?.id, router]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState("");
+
+  const fileInputRef = useRef(null);
 
   // Calculate simulated password strength metric
   const calculateStrength = () => {
@@ -45,6 +59,38 @@ export default function RegisterPage() {
   };
 
   const strengthScore = calculateStrength();
+
+  const handleAvatarFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setValidationError("Profile image must be less than 5MB in size.");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setValidationError("");
+
+    try {
+      const uploadedAbsoluteUrl = await storageService.uploadFile(file, "avatars");
+      if (uploadedAbsoluteUrl) {
+        setAvatarPreview(uploadedAbsoluteUrl);
+      }
+    } catch (err) {
+      console.error("Storage document transfer failed:", err);
+      setValidationError("Failed to upload profile photo. Please try again.");
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = "";
+    }
+  };
+
+  const triggerAvatarInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -73,12 +119,12 @@ export default function RegisterPage() {
 
     dispatch(loginStart());
 
-    // Execute absolute backend signup workflow
+    // Execute absolute backend signup workflow storing profile fields dynamically
     const result = await authService.register({
       email,
       password,
       name,
-      avatar: avatarPreview,
+      avatar: avatarPreview || "https://images.unsplash.com/photo-1534528741775-53994a69daeb",
     });
 
     if (result.error) {
@@ -88,17 +134,6 @@ export default function RegisterPage() {
       dispatch(registerSuccess({ user: result.user }));
       router.push("/chat");
     }
-  };
-
-  // Simulate file upload with mock preset assets
-  const handleSimulatedUpload = () => {
-    const urls = [
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-    ];
-    const randomUrl = urls[Math.floor(Math.random() * urls.length)];
-    setAvatarPreview(randomUrl);
   };
 
   return (
@@ -138,30 +173,47 @@ export default function RegisterPage() {
             </motion.div>
           )}
 
+          {/* Hidden avatar file chooser dialog */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleAvatarFileSelect}
+            accept="image/*"
+            className="hidden"
+          />
+
           {/* Registration form block */}
           <form onSubmit={handleRegister} className="flex flex-col gap-4">
-            {/* Asset Avatar selector */}
+            {/* Realtime Supabase Storage Avatar selector */}
             <div className="flex flex-col items-center justify-center py-2">
               <div
-                className="relative group cursor-pointer"
-                onClick={handleSimulatedUpload}
+                className="relative group cursor-pointer block rounded-full"
+                onClick={triggerAvatarInput}
               >
                 <Avatar
                   src={avatarPreview}
                   fallback={name[0] || "U"}
                   size="xl"
-                  className="shadow-sm"
+                  className="shadow-sm ring-2 ring-wa-border"
                 />
                 <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Upload className="h-5 w-5 text-white" />
                 </div>
+                {isUploadingAvatar && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-wa-modal/80 backdrop-blur-xs">
+                    <Loader2 className="h-6 w-6 text-wa-primary animate-spin" />
+                  </div>
+                )}
               </div>
               <button
                 type="button"
-                onClick={handleSimulatedUpload}
-                className="text-[11px] text-wa-primary hover:underline mt-1.5"
+                onClick={triggerAvatarInput}
+                disabled={isUploadingAvatar}
+                className="text-[11px] text-wa-primary hover:underline mt-1.5 font-medium cursor-pointer"
               >
-                {avatarPreview
+                {isUploadingAvatar
+                  ? "Uploading image..."
+                  : avatarPreview
                   ? "Change profile photo"
                   : "Upload profile image"}
               </button>
@@ -234,7 +286,7 @@ export default function RegisterPage() {
                               : strengthScore === 2
                                 ? "bg-amber-500"
                                 : "bg-wa-primary"
-                            : "bg-transparent",
+                            : "bg-transparent"
                         )}
                       />
                     ))}
@@ -303,7 +355,7 @@ export default function RegisterPage() {
               href="/login"
               className="text-wa-primary font-medium hover:underline"
             >
-              Log in here
+               Log in here
             </Link>
           </div>
         </div>

@@ -1,7 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { MessageSquarePlus, MoreVertical, Search, Users, UserPlus, Check } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  MessageSquarePlus,
+  MoreVertical,
+  Search,
+  Users,
+  UserPlus,
+  Check,
+  Edit2,
+  X,
+  Upload,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
 import { Modal } from "../ui/Modal";
@@ -11,11 +23,12 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 import { SearchBar } from "./SearchBar";
 import { ChatCard } from "./ChatCard";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { logout } from "../../redux/slices/authSlice";
+import { logout, updateProfile } from "../../redux/slices/authSlice";
 import { toggleTheme } from "../../redux/slices/uiSlice";
 import { setChats, appendChat, setActiveChat } from "../../redux/slices/chatSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
+import { storageService } from "../../services/storageService";
 import { cn } from "../../utils/cn";
 
 export function Sidebar({ className }) {
@@ -39,6 +52,15 @@ export function Sidebar({ className }) {
   const [groupAvatar, setGroupAvatar] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
 
+  // Profile editable setting states
+  const [editingName, setEditingName] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [editingStatus, setEditingStatus] = useState(false);
+  const [tempStatus, setTempStatus] = useState("");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+  const profileFileInputRef = useRef(null);
+
   // Fetch linked database conversations dynamically upon load
   useEffect(() => {
     if (user?.id) {
@@ -49,6 +71,17 @@ export function Sidebar({ className }) {
       });
     }
   }, [user?.id, dispatch]);
+
+  // Sync temp profile attributes upon mounting configuration overlays
+  useEffect(() => {
+    if (profileModal && user) {
+      setTempName(user.name || "");
+      setTempStatus(user.status || "Available");
+      setEditingName(false);
+      setEditingStatus(false);
+      setProfileMessage("");
+    }
+  }, [profileModal, user]);
 
   // Handle debounced platform user profile searching
   useEffect(() => {
@@ -124,7 +157,6 @@ export function Sidebar({ className }) {
     );
   };
 
-  // Preset random avatar assignment support for swift group configurations
   const handleRandomGroupAvatar = () => {
     const icons = [
       "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80",
@@ -134,11 +166,95 @@ export function Sidebar({ className }) {
     setGroupAvatar(icons[Math.floor(Math.random() * icons.length)]);
   };
 
+  // Profile Customization pipelines
+  const handleSaveName = async () => {
+    if (!user?.id || !tempName.trim()) return;
+    setIsUpdatingProfile(true);
+    setProfileMessage("");
+    try {
+      const updated = await profileService.updateProfileData(user.id, { name: tempName.trim() });
+      if (updated) {
+        dispatch(updateProfile({ name: updated.name }));
+        setEditingName(false);
+        setProfileMessage("Username updated successfully.");
+      }
+    } catch (err) {
+      setProfileMessage("Failed to update username.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleSaveStatus = async () => {
+    if (!user?.id || !tempStatus.trim()) return;
+    setIsUpdatingProfile(true);
+    setProfileMessage("");
+    try {
+      const updated = await profileService.updateProfileData(user.id, { status: tempStatus.trim() });
+      if (updated) {
+        dispatch(updateProfile({ status: updated.status }));
+        setEditingStatus(false);
+        setProfileMessage("About description updated successfully.");
+      }
+    } catch (err) {
+      setProfileMessage("Failed to update about section.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleProfileAvatarSelectChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMessage("Maximum image size is 5MB.");
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    setProfileMessage("");
+
+    try {
+      const uploadedAbsoluteUrl = await storageService.uploadFile(file, "avatars");
+      if (uploadedAbsoluteUrl) {
+        const updated = await profileService.updateProfileData(user.id, { avatar: uploadedAbsoluteUrl });
+        if (updated) {
+          dispatch(updateProfile({ avatar: updated.avatar }));
+          setProfileMessage("Profile photo updated successfully.");
+        }
+      }
+    } catch (err) {
+      setProfileMessage("Failed to upload profile picture.");
+    } finally {
+      setIsUpdatingProfile(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveAvatarImage = async () => {
+    if (!user?.id) return;
+    setIsUpdatingProfile(true);
+    setProfileMessage("");
+    try {
+      const fallbackUrl = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80";
+      const updated = await profileService.updateProfileData(user.id, { avatar: fallbackUrl });
+      if (updated) {
+        dispatch(updateProfile({ avatar: updated.avatar }));
+        setProfileMessage("Profile photo removed.");
+      }
+    } catch (err) {
+      setProfileMessage("Failed to delete custom image.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
   return (
     <aside className={cn("flex flex-col h-full bg-wa-sidebar border-r border-wa-border select-none transition-colors duration-200", className)}>
       {/* Top native header strip */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-wa-header transition-colors duration-200">
-        <div onClick={() => setProfileModal(true)} className="cursor-pointer" title="View Profile">
+      <header className="flex items-center justify-between px-4 py-2.5 bg-wa-header transition-colors duration-200 shrink-0">
+        <div onClick={() => setProfileModal(true)} className="cursor-pointer block" title="View Profile">
           <Avatar src={user?.avatar} fallback={user?.name?.[0] || "U"} size="md" isOnline={true} />
         </div>
 
@@ -147,7 +263,7 @@ export function Sidebar({ className }) {
 
           <button
             onClick={() => setNewChatModal(true)}
-            className="p-2 rounded-full hover:bg-wa-active transition-colors"
+            className="p-2 rounded-full hover:bg-wa-active transition-colors block"
             title="New Chat"
           >
             <MessageSquarePlus className="h-5 w-5 text-wa-text" />
@@ -155,7 +271,7 @@ export function Sidebar({ className }) {
 
           <Dropdown
             trigger={
-              <button className="p-2 rounded-full hover:bg-wa-active transition-colors">
+              <button className="p-2 rounded-full hover:bg-wa-active transition-colors block">
                 <MoreVertical className="h-5 w-5" />
               </button>
             }
@@ -173,22 +289,161 @@ export function Sidebar({ className }) {
           filteredChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
         ) : (
           <div className="p-6 text-center text-xs sm:text-sm text-wa-muted">
-            No chats or contacts found matching "{searchQuery}"
+             No chats or contacts found matching "{searchQuery}"
           </div>
         )}
       </div>
 
-      {/* Profile Settings Modal */}
+      {/* Profile Settings Engine Modal */}
       <Modal isOpen={profileModal} onClose={() => setProfileModal(false)} title="Profile settings">
-        <div className="flex flex-col items-center py-4">
-          <Avatar src={user?.avatar} fallback={user?.name?.[0] || "U"} size="xxl" className="mb-4 shadow-md" />
-          <h4 className="text-lg font-semibold text-wa-text">{user?.name}</h4>
-          <p className="text-xs text-wa-muted mt-1">{user?.email}</p>
+        <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-2">
+          {profileMessage && (
+            <div className="w-full mb-3 p-2 rounded text-center text-xs bg-wa-active text-wa-text border border-wa-border animate-fade-in">
+              {profileMessage}
+            </div>
+          )}
 
-          <div className="w-full mt-6 pt-4 border-t border-wa-border flex flex-col gap-3">
-            <div className="text-xs text-wa-primary font-medium uppercase tracking-wider">About</div>
-            <div className="text-sm text-wa-text bg-wa-header p-3 rounded-md transition-colors">
-              {user?.status || "Available"}
+          {/* Hidden Avatar Uploader element */}
+          <input
+            type="file"
+            ref={profileFileInputRef}
+            onChange={handleProfileAvatarSelectChange}
+            accept="image/*"
+            className="hidden"
+          />
+
+          {/* Realtime Interactive Profile photo block */}
+          <div className="relative group cursor-pointer my-2 block rounded-full">
+            <Avatar src={user?.avatar} fallback={user?.name?.[0] || "U"} size="xxl" className="shadow-md ring-2 ring-wa-border" />
+            <div
+              onClick={() => profileFileInputRef.current?.click()}
+              className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white text-center p-2"
+            >
+              <Upload className="h-5 w-5 mb-1" />
+              <span className="text-[10px] leading-tight">Change photo</span>
+            </div>
+            {isUpdatingProfile && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-wa-modal/80 backdrop-blur-xs">
+                <Loader2 className="h-6 w-6 text-wa-primary animate-spin" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 mt-1 mb-4 text-xs">
+            <button
+              onClick={() => profileFileInputRef.current?.click()}
+              disabled={isUpdatingProfile}
+              className="text-wa-primary font-medium hover:underline block cursor-pointer"
+            >
+              Upload image
+            </button>
+            <span className="text-wa-muted">•</span>
+            <button
+              onClick={handleRemoveAvatarImage}
+              disabled={isUpdatingProfile}
+              className="text-red-500 font-medium hover:underline block cursor-pointer"
+            >
+              Remove
+            </button>
+          </div>
+
+          {/* Fully Interactive Edit Fields mapping */}
+          <div className="w-full pt-3 border-t border-wa-border flex flex-col gap-4 text-left">
+            {/* Username Section */}
+            <div className="flex flex-col gap-1">
+              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">Your Name</div>
+              {editingName ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    className="h-8 text-xs flex-1"
+                    placeholder="Username"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={isUpdatingProfile || !tempName.trim()}
+                    className="p-1.5 rounded bg-wa-primary text-white hover:opacity-90 block cursor-pointer"
+                    title="Save"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTempName(user?.name || "");
+                      setEditingName(false);
+                    }}
+                    disabled={isUpdatingProfile}
+                    className="p-1.5 rounded bg-wa-active text-wa-muted hover:text-wa-text block cursor-pointer"
+                    title="Cancel"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
+                  <span className="text-xs sm:text-sm font-medium text-wa-text truncate">{user?.name}</span>
+                  <button
+                    onClick={() => setEditingName(true)}
+                    className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
+                    title="Edit name"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <span className="text-[10px] text-wa-muted px-1 block">
+                This is not your username or pin. This name will be visible to your linked contacts.
+              </span>
+            </div>
+
+            {/* About description Section */}
+            <div className="flex flex-col gap-1">
+              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">About</div>
+              {editingStatus ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="text"
+                    value={tempStatus}
+                    onChange={(e) => setTempStatus(e.target.value)}
+                    className="h-8 text-xs flex-1"
+                    placeholder="Status description"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveStatus}
+                    disabled={isUpdatingProfile || !tempStatus.trim()}
+                    className="p-1.5 rounded bg-wa-primary text-white hover:opacity-90 block cursor-pointer"
+                    title="Save"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTempStatus(user?.status || "Available");
+                      setEditingStatus(false);
+                    }}
+                    disabled={isUpdatingProfile}
+                    className="p-1.5 rounded bg-wa-active text-wa-muted hover:text-wa-text block cursor-pointer"
+                    title="Cancel"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
+                  <span className="text-xs sm:text-sm text-wa-text truncate">{user?.status || "Available"}</span>
+                  <button
+                    onClick={() => setEditingStatus(true)}
+                    className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
+                    title="Edit about"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -202,7 +457,7 @@ export function Sidebar({ className }) {
             <button
               onClick={() => setActiveTab("direct")}
               className={cn(
-                "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors",
+                "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors block cursor-pointer",
                 activeTab === "direct"
                   ? "border-wa-primary text-wa-primary"
                   : "border-transparent text-wa-muted hover:text-wa-text"
@@ -213,7 +468,7 @@ export function Sidebar({ className }) {
             <button
               onClick={() => setActiveTab("group")}
               className={cn(
-                "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors",
+                "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors block cursor-pointer",
                 activeTab === "group"
                   ? "border-wa-primary text-wa-primary"
                   : "border-transparent text-wa-muted hover:text-wa-text"
@@ -239,13 +494,13 @@ export function Sidebar({ className }) {
 
               <div className="flex-1 overflow-y-auto pr-1">
                 {isSearching ? (
-                  <div className="py-8 text-center text-xs text-wa-muted">Searching profiles...</div>
+                  <div className="py-8 text-center text-xs text-wa-muted animate-pulse">Searching profiles...</div>
                 ) : searchResults.length > 0 ? (
                   searchResults.map((profile) => (
                     <div
                       key={profile.id}
                       onClick={() => handleStartDirectChat(profile)}
-                      className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors"
+                      className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors block"
                     >
                       <Avatar src={profile.avatar} fallback={profile.name[0]} size="md" isOnline={profile.online} />
                       <div className="flex-1 min-w-0">
@@ -267,7 +522,7 @@ export function Sidebar({ className }) {
             /* Multi-User Native Group Creation Layer */
             <div className="flex flex-col flex-1 overflow-hidden">
               <div className="flex items-center gap-3 mb-3">
-                <div onClick={handleRandomGroupAvatar} className="cursor-pointer" title="Generate Preset Icon">
+                <div onClick={handleRandomGroupAvatar} className="cursor-pointer block" title="Generate Preset Icon">
                   <Avatar
                     src={groupAvatar}
                     fallback="G"
@@ -299,7 +554,7 @@ export function Sidebar({ className }) {
                         key={profile.id}
                         onClick={() => toggleMemberSelection(profile.id)}
                         className={cn(
-                          "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none",
+                          "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none block",
                           isSelected && "bg-wa-active"
                         )}
                       >

@@ -20,6 +20,15 @@ export default function LoginPage() {
   const dispatch = useAppDispatch();
   const loading = useAppSelector((state) => state.auth.loading);
   const error = useAppSelector((state) => state.auth.error);
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const user = useAppSelector((state) => state.auth.user);
+
+  // AUTH ROUTE PROTECTION: Redirect authenticated sessions away from login
+  React.useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      router.replace("/chat");
+    }
+  }, [isAuthenticated, user?.id, router]);
 
   const [email, setEmail] = useState("demo@whatsapp.web");
   const [password, setPassword] = useState("password123");
