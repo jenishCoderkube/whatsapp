@@ -11,6 +11,7 @@ import {
   X,
   UploadCloud,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { addMessage, replaceOptimisticMessage, updateMessageStatus } from "../../redux/slices/messageSlice";
@@ -49,6 +50,153 @@ export function ChatInput() {
   const typingTimeoutRef = useRef(null);
   const attachmentsRef = useRef(null);
   const emojiPickerRef = useRef(null);
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingIntervalRef = useRef(null);
+
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Microphone permission denied or device error:", err);
+      setToastError("Microphone access denied. Please allow permissions to record voice notes.");
+    }
+  };
+
+  const cancelVoiceRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+      } catch (e) {}
+    }
+    if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+    setIsRecording(false);
+    setRecordingDuration(0);
+    audioChunksRef.current = [];
+  };
+
+  const sendVoiceRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.onstop = async () => {
+        if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+        try {
+          mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+        } catch (e) {}
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        setIsRecording(false);
+        const finalDurationSeconds = recordingDuration;
+        setRecordingDuration(0);
+        audioChunksRef.current = [];
+
+        if (audioBlob.size < 100 || finalDurationSeconds < 1) {
+          setToastError("Voice recording too short.");
+          return;
+        }
+
+        const mins = Math.floor(finalDurationSeconds / 60);
+        const secs = finalDurationSeconds % 60;
+        const durationStr = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+
+        const voiceFile = new File([audioBlob], `voice_note_${Date.now()}.webm`, { type: "audio/webm" });
+
+        const tempId = "msg-temp-voice-" + Date.now();
+        const timeString = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        const optimisticMsg = {
+          id: tempId,
+          text: "",
+          timestamp: timeString,
+          isOutgoing: true,
+          status: "sent",
+          type: "voice",
+          duration: durationStr,
+          senderId: user?.id,
+          createdAt: new Date().toISOString(),
+        };
+
+        dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
+        dispatch(
+          updateLastMessage({
+            chatId: activeChatId,
+            text: "🎤 Voice Message",
+            timestamp: timeString,
+            isOutgoing: true,
+            status: "sent",
+          })
+        );
+
+        try {
+          const uploadedUrl = await storageService.uploadFile(voiceFile, "voice");
+
+          const confirmedRow = await messageService.sendMessage({
+            conversationId: activeChatId,
+            senderId: user?.id,
+            text: "",
+            type: "voice",
+            mediaUrl: uploadedUrl,
+            duration: durationStr,
+            timestampString: timeString,
+          });
+
+          dispatch(
+            replaceOptimisticMessage({
+              chatId: activeChatId,
+              tempId,
+              confirmedMessage: {
+                ...confirmedRow,
+                isOutgoing: true,
+              },
+            })
+          );
+        } catch (err) {
+          console.error("Voice file payload storage upload exception:", err);
+          dispatch(updateMessageStatus({ chatId: activeChatId, messageId: tempId, status: "failed" }));
+        }
+      };
+
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+        } catch (e) {}
+      }
+    };
+  }, []);
 
   // Auto-close attachment/emoji dropdowns natively on outside clicks and Escape keystrokes
   useEffect(() => {
@@ -438,116 +586,146 @@ export function ChatInput() {
       )}
 
       <div className="flex items-end gap-1 sm:gap-2 w-full">
-        <div className="flex items-center gap-0.5 sm:gap-1 pb-1 sm:pb-1 text-wa-muted shrink-0">
-          {/* EMOJI PICKER POPUP SYSTEM */}
-          <div ref={emojiPickerRef} className="relative">
-            <button
-              onClick={() => {
-                setShowEmojiPicker(!showEmojiPicker);
-                if (showAttachments) setShowAttachments(false);
-              }}
-              className={cn(
-                "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
-                showEmojiPicker && "bg-wa-active text-wa-primary"
-              )}
-              title="Emojis"
-            >
-              <Smile className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
+        {isRecording ? (
+          <div className="flex items-center justify-between w-full px-2 py-1 select-none animate-fade-in gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse shrink-0" />
+              <span className="text-xs sm:text-sm font-medium text-red-500 font-mono tracking-wider">
+                Recording: {Math.floor(recordingDuration / 60)}:{recordingDuration % 60 < 10 ? "0" : ""}{recordingDuration % 60}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <button
+                onClick={cancelVoiceRecording}
+                className="p-2 rounded-full text-wa-muted hover:bg-wa-hover hover:text-red-500 transition-colors flex items-center justify-center cursor-pointer"
+                title="Discard recording"
+              >
+                <Trash2 className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </button>
+              <button
+                onClick={sendVoiceRecording}
+                className="p-2 sm:p-2.5 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover transition-colors shadow-sm flex items-center justify-center cursor-pointer animate-scale-up"
+                title="Send Voice Message"
+              >
+                <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-white" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-0.5 sm:gap-1 pb-1 sm:pb-1 text-wa-muted shrink-0">
+              {/* EMOJI PICKER POPUP SYSTEM */}
+              <div ref={emojiPickerRef} className="relative">
+                <button
+                  onClick={() => {
+                    setShowEmojiPicker(!showEmojiPicker);
+                    if (showAttachments) setShowAttachments(false);
+                  }}
+                  className={cn(
+                    "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
+                    showEmojiPicker && "bg-wa-active text-wa-primary"
+                  )}
+                  title="Emojis"
+                >
+                  <Smile className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
 
-            {showEmojiPicker && (
-              <div className="absolute bottom-12 left-0 w-72 sm:w-80 bg-wa-modal border border-wa-border rounded-2xl shadow-2xl p-3 z-50 animate-fade-in flex flex-col max-h-72 select-none">
-                <div className="text-xs font-semibold text-wa-muted mb-2 px-1">Frequently Used Emojis</div>
-                <div className="flex-1 overflow-y-auto grid grid-cols-7 gap-1.5 pr-1 rounded-lg">
-                  {popularEmojis.map((emoji, idx) => (
+                {showEmojiPicker && (
+                  <div className="absolute bottom-12 left-0 w-72 sm:w-80 bg-wa-modal border border-wa-border rounded-2xl shadow-2xl p-3 z-50 animate-fade-in flex flex-col max-h-72 select-none">
+                    <div className="text-xs font-semibold text-wa-muted mb-2 px-1">Frequently Used Emojis</div>
+                    <div className="flex-1 overflow-y-auto grid grid-cols-7 gap-1.5 pr-1 rounded-lg">
+                      {popularEmojis.map((emoji, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setMessageText((prev) => prev + emoji);
+                            setTimeout(() => textareaRef.current?.focus(), 0);
+                          }}
+                          className="text-lg sm:text-xl hover:bg-wa-active rounded transition-transform hover:scale-125 flex items-center justify-center p-1 cursor-pointer"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ATTACHMENT POPOUT SYSTEM */}
+              <div ref={attachmentsRef} className="relative">
+                <button
+                  onClick={() => {
+                    setShowAttachments(!showAttachments);
+                    if (showEmojiPicker) setShowEmojiPicker(false);
+                  }}
+                  className={cn(
+                    "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
+                    showAttachments && "bg-wa-active text-wa-primary"
+                  )}
+                  title="Attach files"
+                >
+                  <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+
+                {showAttachments && (
+                  <div className="absolute bottom-12 left-0 flex flex-col gap-2 p-2 sm:p-3 bg-wa-modal rounded-2xl shadow-xl border border-wa-border animate-fade-in w-52 z-50 transition-colors">
                     <button
-                      key={idx}
-                      onClick={() => {
-                        setMessageText((prev) => prev + emoji);
-                        setTimeout(() => textareaRef.current?.focus(), 0);
-                      }}
-                      className="text-lg sm:text-xl hover:bg-wa-active rounded transition-transform hover:scale-125 flex items-center justify-center p-1 cursor-pointer"
+                      onClick={() => triggerFileInput("image/*,video/mp4")}
+                      className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
                     >
-                      {emoji}
+                      <span className="p-2 bg-[#bf59cf] rounded-full text-white shrink-0">
+                        <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </span>
+                      <span className="truncate">Photos & Videos</span>
                     </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* ATTACHMENT POPOUT SYSTEM */}
-          <div ref={attachmentsRef} className="relative">
-            <button
-              onClick={() => {
-                setShowAttachments(!showAttachments);
-                if (showEmojiPicker) setShowEmojiPicker(false);
-              }}
-              className={cn(
-                "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
-                showAttachments && "bg-wa-active text-wa-primary"
+                    <button
+                      onClick={() => triggerFileInput(".pdf,.doc,.docx,.zip,.txt")}
+                      className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
+                    >
+                      <span className="p-2 bg-[#53bdeb] rounded-full text-white shrink-0">
+                        <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </span>
+                      <span className="truncate">Document</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 relative">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={selectedFiles.length > 0 ? "Add a caption..." : "Message"}
+                className="w-full resize-none rounded-lg bg-wa-input px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-wa-text placeholder:text-wa-muted focus:outline-none max-h-24 block leading-normal transition-colors"
+              />
+            </div>
+
+            <div className="pb-0.5 sm:pb-1 shrink-0">
+              {messageText.trim() || selectedFiles.length > 0 ? (
+                <button
+                  onClick={handleSendSubmit}
+                  className="p-2 sm:p-2.5 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover transition-colors shadow-sm flex items-center justify-center cursor-pointer"
+                  title="Send Message"
+                >
+                  <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-white" />
+                </button>
+              ) : (
+                <button
+                  onClick={startVoiceRecording}
+                  className="p-1.5 sm:p-2 rounded-full text-wa-muted hover:bg-wa-active transition-colors flex items-center justify-center cursor-pointer"
+                  title="Voice Message"
+                >
+                  <Mic className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
               )}
-              title="Attach files"
-            >
-              <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-
-            {showAttachments && (
-              <div className="absolute bottom-12 left-0 flex flex-col gap-2 p-2 sm:p-3 bg-wa-modal rounded-2xl shadow-xl border border-wa-border animate-fade-in w-52 z-50 transition-colors">
-                <button
-                  onClick={() => triggerFileInput("image/*,video/mp4")}
-                  className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
-                >
-                  <span className="p-2 bg-[#bf59cf] rounded-full text-white shrink-0">
-                    <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </span>
-                  <span className="truncate">Photos & Videos</span>
-                </button>
-
-                <button
-                  onClick={() => triggerFileInput(".pdf,.doc,.docx,.zip,.txt")}
-                  className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
-                >
-                  <span className="p-2 bg-[#53bdeb] rounded-full text-white shrink-0">
-                    <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </span>
-                  <span className="truncate">Document</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 min-w-0 relative">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={selectedFiles.length > 0 ? "Add a caption..." : "Message"}
-            className="w-full resize-none rounded-lg bg-wa-input px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-wa-text placeholder:text-wa-muted focus:outline-none max-h-24 block leading-normal transition-colors"
-          />
-        </div>
-
-        <div className="pb-0.5 sm:pb-1 shrink-0">
-          {messageText.trim() || selectedFiles.length > 0 ? (
-            <button
-              onClick={handleSendSubmit}
-              className="p-2 sm:p-2.5 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover transition-colors shadow-sm flex items-center justify-center cursor-pointer"
-              title="Send Message"
-            >
-              <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-white" />
-            </button>
-          ) : (
-            <button
-              className="p-1.5 sm:p-2 rounded-full text-wa-muted hover:bg-wa-active transition-colors flex items-center justify-center cursor-pointer"
-              title="Voice Message"
-            >
-              <Mic className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </footer>
   );

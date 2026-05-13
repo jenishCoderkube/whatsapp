@@ -10,7 +10,15 @@ const messageSlice = createSlice({
   reducers: {
     setMessages(state, action) {
       const { chatId, messages } = action.payload;
-      state.messages[chatId] = messages;
+      const seen = new Set();
+      const unique = [];
+      for (const m of messages) {
+        if (!seen.has(m.id)) {
+          seen.add(m.id);
+          unique.push(m);
+        }
+      }
+      state.messages[chatId] = unique;
     },
     prependMessages(state, action) {
       const { chatId, messages } = action.payload;
@@ -26,12 +34,15 @@ const messageSlice = createSlice({
       const { chatId, tempId, confirmedMessage } = action.payload;
       const list = state.messages[chatId];
       if (list) {
-        const idx = list.findIndex((m) => m.id === tempId);
-        if (idx !== -1) {
-          list[idx] = confirmedMessage;
+        const existingConfirmedIdx = list.findIndex((m) => m.id === confirmedMessage.id);
+        if (existingConfirmedIdx !== -1) {
+          // If the confirmed ID is already present via real-time subscription broadcast, cleanly drop the speculative duplicate row
+          state.messages[chatId] = list.filter((m) => m.id !== tempId);
         } else {
-          // If not found, append directly ensuring duplicate guard
-          if (!list.some((m) => m.id === confirmedMessage.id)) {
+          const idx = list.findIndex((m) => m.id === tempId);
+          if (idx !== -1) {
+            list[idx] = confirmedMessage;
+          } else {
             list.push(confirmedMessage);
           }
         }
@@ -42,15 +53,19 @@ const messageSlice = createSlice({
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
+      const list = state.messages[chatId];
+      // Prevent duplicate row insertion if key identity matches exactly
+      if (list.some((m) => m.id === message.id)) {
+        return;
+      }
       // Accurately prevent duplication while permitting identical payload arrays on batch transfers
-      const exists = state.messages[chatId].some(
+      const exists = list.some(
         (m) =>
-          m.id === message.id ||
           (m.mediaUrl && message.mediaUrl && m.mediaUrl === message.mediaUrl) ||
-          (m.text && message.text && m.text === message.text && m.timestamp === message.timestamp && !m.mediaUrl && !message.mediaUrl)
+          (m.text && message.text && m.text === message.text && m.timestamp === message.timestamp && !m.mediaUrl && !message.mediaUrl && m.type === message.type)
       );
       if (!exists) {
-        state.messages[chatId].push(message);
+        list.push(message);
       }
     },
     updateMessageStatus(state, action) {

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
   CheckCheck,
   Play,
+  Pause,
   FileText,
   Download,
   AlertCircle,
@@ -59,6 +60,63 @@ export function MessageBubble({ message }) {
     isOpen: false,
     style: {},
   });
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
+  const audioRef = useRef(null);
+  const playbackIntervalRef = useRef(null);
+
+  const toggleVoicePlay = (e) => {
+    e.stopPropagation();
+    if (!mediaUrl) return;
+
+    if (!audioRef.current) {
+      const audio = new Audio(mediaUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setIsPlaying(false);
+        setPlaybackProgress(0);
+        if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      };
+
+      audio.onerror = () => {
+        setIsPlaying(false);
+        setPlaybackProgress(0);
+        if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      };
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+    } else {
+      audioRef.current
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+          playbackIntervalRef.current = setInterval(() => {
+            if (audioRef.current && audioRef.current.duration) {
+              const pct = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+              setPlaybackProgress(pct);
+            }
+          }, 100);
+        })
+        .catch((err) => console.warn("Audio playback initialization failed:", err));
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+      }
+    };
+  }, []);
 
   // Parse localStorage to check if local user deleted this message for themselves
   useEffect(() => {
@@ -307,15 +365,26 @@ export function MessageBubble({ message }) {
 
       case "voice":
         return (
-          <div className="flex items-center gap-3 py-1 min-w-[200px] sm:min-w-[240px]">
-            <button className="p-2 rounded-full bg-wa-primary text-white hover:opacity-90 shrink-0 transition-colors">
-              <Play className="h-4 w-4 fill-white" />
+          <div className="flex items-center gap-3 py-1 min-w-[200px] sm:min-w-[240px] select-none">
+            <button
+              onClick={toggleVoicePlay}
+              className="p-2 rounded-full bg-wa-primary text-white hover:opacity-90 shrink-0 transition-colors cursor-pointer"
+              title={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? (
+                <Pause className="h-4 w-4 fill-white" />
+              ) : (
+                <Play className="h-4 w-4 fill-white" />
+              )}
             </button>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="h-1.5 w-full bg-wa-border rounded-full overflow-hidden relative transition-colors">
-                <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-wa-primary rounded-full transition-colors" />
+                <div
+                  className="absolute left-0 top-0 bottom-0 bg-wa-primary rounded-full transition-all duration-100"
+                  style={{ width: `${playbackProgress || 0}%` }}
+                />
               </div>
-              <div className="flex justify-between text-[10px] text-wa-muted mt-1">
+              <div className="flex justify-between text-[10px] text-wa-muted mt-1 font-mono">
                 <span>{duration || "0:15"}</span>
                 <span>Voice Note</span>
               </div>
