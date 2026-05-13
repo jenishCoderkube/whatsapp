@@ -8,22 +8,60 @@ import { setActiveChat } from "../../redux/slices/chatSlice";
 import { setMobileScreen } from "../../redux/slices/uiSlice";
 import { cn } from "../../utils/cn";
 
-export function ChatCard({ chat }) {
+export const ChatCard = React.memo(({ chat }) => {
   const dispatch = useAppDispatch();
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
+  const typingMap = useAppSelector((state) => state.chat.typingMap[chat.id] || {});
+  const currentUserId = useAppSelector((state) => state.auth.user?.id);
+  const latestLoadedMsg = useAppSelector((state) => state.message.messages[chat.id]?.[0]);
+
   const isActive = activeChatId === chat.id;
+
+  // Evaluate if any peer apart from myself is typing
+  const isPeerTyping = Object.keys(typingMap).some((uid) => uid !== currentUserId);
 
   const handleClick = () => {
     dispatch(setActiveChat(chat.id));
     dispatch(setMobileScreen("chat"));
   };
 
+  const isOutgoing = latestLoadedMsg
+    ? latestLoadedMsg.senderId === currentUserId
+    : chat.lastMessage?.isOutgoing;
+
+  const status = latestLoadedMsg
+    ? latestLoadedMsg.status
+    : chat.lastMessage?.status;
+
+  const displayTimestamp = latestLoadedMsg
+    ? latestLoadedMsg.timestamp
+    : chat.lastMessage?.timestamp;
+
   const renderStatus = () => {
-    if (!chat.lastMessage?.isOutgoing) return null;
-    if (chat.lastMessage.status === "read") {
-      return <CheckCheck className="h-3.5 w-3.5 text-[#53bdeb] inline mr-1" />;
+    if (isPeerTyping) return null;
+    if (!isOutgoing) return null;
+    if (status === "read") {
+      return <CheckCheck className="h-3.5 w-3.5 text-[#53bdeb] inline mr-1 shrink-0" />;
     }
-    return <CheckCheck className="h-3.5 w-3.5 text-wa-muted inline mr-1" />;
+    if (status === "delivered") {
+      return <CheckCheck className="h-3.5 w-3.5 text-wa-muted inline mr-1 shrink-0" />;
+    }
+    return <Check className="h-3.5 w-3.5 text-wa-muted inline mr-1 shrink-0" />;
+  };
+
+  const renderPreviewText = () => {
+    if (isPeerTyping) {
+      return <span className="text-wa-primary font-medium italic animate-pulse">Typing...</span>;
+    }
+
+    const type = latestLoadedMsg ? latestLoadedMsg.type : "text";
+    const baseText = latestLoadedMsg ? latestLoadedMsg.text : chat.lastMessage?.text;
+
+    if (type === "image") return "📷 Photo";
+    if (type === "video") return "🎥 Video";
+    if (type === "file") return "📎 Document";
+    if (type === "voice") return "🎤 Voice Message";
+    return baseText || "No messages yet";
   };
 
   return (
@@ -47,14 +85,14 @@ export function ChatCard({ chat }) {
               chat.unreadCount > 0 ? "text-wa-unread font-medium" : "text-wa-muted"
             )}
           >
-            {chat.lastMessage?.timestamp}
+            {displayTimestamp}
           </span>
         </div>
 
         <div className="flex items-center justify-between">
           <p className="text-xs sm:text-sm text-wa-muted truncate flex-1 pr-1">
             {renderStatus()}
-            {chat.lastMessage?.text || "No messages yet"}
+            {renderPreviewText()}
           </p>
 
           {chat.unreadCount > 0 && (
@@ -66,4 +104,6 @@ export function ChatCard({ chat }) {
       </div>
     </div>
   );
-}
+});
+
+ChatCard.displayName = "ChatCard";

@@ -10,13 +10,13 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Avatar } from "../../components/ui/Avatar";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { loginStart, registerSuccess } from "../../redux/slices/authSlice";
+import { loginStart, registerSuccess, loginFailure } from "../../redux/slices/authSlice";
+import { authService } from "../../services/authService";
 import { cn } from "../../utils/cn";
 
 export default function RegisterPage() {
@@ -46,7 +46,7 @@ export default function RegisterPage() {
 
   const strengthScore = calculateStrength();
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setValidationError("");
 
@@ -73,18 +73,21 @@ export default function RegisterPage() {
 
     dispatch(loginStart());
 
-    setTimeout(() => {
-      dispatch(
-        registerSuccess({
-          name,
-          email,
-          avatar:
-            avatarPreview ||
-            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-        }),
-      );
+    // Execute absolute backend signup workflow
+    const result = await authService.register({
+      email,
+      password,
+      name,
+      avatar: avatarPreview,
+    });
+
+    if (result.error) {
+      dispatch(loginFailure(result.error));
+      setValidationError(result.error);
+    } else if (result.user) {
+      dispatch(registerSuccess({ user: result.user }));
       router.push("/chat");
-    }, 1200);
+    }
   };
 
   // Simulate file upload with mock preset assets

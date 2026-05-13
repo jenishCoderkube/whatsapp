@@ -13,11 +13,46 @@ export function ChatHeader() {
   const dispatch = useAppDispatch();
   const chats = useAppSelector((state) => state.chat.chats);
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
+  const typingMap = useAppSelector((state) => state.chat.typingMap[activeChatId] || {});
+  const currentUserId = useAppSelector((state) => state.auth.user?.id);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
   const [infoModal, setInfoModal] = useState(false);
 
   if (!activeChat) return null;
+
+  // Check if any remote peer is dynamically typing inside this view channel
+  const isPeerTyping = Object.keys(typingMap).some((uid) => uid !== currentUserId);
+
+  const formatLastSeen = (timestamp) => {
+    if (!timestamp) return activeChat.phoneNumber;
+    const date = new Date(timestamp);
+    const now = new Date();
+
+    const isToday = date.toDateString() === now.toDateString();
+
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    if (isToday) {
+      return `last seen today at ${timeStr}`;
+    } else if (isYesterday) {
+      return `last seen yesterday at ${timeStr}`;
+    } else {
+      const dateStr = date.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+      return `last seen ${dateStr} at ${timeStr}`;
+    }
+  };
+
+  const renderSubtitle = () => {
+    if (activeChat.isGroup) return activeChat.phoneNumber;
+    if (activeChat.online) return "Online";
+    if (activeChat.lastSeen) return formatLastSeen(activeChat.lastSeen);
+    return activeChat.phoneNumber;
+  };
 
   const headerOptions = [
     { label: "Contact Info", onClick: () => setInfoModal(true) },
@@ -48,9 +83,15 @@ export function ChatHeader() {
           <h2 className="text-sm sm:text-base font-medium text-wa-text truncate">
             {activeChat.name}
           </h2>
-          <p className="text-xs text-wa-muted truncate">
-            {activeChat.online ? "click here for contact info" : activeChat.phoneNumber}
-          </p>
+          {isPeerTyping ? (
+            <p className="text-xs text-wa-primary font-medium italic animate-pulse truncate">
+              Typing...
+            </p>
+          ) : (
+            <p className="text-xs text-wa-muted truncate capitalize-first">
+              {renderSubtitle()}
+            </p>
+          )}
         </div>
       </div>
 
@@ -82,7 +123,7 @@ export function ChatHeader() {
         <div className="flex flex-col items-center py-4 text-center">
           <Avatar src={activeChat.avatar} fallback={activeChat.name[0]} size="xxl" className="mb-4 shadow-md" />
           <h3 className="text-lg font-semibold text-wa-text">{activeChat.name}</h3>
-          <p className="text-xs text-wa-primary font-medium mt-1">{activeChat.online ? "Online" : "Offline"}</p>
+          <p className="text-xs text-wa-primary font-medium mt-1 capitalize-first">{renderSubtitle()}</p>
           
           <div className="w-full mt-6 pt-4 border-t border-wa-border flex flex-col gap-2 text-left">
             <span className="text-xs text-wa-muted">Phone Number / Details</span>

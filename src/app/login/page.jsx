@@ -13,6 +13,7 @@ import {
   loginSuccess,
   loginFailure,
 } from "../../redux/slices/authSlice";
+import { authService } from "../../services/authService";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [validationError, setValidationError] = useState("");
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setValidationError("");
 
@@ -41,11 +42,18 @@ export default function LoginPage() {
 
     dispatch(loginStart());
 
-    // Simulate safe server API call verification
-    setTimeout(() => {
-      dispatch(loginSuccess({ email }));
+    // Execute backend authentication flow
+    const result = await authService.login({ email, password });
+
+    if (result.error) {
+      console.log("result", result);
+
+      dispatch(loginFailure(result.error));
+      setValidationError(result.error);
+    } else if (result.user) {
+      dispatch(loginSuccess({ user: result.user }));
       router.push("/chat");
-    }, 1000);
+    }
   };
 
   return (
@@ -147,9 +155,7 @@ export default function LoginPage() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded accent-wa-primary"
                 />
-                <span className="text-xs text-wa-muted">
-                  Remember me
-                </span>
+                <span className="text-xs text-wa-muted">Remember me</span>
               </label>
             </div>
 
