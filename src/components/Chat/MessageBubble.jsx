@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
   CheckCheck,
@@ -10,13 +10,20 @@ import {
   Download,
   AlertCircle,
   Maximize2,
+  MoreVertical,
+  Smile,
+  Reply,
+  Trash2,
 } from "lucide-react";
 import { Modal } from "../ui/Modal";
+import { Avatar } from "../ui/Avatar";
 import { useAppSelector } from "../../hooks/useRedux";
+import { messageService } from "../../services/messageService";
 import { cn } from "../../utils/cn";
 
 export function MessageBubble({ message }) {
   const {
+    id,
     text,
     timestamp,
     status,
@@ -25,10 +32,17 @@ export function MessageBubble({ message }) {
     fileName,
     fileSize,
     duration,
+    reactions = {},
+    rawText = "",
   } = message;
 
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
+
+  const chats = useAppSelector((state) => state.chat.chats);
+  const activeChatId = useAppSelector((state) => state.chat.activeChatId);
+  const activeChat = chats.find((c) => c.id === activeChatId);
+  const isGroup = activeChat?.isGroup;
 
   // Accurately resolve string/UUID ownership parameters ensuring alignment parity survives refreshing/reconnection
   const normalizedSenderId = message.sender_id || message.senderId;
@@ -39,9 +53,132 @@ export function MessageBubble({ message }) {
       : !!message.isOutgoing;
 
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [isDeletedForMe, setIsDeletedForMe] = useState(false);
+  const [showReactionBar, setShowReactionBar] = useState(false);
+  const [dropdownConfig, setDropdownConfig] = useState({
+    isOpen: false,
+    style: {},
+  });
+
+  // Parse localStorage to check if local user deleted this message for themselves
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("wa_deleted_for_me") || "[]",
+      );
+      if (stored.includes(id)) {
+        setIsDeletedForMe(true);
+      }
+    } catch (e) {}
+  }, [id]);
+
+  // Global click listener to auto-close dropdown menus and reaction bars gracefully
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (dropdownConfig.isOpen) {
+        setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+      }
+      if (showReactionBar) {
+        setShowReactionBar(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [dropdownConfig.isOpen, showReactionBar]);
+
+  if (isDeletedForMe) return null;
+
+  const isDeleted = type === "deleted" || text === "This message was deleted";
+
+  const handleOpenMenu = (e) => {
+    e.stopPropagation();
+    setShowReactionBar(false);
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const style = {};
+
+    // Automatic top/bottom edge positioning detection
+    // If distance to bottom of window is less than 220px, display above to prevent vertical overflow
+    if (window.innerHeight - rect.bottom < 220) {
+      style.bottom = "100%";
+      style.marginBottom = "6px";
+    } else {
+      style.top = "100%";
+      style.marginTop = "6px";
+    }
+
+    // Automatic left/right edge positioning to ensure dropdown never goes outside viewport
+    // Since the 3-dots icon sits consistently on the right side of the message bubble:
+    // If close to the screen's right edge (outgoing messages or wide incoming bubbles), anchor right to expand leftward
+    if (rect.right > window.innerWidth - 180 || isMsgOutgoing) {
+      style.right = 0;
+    } else {
+      style.left = 0;
+    }
+
+    setDropdownConfig({ isOpen: true, style });
+  };
+
+  const handleDeleteForMe = (e) => {
+    e.stopPropagation();
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("wa_deleted_for_me") || "[]",
+      );
+      if (!stored.includes(id)) {
+        stored.push(id);
+        localStorage.setItem("wa_deleted_for_me", JSON.stringify(stored));
+      }
+      setIsDeletedForMe(true);
+      setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    } catch (err) {}
+  };
+
+  const handleDeleteForEveryone = async (e) => {
+    e.stopPropagation();
+    if (!isMsgOutgoing) return;
+    try {
+      const targetConvId =
+        message.conversation_id || message.conversationId || activeChatId;
+      await messageService.deleteMessageForEveryone(id, targetConvId);
+      setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    } catch (err) {}
+  };
+
+  const handleReplyAction = (e) => {
+    e.stopPropagation();
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    const customEvent = new CustomEvent("wa_reply_trigger", {
+      detail: {
+        text,
+        senderName: message.senderName || (isMsgOutgoing ? "You" : "Peer"),
+      },
+    });
+    window.dispatchEvent(customEvent);
+  };
+
+  const handleOpenReactions = (e) => {
+    e.stopPropagation();
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    setShowReactionBar((prev) => !prev);
+  };
+
+  const handleToggleReaction = async (emoji) => {
+    if (!currentUserId) return;
+    try {
+      await messageService.toggleReaction(
+        id,
+        currentUserId,
+        emoji,
+        text,
+        reactions,
+      );
+      setShowReactionBar(false);
+    } catch (err) {}
+  };
 
   const renderStatusTicks = () => {
-    if (!isMsgOutgoing) return null;
+    if (!isMsgOutgoing || isDeleted) return null;
     if (status === "failed") {
       return (
         <span
@@ -84,6 +221,15 @@ export function MessageBubble({ message }) {
   };
 
   const renderMediaContent = () => {
+    if (isDeleted) {
+      return (
+        <div className="flex items-center gap-1.5 py-0.5 text-wa-muted italic text-xs sm:text-sm select-none">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-wa-muted/70" />
+          <span>This message was deleted</span>
+        </div>
+      );
+    }
+
     switch (type) {
       case "image":
         return (
@@ -213,43 +359,188 @@ export function MessageBubble({ message }) {
     }
   };
 
+  const reactionEmojis = Object.keys(reactions).filter(
+    (k) => Array.isArray(reactions[k]) && reactions[k].length > 0,
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.15, ease: "easeOut" }}
       className={cn(
-        "flex w-full mb-1 sm:mb-2 px-2 sm:px-4 select-text",
+        "flex w-full mb-1.5 sm:mb-2.5 px-2 sm:px-4 select-text relative",
         isMsgOutgoing ? "justify-end" : "justify-start",
       )}
     >
-      <div
-        className={cn(
-          "relative max-w-[85%] sm:max-w-[70%] rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200",
-          isMsgOutgoing
-            ? "bg-wa-bubble-out text-wa-text rounded-tr-none"
-            : "bg-wa-bubble-in text-wa-text rounded-tl-none",
-        )}
-      >
-        {/* Tail graphic rendering */}
-        <span
-          className={cn(
-            "absolute top-0 w-0 h-0 border-solid border-t-[10px] transition-colors duration-200",
-            isMsgOutgoing
-              ? "right-[-8px] border-r-[8px] border-t-wa-bubble-out border-r-transparent"
-              : "left-[-8px] border-l-[8px] border-t-wa-bubble-in border-l-transparent",
-          )}
-        />
-
-        {renderMediaContent()}
-
-        {/* Timestamp metadata */}
-        <div className="flex items-center justify-end gap-1 mt-0.5 float-right clear-both ml-3 -mb-0.5 select-none">
-          <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans">
-            {timestamp}
-          </span>
-          {renderStatusTicks()}
+      {/* Group Chat Incoming Avatar mapping */}
+      {isGroup && !isMsgOutgoing && (
+        <div className="mr-1.5 sm:mr-2 shrink-0 self-start mt-0.5 select-none">
+          <Avatar
+            src={message.senderAvatar}
+            fallback={message.senderName?.[0] || "U"}
+            size="sm"
+            className="ring-1 ring-wa-border shadow-xs"
+          />
         </div>
+      )}
+
+      {/* Outer Flex Container keeping core Bubble followed consistently by the 3-dots action icon on the right side */}
+      <div className="flex items-center gap-1 sm:gap-1.5 relative max-w-full flex-row">
+        {/* Core Message Bubble Container */}
+        <div
+          className={cn(
+            "relative rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200 shrink min-w-0 max-w-full",
+            isMsgOutgoing
+              ? "bg-wa-bubble-out text-wa-text rounded-tr-none"
+              : "bg-wa-bubble-in text-wa-text rounded-tl-none",
+            reactionEmojis.length > 0 && "mb-3", // Leave space for trailing overlapping reactions
+          )}
+        >
+          {/* Tail graphic rendering */}
+          <span
+            className={cn(
+              "absolute top-0 w-0 h-0 border-solid border-t-[10px] transition-colors duration-200",
+              isMsgOutgoing
+                ? "right-[-8px] border-r-[8px] border-t-wa-bubble-out border-r-transparent"
+                : "left-[-8px] border-l-[8px] border-t-wa-bubble-in border-l-transparent",
+            )}
+          />
+
+          {/* Group sender name overlay inside bubble */}
+          {isGroup && !isMsgOutgoing && !isDeleted && (
+            <div className="text-xs font-semibold text-wa-primary mb-0.5 select-none truncate max-w-xs">
+              {message.senderName || "Group Member"}
+            </div>
+          )}
+
+          {renderMediaContent()}
+
+          {/* Timestamp metadata */}
+          <div className="flex items-center justify-end gap-1 mt-0.5 float-right clear-both ml-3 -mb-0.5 select-none">
+            <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans">
+              {timestamp}
+            </span>
+            {renderStatusTicks()}
+          </div>
+
+          {/* Pop-out Horizontal Reaction Picker Strip centered beautifully */}
+          {showReactionBar && !isDeleted && (
+            <div
+              className={cn(
+                "absolute -top-12 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50 select-none animate-scale-up",
+                isMsgOutgoing ? "right-0" : "left-0",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleToggleReaction(emoji)}
+                  className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Grouped Overlapping Active Reactions Pill */}
+          {reactionEmojis.length > 0 && (
+            <div className="absolute -bottom-2.5 right-2 bg-wa-sidebar border border-wa-border rounded-full px-1.5 py-0.5 flex items-center gap-1 shadow-xs select-none z-10 scale-95 sm:scale-100">
+              {reactionEmojis.map((emoji) => {
+                const count = reactions[emoji].length;
+                const hasReacted = reactions[emoji].includes(currentUserId);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => handleToggleReaction(emoji)}
+                    className={cn(
+                      "text-xs hover:scale-110 transition-transform cursor-pointer inline-flex items-center gap-0.5 leading-none",
+                      hasReacted && "bg-wa-primary/20 rounded-full px-1 py-0.5",
+                    )}
+                    title={hasReacted ? "Remove reaction" : "React"}
+                  >
+                    <span>{emoji}</span>
+                    {count > 1 && (
+                      <span className="text-[9px] text-wa-muted font-bold font-sans">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Persistent 3-dots icon positioned consistently immediately after (right side of) the message bubble */}
+        {!isDeleted && (
+          <div className="relative self-center shrink-0 select-none">
+            <button
+              onClick={handleOpenMenu}
+              className="p-1 text-wa-muted hover:text-wa-text hover:bg-wa-active rounded-full transition-colors cursor-pointer flex items-center justify-center"
+              title="Message options"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+
+            {/* Contextual Dropdown Menu */}
+            <AnimatePresence>
+              {dropdownConfig.isOpen && (
+                <motion.div
+                  initial={{
+                    opacity: 0,
+                    scale: 0.95,
+                    y: dropdownConfig.style.bottom ? 4 : -4,
+                  }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.12, ease: "easeOut" }}
+                  style={dropdownConfig.style}
+                  className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs select-none overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={handleReplyAction}
+                    className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors cursor-pointer font-sans flex items-center gap-2"
+                  >
+                    <Reply className="h-3.5 w-3.5 text-wa-muted shrink-0" />
+                    <span>Reply</span>
+                  </button>
+
+                  <button
+                    onClick={handleOpenReactions}
+                    className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors cursor-pointer font-sans flex items-center gap-2"
+                  >
+                    <Smile className="h-3.5 w-3.5 text-wa-muted shrink-0" />
+                    <span>React</span>
+                  </button>
+
+                  <div className="border-t border-wa-border my-1" />
+
+                  <button
+                    onClick={handleDeleteForMe}
+                    className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors cursor-pointer font-sans flex items-center gap-2"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-wa-muted shrink-0" />
+                    <span>Delete for me</span>
+                  </button>
+
+                  {isMsgOutgoing && (
+                    <button
+                      onClick={handleDeleteForEveryone}
+                      className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors cursor-pointer font-sans font-medium flex items-center gap-2"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                      <span>Delete for everyone</span>
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </motion.div>
   );

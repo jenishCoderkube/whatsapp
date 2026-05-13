@@ -21,10 +21,22 @@ export const realtimeService = {
           if (!payload.new) return;
           const row = payload.new;
 
+          let cleanText = row.text || "";
+          let reactions = {};
+          if (cleanText.includes("|||R:")) {
+            const parts = cleanText.split("|||R:");
+            cleanText = parts[0];
+            try {
+              reactions = JSON.parse(parts[1] || "{}");
+            } catch (e) {}
+          }
+
           const uniformMsg = {
             id: row.id,
             conversationId: row.conversation_id,
-            text: row.text || "",
+            text: cleanText,
+            rawText: row.text || "",
+            reactions,
             timestamp: row.timestamp_string || new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             status: row.status || "sent",
             type: row.type || "text",
@@ -33,6 +45,7 @@ export const realtimeService = {
             fileSize: row.file_size,
             duration: row.duration,
             senderId: row.sender_id,
+            sender_id: row.sender_id,
             createdAt: row.created_at,
           };
 

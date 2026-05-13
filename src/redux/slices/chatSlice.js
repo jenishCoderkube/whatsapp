@@ -14,7 +14,10 @@ const chatSlice = createSlice({
   reducers: {
     setChats(state, action) {
       if (action.payload) {
-        state.chats = action.payload;
+        const sorted = [...action.payload].sort(
+          (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
+        );
+        state.chats = sorted;
         // Verify activeChatId stays bound cleanly without auto-selecting an initial chat
         if (
           state.activeChatId &&
@@ -47,6 +50,7 @@ const chatSlice = createSlice({
       const chat = state.chats.find((c) => c.id === chatId);
       if (chat) {
         chat.lastMessage = { text, timestamp, isOutgoing, status };
+        chat.updatedAt = new Date().toISOString();
         // Move chat to top of list efficiently avoiding whole-array re-allocation keys
         const filtered = state.chats.filter((c) => c.id !== chatId);
         state.chats = [chat, ...filtered];

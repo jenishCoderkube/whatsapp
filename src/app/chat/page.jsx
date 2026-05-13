@@ -8,10 +8,11 @@ import { MessageBubble } from "../../components/Chat/MessageBubble";
 import { ChatInput } from "../../components/Chat/ChatInput";
 import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { setMessages, prependMessages, addMessage, updateMessageStatus } from "../../redux/slices/messageSlice";
+import { setMessages, prependMessages, addMessage, updateMessageStatus, updateMessage } from "../../redux/slices/messageSlice";
 import { updateLastMessage, incrementUnread, setChats } from "../../redux/slices/chatSlice";
 import { messageService } from "../../services/messageService";
 import { realtimeService } from "../../services/realtimeService";
+import { profileService } from "../../services/profileService";
 import { cn } from "../../utils/cn";
 
 export default function ChatPage() {
@@ -91,12 +92,33 @@ export default function ChatPage() {
       if (eventType === "INSERT") {
         // 1. If payload targets actively open viewport:
         if (targetChatId === activeChatIdRef.current) {
-          dispatch(
-            addMessage({
-              chatId: targetChatId,
-              message: { ...incomingMsg, isOutgoing: isMine },
-            })
-          );
+          if (!isMine && incomingMsg.senderId) {
+            profileService.getProfileById(incomingMsg.senderId).then((profile) => {
+              dispatch(
+                addMessage({
+                  chatId: targetChatId,
+                  message: {
+                    ...incomingMsg,
+                    isOutgoing: false,
+                    senderName: profile?.name || "Member",
+                    senderAvatar: profile?.avatar,
+                  },
+                })
+              );
+            });
+          } else {
+            dispatch(
+              addMessage({
+                chatId: targetChatId,
+                message: {
+                  ...incomingMsg,
+                  isOutgoing: isMine,
+                  senderName: user?.name,
+                  senderAvatar: user?.avatar,
+                },
+              })
+            );
+          }
 
           if (!isMine) {
             const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
@@ -152,6 +174,14 @@ export default function ChatPage() {
           });
         }
       } else if (eventType === "UPDATE") {
+        // Sync live updates for content, reactions, and deletions
+        dispatch(
+          updateMessage({
+            chatId: targetChatId,
+            message: incomingMsg,
+          })
+        );
+
         // Sync live read receipt updates onto active bubbles
         dispatch(
           updateMessageStatus({

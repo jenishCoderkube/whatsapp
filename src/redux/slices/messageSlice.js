@@ -63,6 +63,16 @@ const messageSlice = createSlice({
         }
       }
     },
+    updateMessage(state, action) {
+      const { chatId, message } = action.payload;
+      const list = state.messages[chatId];
+      if (list) {
+        const idx = list.findIndex((m) => m.id === message.id);
+        if (idx !== -1) {
+          list[idx] = { ...list[idx], ...message };
+        }
+      }
+    },
   },
 });
 
@@ -72,6 +82,7 @@ export const {
   replaceOptimisticMessage,
   addMessage,
   updateMessageStatus,
+  updateMessage,
 } = messageSlice.actions;
 
 export default messageSlice.reducer;

@@ -25,7 +25,11 @@ import { ChatCard } from "./ChatCard";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
 import { toggleTheme } from "../../redux/slices/uiSlice";
-import { setChats, appendChat, setActiveChat } from "../../redux/slices/chatSlice";
+import {
+  setChats,
+  appendChat,
+  setActiveChat,
+} from "../../redux/slices/chatSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
 import { storageService } from "../../services/storageService";
@@ -98,7 +102,7 @@ export function Sidebar({ className }) {
   }, [userSearchQuery, user?.id, newChatModal]);
 
   const filteredChats = chats.filter((chat) =>
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const dropdownItems = [
@@ -121,7 +125,10 @@ export function Sidebar({ className }) {
   const handleStartDirectChat = async (targetProfile) => {
     if (!user?.id) return;
     try {
-      const chatObj = await chatService.createOrOpenOneToOneChat(user.id, targetProfile);
+      const chatObj = await chatService.createOrOpenOneToOneChat(
+        user.id,
+        targetProfile,
+      );
       dispatch(appendChat(chatObj));
       dispatch(setActiveChat(chatObj.id));
       setNewChatModal(false);
@@ -136,7 +143,9 @@ export function Sidebar({ className }) {
     try {
       const groupObj = await chatService.createGroupChat({
         name: groupName.trim(),
-        avatar: groupAvatar || "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80",
+        avatar:
+          groupAvatar ||
+          "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80",
         currentUserId: user.id,
         memberIds: selectedMembers,
       });
@@ -153,7 +162,9 @@ export function Sidebar({ className }) {
 
   const toggleMemberSelection = (targetId) => {
     setSelectedMembers((prev) =>
-      prev.includes(targetId) ? prev.filter((id) => id !== targetId) : [...prev, targetId]
+      prev.includes(targetId)
+        ? prev.filter((id) => id !== targetId)
+        : [...prev, targetId],
     );
   };
 
@@ -172,7 +183,9 @@ export function Sidebar({ className }) {
     setIsUpdatingProfile(true);
     setProfileMessage("");
     try {
-      const updated = await profileService.updateProfileData(user.id, { name: tempName.trim() });
+      const updated = await profileService.updateProfileData(user.id, {
+        name: tempName.trim(),
+      });
       if (updated) {
         dispatch(updateProfile({ name: updated.name }));
         setEditingName(false);
@@ -190,7 +203,9 @@ export function Sidebar({ className }) {
     setIsUpdatingProfile(true);
     setProfileMessage("");
     try {
-      const updated = await profileService.updateProfileData(user.id, { status: tempStatus.trim() });
+      const updated = await profileService.updateProfileData(user.id, {
+        status: tempStatus.trim(),
+      });
       if (updated) {
         dispatch(updateProfile({ status: updated.status }));
         setEditingStatus(false);
@@ -216,9 +231,14 @@ export function Sidebar({ className }) {
     setProfileMessage("");
 
     try {
-      const uploadedAbsoluteUrl = await storageService.uploadFile(file, "avatars");
+      const uploadedAbsoluteUrl = await storageService.uploadFile(
+        file,
+        "avatars",
+      );
       if (uploadedAbsoluteUrl) {
-        const updated = await profileService.updateProfileData(user.id, { avatar: uploadedAbsoluteUrl });
+        const updated = await profileService.updateProfileData(user.id, {
+          avatar: uploadedAbsoluteUrl,
+        });
         if (updated) {
           dispatch(updateProfile({ avatar: updated.avatar }));
           setProfileMessage("Profile photo updated successfully.");
@@ -237,8 +257,11 @@ export function Sidebar({ className }) {
     setIsUpdatingProfile(true);
     setProfileMessage("");
     try {
-      const fallbackUrl = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80";
-      const updated = await profileService.updateProfileData(user.id, { avatar: fallbackUrl });
+      const fallbackUrl =
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80";
+      const updated = await profileService.updateProfileData(user.id, {
+        avatar: fallbackUrl,
+      });
       if (updated) {
         dispatch(updateProfile({ avatar: updated.avatar }));
         setProfileMessage("Profile photo removed.");
@@ -251,11 +274,25 @@ export function Sidebar({ className }) {
   };
 
   return (
-    <aside className={cn("flex flex-col h-full bg-wa-sidebar border-r border-wa-border select-none transition-colors duration-200", className)}>
+    <aside
+      className={cn(
+        "flex flex-col h-full bg-wa-sidebar border-r border-wa-border select-none transition-colors duration-200",
+        className,
+      )}
+    >
       {/* Top native header strip */}
       <header className="flex items-center justify-between px-4 py-2.5 bg-wa-header transition-colors duration-200 shrink-0">
-        <div onClick={() => setProfileModal(true)} className="cursor-pointer block" title="View Profile">
-          <Avatar src={user?.avatar} fallback={user?.name?.[0] || "U"} size="md" isOnline={true} />
+        <div
+          onClick={() => setProfileModal(true)}
+          className="cursor-pointer block"
+          title="View Profile"
+        >
+          <Avatar
+            src={user?.avatar}
+            fallback={user?.name?.[0] || "U"}
+            size="md"
+            isOnline={true}
+          />
         </div>
 
         <div className="flex items-center gap-2 text-wa-muted">
@@ -289,13 +326,17 @@ export function Sidebar({ className }) {
           filteredChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
         ) : (
           <div className="p-6 text-center text-xs sm:text-sm text-wa-muted">
-             No chats or contacts found matching "{searchQuery}"
+            No chats or contacts found matching "{searchQuery}"
           </div>
         )}
       </div>
 
       {/* Profile Settings Engine Modal */}
-      <Modal isOpen={profileModal} onClose={() => setProfileModal(false)} title="Profile settings">
+      <Modal
+        isOpen={profileModal}
+        onClose={() => setProfileModal(false)}
+        title="Profile settings"
+      >
         <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-2">
           {profileMessage && (
             <div className="w-full mb-3 p-2 rounded text-center text-xs bg-wa-active text-wa-text border border-wa-border animate-fade-in">
@@ -314,7 +355,12 @@ export function Sidebar({ className }) {
 
           {/* Realtime Interactive Profile photo block */}
           <div className="relative group cursor-pointer my-2 block rounded-full">
-            <Avatar src={user?.avatar} fallback={user?.name?.[0] || "U"} size="xxl" className="shadow-md ring-2 ring-wa-border" />
+            <Avatar
+              src={user?.avatar}
+              fallback={user?.name?.[0] || "U"}
+              size="xxl"
+              className="shadow-md ring-2 ring-wa-border"
+            />
             <div
               onClick={() => profileFileInputRef.current?.click()}
               className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white text-center p-2"
@@ -351,7 +397,9 @@ export function Sidebar({ className }) {
           <div className="w-full pt-3 border-t border-wa-border flex flex-col gap-4 text-left">
             {/* Username Section */}
             <div className="flex flex-col gap-1">
-              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">Your Name</div>
+              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">
+                Your Name
+              </div>
               {editingName ? (
                 <div className="flex items-center gap-1">
                   <Input
@@ -384,7 +432,9 @@ export function Sidebar({ className }) {
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
-                  <span className="text-xs sm:text-sm font-medium text-wa-text truncate">{user?.name}</span>
+                  <span className="text-xs sm:text-sm font-medium text-wa-text truncate">
+                    {user?.name}
+                  </span>
                   <button
                     onClick={() => setEditingName(true)}
                     className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
@@ -395,13 +445,16 @@ export function Sidebar({ className }) {
                 </div>
               )}
               <span className="text-[10px] text-wa-muted px-1 block">
-                This is not your username or pin. This name will be visible to your linked contacts.
+                This is not your username or pin. This name will be visible to
+                your linked contacts.
               </span>
             </div>
 
             {/* About description Section */}
             <div className="flex flex-col gap-1">
-              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">About</div>
+              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">
+                About
+              </div>
               {editingStatus ? (
                 <div className="flex items-center gap-1">
                   <Input
@@ -434,7 +487,9 @@ export function Sidebar({ className }) {
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
-                  <span className="text-xs sm:text-sm text-wa-text truncate">{user?.status || "Available"}</span>
+                  <span className="text-xs sm:text-sm text-wa-text truncate">
+                    {user?.status || "Available"}
+                  </span>
                   <button
                     onClick={() => setEditingStatus(true)}
                     className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
@@ -450,7 +505,11 @@ export function Sidebar({ className }) {
       </Modal>
 
       {/* Interactive New Chat / Create Group Chat Modals */}
-      <Modal isOpen={newChatModal} onClose={() => setNewChatModal(false)} title="Start New Conversation">
+      <Modal
+        isOpen={newChatModal}
+        onClose={() => setNewChatModal(false)}
+        title="Start New Conversation"
+      >
         <div className="flex flex-col h-[420px]">
           {/* Internal view switching strip */}
           <div className="flex border-b border-wa-border mb-3">
@@ -460,7 +519,7 @@ export function Sidebar({ className }) {
                 "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors block cursor-pointer",
                 activeTab === "direct"
                   ? "border-wa-primary text-wa-primary"
-                  : "border-transparent text-wa-muted hover:text-wa-text"
+                  : "border-transparent text-wa-muted hover:text-wa-text",
               )}
             >
               Direct Chat
@@ -471,7 +530,7 @@ export function Sidebar({ className }) {
                 "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors block cursor-pointer",
                 activeTab === "group"
                   ? "border-wa-primary text-wa-primary"
-                  : "border-transparent text-wa-muted hover:text-wa-text"
+                  : "border-transparent text-wa-muted hover:text-wa-text",
               )}
             >
               Create Group
@@ -481,31 +540,42 @@ export function Sidebar({ className }) {
           {/* Direct Chat search view */}
           {activeTab === "direct" ? (
             <div className="flex flex-col flex-1 overflow-hidden">
-              <div className="relative mb-3">
+              <div className="relative mb-3 p-0.5">
                 <Input
                   type="text"
                   placeholder="Search registered profiles..."
                   value={userSearchQuery}
                   onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 bg-wa-header border border-wa-border rounded-lg text-xs sm:text-sm py-2 focus:ring-1 focus:ring-wa-primary"
                 />
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-wa-muted" />
+                <Search className="absolute left-3.5 top-3 h-4 w-4 text-wa-muted" />
               </div>
 
               <div className="flex-1 overflow-y-auto pr-1">
                 {isSearching ? (
-                  <div className="py-8 text-center text-xs text-wa-muted animate-pulse">Searching profiles...</div>
+                  <div className="py-8 text-center text-xs text-wa-muted animate-pulse">
+                    Searching profiles...
+                  </div>
                 ) : searchResults.length > 0 ? (
                   searchResults.map((profile) => (
                     <div
                       key={profile.id}
                       onClick={() => handleStartDirectChat(profile)}
-                      className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors block"
+                      className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors"
                     >
-                      <Avatar src={profile.avatar} fallback={profile.name[0]} size="md" isOnline={profile.online} />
+                      <Avatar
+                        src={profile.avatar}
+                        fallback={profile.name[0]}
+                        size="md"
+                        isOnline={profile.online}
+                      />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-wa-text truncate">{profile.name}</div>
-                        <div className="text-[11px] text-wa-muted truncate">{profile.email}</div>
+                        <div className="text-xs font-medium text-wa-text truncate">
+                          {profile.name}
+                        </div>
+                        <div className="text-[11px] text-wa-muted truncate">
+                          {profile.email}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -522,7 +592,11 @@ export function Sidebar({ className }) {
             /* Multi-User Native Group Creation Layer */
             <div className="flex flex-col flex-1 overflow-hidden">
               <div className="flex items-center gap-3 mb-3">
-                <div onClick={handleRandomGroupAvatar} className="cursor-pointer block" title="Generate Preset Icon">
+                <div
+                  onClick={handleRandomGroupAvatar}
+                  className="cursor-pointer block"
+                  title="Generate Preset Icon"
+                >
                   <Avatar
                     src={groupAvatar}
                     fallback="G"
@@ -530,8 +604,9 @@ export function Sidebar({ className }) {
                     className="border border-wa-border hover:opacity-80 transition-opacity"
                   />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 p-0.5">
                   <Input
+                    className="bg-wa-header border border-wa-border rounded-lg text-xs sm:text-sm py-2 font-medium focus:ring-1 focus:ring-wa-primary"
                     type="text"
                     placeholder="Group Subject / Title..."
                     value={groupName}
@@ -543,7 +618,9 @@ export function Sidebar({ className }) {
                 </div>
               </div>
 
-              <div className="text-xs font-medium text-wa-muted mb-1.5">Select Group Participants</div>
+              <div className="text-xs font-medium text-wa-muted mb-1.5">
+                Select Group Participants
+              </div>
 
               <div className="flex-1 overflow-y-auto border border-wa-border rounded-md p-1.5 mb-3 bg-wa-sidebar">
                 {searchResults.length > 0 ? (
@@ -554,26 +631,37 @@ export function Sidebar({ className }) {
                         key={profile.id}
                         onClick={() => toggleMemberSelection(profile.id)}
                         className={cn(
-                          "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none block",
-                          isSelected && "bg-wa-active"
+                          "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none",
+                          isSelected && "bg-wa-active",
                         )}
                       >
                         <div
                           className={cn(
                             "flex items-center justify-center h-4 w-4 rounded border transition-colors shrink-0",
-                            isSelected ? "bg-wa-primary border-wa-primary text-white" : "border-wa-muted"
+                            isSelected
+                              ? "bg-wa-primary border-wa-primary text-white"
+                              : "border-wa-muted",
                           )}
                         >
-                          {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                          {isSelected && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
                         </div>
-                        <Avatar src={profile.avatar} fallback={profile.name[0]} size="sm" />
-                        <span className="text-xs text-wa-text truncate flex-1">{profile.name}</span>
+                        <Avatar
+                          src={profile.avatar}
+                          fallback={profile.name[0]}
+                          size="sm"
+                        />
+                        <span className="text-xs text-wa-text truncate flex-1">
+                          {profile.name}
+                        </span>
                       </div>
                     );
                   })
                 ) : (
                   <div className="py-8 text-center text-xs text-wa-muted">
-                    No searchable peers ready. Type characters in the Search input to fetch accounts.
+                    No searchable peers ready. Type characters in the Search
+                    input to fetch accounts.
                   </div>
                 )}
               </div>

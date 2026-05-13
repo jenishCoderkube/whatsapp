@@ -23,7 +23,7 @@ export const messageService = {
 
       let dbQuery = supabase
         .from("messages")
-        .select("*")
+        .select("*, profiles:sender_id(name, avatar)")
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: false })
         .limit(limitCount);
@@ -40,9 +40,21 @@ export const messageService = {
       // Map rows directly to frontend expectations, reversing so earliest is first natively
       return data.reverse().map((msg) => {
         const isMine = currentUserId ? msg.sender_id === currentUserId : false;
+        let cleanText = msg.text || "";
+        let reactions = {};
+        if (cleanText.includes("|||R:")) {
+          const parts = cleanText.split("|||R:");
+          cleanText = parts[0];
+          try {
+            reactions = JSON.parse(parts[1] || "{}");
+          } catch (e) {}
+        }
+
         return {
           id: msg.id,
-          text: msg.text || "",
+          text: cleanText,
+          rawText: msg.text || "",
+          reactions,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -58,6 +70,8 @@ export const messageService = {
           duration: msg.duration,
           senderId: msg.sender_id,
           sender_id: msg.sender_id, // Normalized alignment reference parity
+          senderName: msg.profiles?.name || "Member",
+          senderAvatar: msg.profiles?.avatar,
           createdAt: msg.created_at,
         };
       });
@@ -166,6 +180,8 @@ export const messageService = {
       return {
         id: newMsg.id,
         text: newMsg.text || "",
+        rawText: newMsg.text || "",
+        reactions: {},
         timestamp: newMsg.timestamp_string,
         status: newMsg.status,
         type: newMsg.type,
@@ -245,6 +261,79 @@ export const messageService = {
         .eq("id", conversationId);
     } catch (e) {
       console.warn("Exception updating message read state flags:", e);
+    }
+  },
+
+  /**
+   * Delete message globally for everyone by replacing text with placeholder.
+   */
+  async deleteMessageForEveryone(messageId, conversationId) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      if (!messageId || !isUuid) return;
+
+      const deletedPlaceholderText = "This message was deleted";
+      await supabase
+        .from("messages")
+        .update({
+          text: deletedPlaceholderText,
+          type: "deleted",
+        })
+        .eq("id", messageId);
+
+      if (conversationId) {
+        await supabase
+          .from("conversations")
+          .update({
+            last_message_text: deletedPlaceholderText,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
+      }
+    } catch (e) {
+      console.warn("Delete for everyone exception:", e);
+    }
+  },
+
+  /**
+   * Toggle emoji reaction for current user encoded cleanly inside text.
+   */
+  async toggleReaction(messageId, currentUserId, emoji, currentCleanText, currentReactionsDict = {}) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      if (!messageId || !isUuid || !currentUserId) return;
+
+      // Deep clone current reactions dict
+      const newReactions = JSON.parse(JSON.stringify(currentReactionsDict));
+
+      // Check if user already reacted with this exact emoji
+      const hasReactedWithThisEmoji = Array.isArray(newReactions[emoji]) && newReactions[emoji].includes(currentUserId);
+
+      // First, remove user from all existing emojis to guarantee mutually exclusive reaction rule per user
+      Object.keys(newReactions).forEach((key) => {
+        if (Array.isArray(newReactions[key])) {
+          newReactions[key] = newReactions[key].filter((uid) => uid !== currentUserId);
+          if (newReactions[key].length === 0) {
+            delete newReactions[key];
+          }
+        }
+      });
+
+      // If they hadn't reacted with this emoji, add them to it
+      if (!hasReactedWithThisEmoji) {
+        if (!newReactions[emoji]) {
+          newReactions[emoji] = [];
+        }
+        newReactions[emoji].push(currentUserId);
+      }
+
+      const encodedText = currentCleanText + "|||R:" + JSON.stringify(newReactions);
+      await supabase.from("messages").update({ text: encodedText }).eq("id", messageId);
+
+      return newReactions;
+    } catch (e) {
+      console.warn("Toggle reaction exception:", e);
+      return null;
     }
   },
 };

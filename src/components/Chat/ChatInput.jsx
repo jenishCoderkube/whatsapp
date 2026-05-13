@@ -114,6 +114,21 @@ export function ChatInput() {
     }
   }, [toastError]);
 
+  // Support Reply action natively
+  useEffect(() => {
+    const handleReply = (e) => {
+      const { text: replyText, senderName } = e.detail || {};
+      if (replyText) {
+        const snippet = replyText.length > 40 ? replyText.substring(0, 40) + "..." : replyText;
+        const prefix = `Replying to ${senderName || "peer"}: "${snippet}"\n`;
+        setMessageText((prev) => (prev ? prev + "\n" + prefix : prefix));
+        setTimeout(() => textareaRef.current?.focus(), 50);
+      }
+    };
+    window.addEventListener("wa_reply_trigger", handleReply);
+    return () => window.removeEventListener("wa_reply_trigger", handleReply);
+  }, []);
+
   const formatBytes = (bytes) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
