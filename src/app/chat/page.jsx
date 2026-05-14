@@ -58,11 +58,12 @@ export default function ChatPage() {
   // Instantly mark targeted unread sequences as read whenever actively viewing a thread
   useEffect(() => {
     const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+    const isAppFocused = typeof document !== "undefined" ? document.hasFocus() : true;
     const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
       ? mobileScreen === "chat"
       : true;
 
-    if (activeChatId && user?.id && isAppVisible && isChatActiveView) {
+    if (activeChatId && user?.id && isAppVisible && isAppFocused && isChatActiveView) {
       messageService.markConversationMessagesAsRead(activeChatId, user.id);
     }
   }, [activeChatId, user?.id, mobileScreen]);
@@ -74,6 +75,9 @@ export default function ChatPage() {
     messageService.fetchMessages(activeChatId, null, 20, user.id).then((fetched) => {
       if (fetched && fetched.length > 0) {
         dispatch(setMessages({ chatId: activeChatId, messages: fetched }));
+        
+        // Acknowledge delivery for incoming messages if not already read
+        messageService.markConversationMessagesAsDelivered(activeChatId, user.id);
       }
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
@@ -84,6 +88,14 @@ export default function ChatPage() {
   // Unify absolute table-wide database message publication monitoring pipeline
   useEffect(() => {
     if (!user?.id) return;
+
+    // Acknowledge all pending deliveries globally on mount or reconnect
+    messageService.syncAllPendingDeliveries(user.id);
+    
+    const handleOnline = () => {
+      messageService.syncAllPendingDeliveries(user.id);
+    };
+    window.addEventListener("online", handleOnline);
 
     realtimeService.subscribeToUserGlobalMessages((eventType, incomingMsg) => {
       const isMine = incomingMsg.senderId === user.id;
@@ -122,14 +134,15 @@ export default function ChatPage() {
 
           if (!isMine) {
             const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+            const isAppFocused = typeof document !== "undefined" ? document.hasFocus() : true;
             const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
               ? mobileScreenRef.current === "chat"
               : true;
 
-            if (isAppVisible && isChatActiveView) {
+            if (isAppVisible && isAppFocused && isChatActiveView) {
               messageService.markConversationMessagesAsRead(targetChatId, user.id);
             } else {
-              // Message targets thread but app is minimized or list layout is actively displayed on mobile screen
+              // Message targets thread but app is minimized, list layout is displayed, or window is backgrounded
               dispatch(incrementUnread(targetChatId));
               if (incomingMsg.id) {
                 messageService.updateStatus(incomingMsg.id, "delivered");
@@ -206,13 +219,17 @@ export default function ChatPage() {
 
     return () => {
       realtimeService.disconnectGlobalMessages();
+      window.removeEventListener("online", handleOnline);
     };
   }, [user?.id, dispatch]);
 
   // Tab restoration event monitoring sync engine
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible" && activeChatIdRef.current && user?.id) {
+      const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+      const isFocused = typeof document !== "undefined" && document.hasFocus();
+      
+      if (isVisible && isFocused && activeChatIdRef.current && user?.id) {
         const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
           ? mobileScreenRef.current === "chat"
           : true;
@@ -224,7 +241,11 @@ export default function ChatPage() {
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", handleVisibilityChange);
-      return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("focus", handleVisibilityChange);
+      return () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("focus", handleVisibilityChange);
+      };
     }
   }, [user?.id]);
 

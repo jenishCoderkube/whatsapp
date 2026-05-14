@@ -71,6 +71,19 @@ export function Sidebar({ className }) {
       chatService.getUserChats(user.id).then((fetchedChats) => {
         if (fetchedChats && fetchedChats.length > 0) {
           dispatch(setChats(fetchedChats));
+
+          // Batch acknowledge delivery for all active sidebar conversations
+          fetchedChats.forEach((chat) => {
+            if (
+              chat.lastMessage &&
+              !chat.lastMessage.isOutgoing &&
+              chat.lastMessage.status === "sent"
+            ) {
+              import("../../services/messageService").then(({ messageService }) => {
+                messageService.markConversationMessagesAsDelivered(chat.id, user.id);
+              });
+            }
+          });
         }
       });
     }

@@ -149,6 +149,7 @@ export const messageService = {
           last_message_text: previewText,
           last_message_timestamp: insertPayload.timestamp_string,
           last_message_status: "sent",
+          last_message_sender_id: senderId,
           updated_at: new Date().toISOString(),
         })
         .eq("id", conversationId);
@@ -212,19 +213,97 @@ export const messageService = {
 
       const { data: msg } = await supabase
         .from("messages")
-        .update({ status })
+        .update({
+          status,
+          ...(status === "delivered"
+            ? { delivered_at: new Date().toISOString() }
+            : {}),
+          ...(status === "read" ? { read_at: new Date().toISOString() } : {}),
+        })
         .eq("id", messageId)
-        .select("conversation_id")
+        .select("conversation_id, sender_id")
         .single();
 
       if (msg?.conversation_id) {
         await supabase
           .from("conversations")
           .update({ last_message_status: status })
-          .eq("id", msg.conversation_id);
+          .eq("id", msg.conversation_id)
+          .eq("last_message_sender_id", msg.sender_id); // Only update if the message being updated is the one that set the current last_message_sender_id
       }
     } catch (e) {
       console.warn("Delivery state update interrupted:", e);
+    }
+  },
+
+  /**
+   * Batch mark messages in a conversation as delivered.
+   * Useful for syncing offline-received messages when app initializes or room opens.
+   */
+  async markConversationMessagesAsDelivered(conversationId, currentUserId) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (!conversationId || !isUuid || !currentUserId) return;
+
+      // 1. Update message rows
+      const { data: updatedMsgs } = await supabase
+        .from("messages")
+        .update({ 
+          status: "delivered",
+          delivered_at: new Date().toISOString()
+        })
+        .eq("conversation_id", conversationId)
+        .neq("sender_id", currentUserId)
+        .eq("status", "sent")
+        .select("id");
+
+      // 2. Update conversation preview if needed
+      if (updatedMsgs && updatedMsgs.length > 0) {
+        await supabase
+          .from("conversations")
+          .update({ last_message_status: "delivered" })
+          .eq("id", conversationId)
+          .eq("last_message_status", "sent")
+          .neq("last_message_sender_id", currentUserId);
+      }
+    } catch (e) {
+      console.warn("Batch delivery update failed:", e);
+    }
+  },
+
+  /**
+   * Global delivery sync: Find all conversations for user and acknowledge pending 'sent' messages.
+   * Prevents 'ghost' single ticks when receiver is online but hasn't opened specific rooms.
+   */
+  async syncAllPendingDeliveries(currentUserId) {
+    if (!currentUserId) return;
+    try {
+      const { data: memberships } = await supabase
+        .from("conversation_members")
+        .select("conversation_id")
+        .eq("user_id", currentUserId);
+
+      if (memberships && memberships.length > 0) {
+        const convIds = memberships.map(m => m.conversation_id);
+        
+        // Update all pending 'sent' messages targeting this user in these conversations
+        await supabase
+          .from("messages")
+          .update({ status: "delivered", delivered_at: new Date().toISOString() })
+          .in("conversation_id", convIds)
+          .neq("sender_id", currentUserId)
+          .eq("status", "sent");
+
+        // Sync conversation preview status fields
+        await supabase
+          .from("conversations")
+          .update({ last_message_status: "delivered" })
+          .in("id", convIds)
+          .neq("last_message_sender_id", currentUserId)
+          .eq("last_message_status", "sent");
+      }
+    } catch (err) {
+      console.warn("Global delivery sync failure:", err);
     }
   },
 
@@ -242,7 +321,10 @@ export const messageService = {
       // Overwrite target database status fields natively
       await supabase
         .from("messages")
-        .update({ status: "read" })
+        .update({
+          status: "read",
+          read_at: new Date().toISOString(),
+        })
         .eq("conversation_id", conversationId)
         .neq("sender_id", currentUserId)
         .neq("status", "read");
@@ -258,7 +340,8 @@ export const messageService = {
       await supabase
         .from("conversations")
         .update({ last_message_status: "read" })
-        .eq("id", conversationId);
+        .eq("id", conversationId)
+        .neq("last_message_sender_id", currentUserId); // Crucial: Don't mark own last message as read in sidebar preview
     } catch (e) {
       console.warn("Exception updating message read state flags:", e);
     }
@@ -269,7 +352,10 @@ export const messageService = {
    */
   async deleteMessageForEveryone(messageId, conversationId) {
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          messageId,
+        );
       if (!messageId || !isUuid) return;
 
       const deletedPlaceholderText = "This message was deleted";
@@ -298,21 +384,34 @@ export const messageService = {
   /**
    * Toggle emoji reaction for current user encoded cleanly inside text.
    */
-  async toggleReaction(messageId, currentUserId, emoji, currentCleanText, currentReactionsDict = {}) {
+  async toggleReaction(
+    messageId,
+    currentUserId,
+    emoji,
+    currentCleanText,
+    currentReactionsDict = {},
+  ) {
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          messageId,
+        );
       if (!messageId || !isUuid || !currentUserId) return;
 
       // Deep clone current reactions dict
       const newReactions = JSON.parse(JSON.stringify(currentReactionsDict));
 
       // Check if user already reacted with this exact emoji
-      const hasReactedWithThisEmoji = Array.isArray(newReactions[emoji]) && newReactions[emoji].includes(currentUserId);
+      const hasReactedWithThisEmoji =
+        Array.isArray(newReactions[emoji]) &&
+        newReactions[emoji].includes(currentUserId);
 
       // First, remove user from all existing emojis to guarantee mutually exclusive reaction rule per user
       Object.keys(newReactions).forEach((key) => {
         if (Array.isArray(newReactions[key])) {
-          newReactions[key] = newReactions[key].filter((uid) => uid !== currentUserId);
+          newReactions[key] = newReactions[key].filter(
+            (uid) => uid !== currentUserId,
+          );
           if (newReactions[key].length === 0) {
             delete newReactions[key];
           }
@@ -327,8 +426,12 @@ export const messageService = {
         newReactions[emoji].push(currentUserId);
       }
 
-      const encodedText = currentCleanText + "|||R:" + JSON.stringify(newReactions);
-      await supabase.from("messages").update({ text: encodedText }).eq("id", messageId);
+      const encodedText =
+        currentCleanText + "|||R:" + JSON.stringify(newReactions);
+      await supabase
+        .from("messages")
+        .update({ text: encodedText })
+        .eq("id", messageId);
 
       return newReactions;
     } catch (e) {

@@ -72,8 +72,8 @@ export const chatService = {
           lastMessage: conv.last_message_text ? {
             text: conv.last_message_text,
             timestamp: conv.last_message_timestamp || "",
-            status: conv.last_message_status || "read",
-            isOutgoing: false, // fallback calculated dynamically in ui state reducers
+            status: conv.last_message_status || "sent",
+            isOutgoing: conv.last_message_sender_id === userId,
           } : null,
           online,
           phoneNumber,
@@ -190,6 +190,8 @@ export const chatService = {
           is_group: true,
           last_message_text: "Group created.",
           last_message_timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          last_message_status: "sent",
+          last_message_sender_id: currentUserId,
           updated_at: new Date().toISOString(),
         })
         .select()
@@ -215,6 +217,7 @@ export const chatService = {
           text: "Group created.",
           timestamp: newGroup.last_message_timestamp,
           status: "sent",
+          isOutgoing: true,
         },
         online: false,
         phoneNumber: "Group Chat",
