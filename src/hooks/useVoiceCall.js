@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import { 
   setIncomingCall, 
@@ -9,7 +9,6 @@ import {
 } from "../redux/slices/callSlice";
 import { signalingService } from "../services/signalingService";
 import { webrtcService } from "../services/webrtcService";
-
 import { messageService } from "../services/messageService";
 
 export const useVoiceCall = () => {
@@ -18,19 +17,18 @@ export const useVoiceCall = () => {
   const activeCall = useAppSelector((state) => state.call.activeCall);
   const incomingCall = useAppSelector((state) => state.call.incomingCall);
 
-  const activeCallRef = useRef(activeCall);
-  const incomingCallRef = useRef(incomingCall);
+  const [localStream, setLocalStreamState] = useState(null);
+  const [remoteStream, setRemoteStreamState] = useState(null);
 
-  useEffect(() => {
-    activeCallRef.current = activeCall;
-  }, [activeCall]);
+  const activeCallRef = useRef(null);
+  const incomingCallRef = useRef(null);
 
-  useEffect(() => {
-    incomingCallRef.current = incomingCall;
-  }, [incomingCall]);
+  // Sync refs with state for use in callbacks
+  useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
+  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
 
   /**
-   * Log a call message to the conversation history
+   * Log call to chat history
    */
   const logCallMessage = useCallback(async (callData, statusOverride = null) => {
     if (!callData?.conversationId || !user?.id) return;
@@ -55,13 +53,13 @@ export const useVoiceCall = () => {
   }, [user?.id]);
 
   /**
-   * Handle incoming signaling messages
+   * Handle Signal Events
    */
   const handleSignal = useCallback(async (type, data) => {
     switch (type) {
       case "invite":
-        if (activeCallRef.current) {
-          signalingService.sendCallEnd(data.caller.id, { reason: "busy" });
+        if (activeCallRef.current || incomingCallRef.current) {
+          signalingService.sendEnd(data.caller.id, { reason: "busy" });
           return;
         }
         dispatch(setIncomingCall(data));
@@ -75,29 +73,31 @@ export const useVoiceCall = () => {
         break;
 
       case "candidate":
-        if (activeCallRef.current) {
+        if (activeCallRef.current || incomingCallRef.current) {
           await webrtcService.addIceCandidate(data.candidate);
         }
         break;
 
       case "end":
+        console.log("Call ended by peer");
         if (activeCallRef.current) {
-          // If we were in a call, log it
           logCallMessage(activeCallRef.current);
-          webrtcService.cleanup();
-          dispatch(endCall());
         } else if (incomingCallRef.current) {
-          // If we missed an incoming call
           logCallMessage(incomingCallRef.current, "missed");
-          webrtcService.cleanup();
-          dispatch(endCall());
         }
+        webrtcService.cleanup();
+        setLocalStreamState(null);
+        setRemoteStreamState(null);
+        dispatch(endCall());
         break;
+
+      default:
+        console.warn("Unknown signal type:", type);
     }
   }, [dispatch, logCallMessage]);
 
   /**
-   * Initialize signaling on mount
+   * Initialize Signaling
    */
   useEffect(() => {
     if (user?.id) {
@@ -107,18 +107,30 @@ export const useVoiceCall = () => {
   }, [user?.id, handleSignal]);
 
   /**
-   * Start an outgoing call
+   * Start Outgoing Call
    */
   const startCall = async (peer, conversationId, type = "voice") => {
+    if (activeCall) return;
+
     try {
       const isVideo = type === "video";
       const stream = await webrtcService.getLocalStream(isVideo);
+      setLocalStreamState(stream);
+      
       dispatch(initiateOutgoingCall({ peer, type, conversationId }));
 
       webrtcService.createPeerConnection(
-        (candidate) => signalingService.sendCandidate(peer.id, { candidate }),
+        (candidate) => {
+          if (peer.id) signalingService.sendCandidate(peer.id, { candidate });
+        },
         (remoteStream) => {
-          // Streams are handled in CallOverlay component via webrtcService.remoteStream
+          setRemoteStreamState(remoteStream);
+          // Play remote audio automatically for voice calls
+          if (type === "voice") {
+            const audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play().catch(e => console.warn("Audio autoplay failed:", e));
+          }
         }
       );
 
@@ -132,13 +144,15 @@ export const useVoiceCall = () => {
       });
 
     } catch (err) {
-      console.error("Failed to start call:", err);
+      console.error("Failed to initiate call:", err);
+      webrtcService.cleanup();
+      setLocalStreamState(null);
       dispatch(endCall());
     }
   };
 
   /**
-   * Answer an incoming call
+   * Answer Incoming Call
    */
   const handleAnswerCall = async () => {
     if (!incomingCall) return;
@@ -146,12 +160,21 @@ export const useVoiceCall = () => {
     try {
       const isVideo = incomingCall.type === "video";
       const stream = await webrtcService.getLocalStream(isVideo);
+      setLocalStreamState(stream);
+      
       dispatch(acceptCall());
 
       webrtcService.createPeerConnection(
-        (candidate) => signalingService.sendCandidate(incomingCall.caller.id, { candidate }),
+        (candidate) => {
+          if (incomingCall.caller.id) signalingService.sendCandidate(incomingCall.caller.id, { candidate });
+        },
         (remoteStream) => {
-          // Handled via webrtcService
+          setRemoteStreamState(remoteStream);
+          if (incomingCall.type === "voice") {
+            const audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play().catch(e => console.warn("Audio autoplay failed:", e));
+          }
         }
       );
 
@@ -161,17 +184,19 @@ export const useVoiceCall = () => {
 
     } catch (err) {
       console.error("Failed to answer call:", err);
+      webrtcService.cleanup();
+      setLocalStreamState(null);
       dispatch(endCall());
     }
   };
 
   /**
-   * Terminate active or incoming call
+   * End Call
    */
   const handleEndCall = () => {
     const peerId = activeCall?.peer?.id || incomingCall?.caller?.id;
     if (peerId) {
-      signalingService.sendCallEnd(peerId, { reason: "ended" });
+      signalingService.sendEnd(peerId, { reason: "ended" });
     }
     
     if (activeCall) {
@@ -181,8 +206,28 @@ export const useVoiceCall = () => {
     }
 
     webrtcService.cleanup();
+    setLocalStreamState(null);
+    setRemoteStreamState(null);
     dispatch(endCall());
   };
+
+  /**
+   * Cleanup on Unmount
+   */
+  useEffect(() => {
+    const handleUnload = () => {
+      const peerId = activeCallRef.current?.peer?.id || incomingCallRef.current?.caller?.id;
+      if (peerId) {
+        signalingService.sendEnd(peerId, { reason: "disconnected" });
+      }
+      webrtcService.cleanup();
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, []);
 
   return {
     startCall,
@@ -190,5 +235,7 @@ export const useVoiceCall = () => {
     handleEndCall,
     activeCall,
     incomingCall,
+    localStream,
+    remoteStream
   };
 };
