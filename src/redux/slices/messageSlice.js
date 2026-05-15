@@ -74,7 +74,12 @@ const messageSlice = createSlice({
       if (list) {
         const msg = list.find((m) => m.id === messageId);
         if (msg) {
-          msg.status = status;
+          const statusWeight = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
+          const oldWeight = statusWeight[msg.status] || 0;
+          const newWeight = statusWeight[status] || 0;
+          if (newWeight >= oldWeight) {
+            msg.status = status;
+          }
         }
       }
     },
@@ -84,7 +89,20 @@ const messageSlice = createSlice({
       if (list) {
         const idx = list.findIndex((m) => m.id === message.id);
         if (idx !== -1) {
-          list[idx] = { ...list[idx], ...message };
+          const oldStatus = list[idx].status;
+          const newStatus = message.status;
+          const statusWeight = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
+          
+          let finalStatus = newStatus;
+          if (oldStatus && newStatus) {
+            const oldWeight = statusWeight[oldStatus] || 0;
+            const newWeight = statusWeight[newStatus] || 0;
+            if (oldWeight > newWeight) {
+              finalStatus = oldStatus;
+            }
+          }
+          
+          list[idx] = { ...list[idx], ...message, status: finalStatus || oldStatus };
         }
       }
     },

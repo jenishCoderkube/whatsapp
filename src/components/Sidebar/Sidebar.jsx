@@ -32,6 +32,7 @@ import {
   removeChat,
   updateChatMembership,
   updateChatAvatar,
+  updateLastMessage,
 } from "../../redux/slices/chatSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
@@ -133,7 +134,7 @@ export function Sidebar({ className }) {
         )
         .subscribe();
 
-      // Listen for conversation metadata updates (Group Avatar/Name changes)
+      // Listen for conversation metadata updates (Group Avatar/Name, Last Message, Status)
       const conversationChannel = supabase
         .channel("global-conversation-updates")
         .on(
@@ -148,8 +149,24 @@ export function Sidebar({ className }) {
             // Check if this conversation exists in our list
             const existing = chatsRef.current.find(c => c.id === updatedConv.id);
             if (existing) {
+              // Update avatar if changed
               if (updatedConv.avatar !== existing.avatar) {
                 dispatch(updateChatAvatar({ chatId: updatedConv.id, avatar: updatedConv.avatar }));
+              }
+              
+              // Update last message preview and status (ticks) if changed
+              if (
+                updatedConv.last_message_text !== existing.lastMessage?.text ||
+                updatedConv.last_message_status !== existing.lastMessage?.status ||
+                updatedConv.last_message_timestamp !== existing.lastMessage?.timestamp
+              ) {
+                dispatch(updateLastMessage({
+                  chatId: updatedConv.id,
+                  text: updatedConv.last_message_text,
+                  timestamp: updatedConv.last_message_timestamp,
+                  isOutgoing: updatedConv.last_message_sender_id === user.id,
+                  status: updatedConv.last_message_status
+                }));
               }
             }
           }

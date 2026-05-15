@@ -49,9 +49,26 @@ const chatSlice = createSlice({
       const { chatId, text, timestamp, isOutgoing, status } = action.payload;
       const chat = state.chats.find((c) => c.id === chatId);
       if (chat) {
-        chat.lastMessage = { text, timestamp, isOutgoing, status };
+        let finalStatus = status;
+        const oldMessage = chat.lastMessage;
+        
+        // Only apply status weight priority if we are updating the SAME message.
+        // If the text or timestamp changed, it's a new message and should reset to 'sent' or 'delivered'.
+        const isSameMessage = oldMessage && 
+                             oldMessage.text === text && 
+                             oldMessage.timestamp === timestamp;
+
+        if (isSameMessage && oldMessage.status && status) {
+          const statusWeight = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
+          const oldWeight = statusWeight[oldMessage.status] || 0;
+          const newWeight = statusWeight[status] || 0;
+          if (oldWeight > newWeight) {
+            finalStatus = oldMessage.status;
+          }
+        }
+
+        chat.lastMessage = { text, timestamp, isOutgoing, status: finalStatus };
         chat.updatedAt = new Date().toISOString();
-        // Move chat to top of list efficiently avoiding whole-array re-allocation keys
         const filtered = state.chats.filter((c) => c.id !== chatId);
         state.chats = [chat, ...filtered];
       }

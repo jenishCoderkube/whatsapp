@@ -31,16 +31,18 @@ export const ChatCard = React.memo(({ chat }) => {
     dispatch(setMobileScreen("chat"));
   };
 
-  // Evaluate final ownership and status keys prioritizing freshly broadcast streaming parameters
-  const isOutgoing = chat.lastMessage?.isOutgoing !== undefined
-    ? chat.lastMessage.isOutgoing
-    : latestLoadedMsg
+  // Prefer the actual message data from Redux messages if it exists, as it is the most granular source of truth
+  const isOutgoing = latestLoadedMsg 
     ? (latestLoadedMsg.sender_id || latestLoadedMsg.senderId) === currentUserId
+    : chat.lastMessage?.isOutgoing !== undefined
+    ? chat.lastMessage.isOutgoing
     : false;
 
-  const status = chat.lastMessage?.status || (latestLoadedMsg ? latestLoadedMsg.status : "sent");
+  const status = latestLoadedMsg 
+    ? latestLoadedMsg.status 
+    : (chat.lastMessage?.status || "sent");
  
-  const createdAt = latestLoadedMsg ? latestLoadedMsg.createdAt : chat.updatedAt;
+  const createdAt = latestLoadedMsg ? latestLoadedMsg.createdAt : (chat.lastMessage?.timestamp || chat.updatedAt);
   const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);
 
   const renderStatus = () => {

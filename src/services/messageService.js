@@ -232,67 +232,25 @@ export const messageService = {
 
   /**
    * Update message read/delivered verification status checkmarks.
-   * Hardened for groups: Only transitions to full status when all members acknowledge.
+   * Hardened for groups: Transitions are strictly managed by an atomic Postgres RPC
+   * to guarantee no race conditions when multiple members fetch and acknowledge simultaneously.
    */
   async updateStatus(messageId, status, currentUserId) {
     try {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
       if (!messageId || !isUuid || !currentUserId) return;
 
-      // 1. Fetch current state to evaluate array membership
-      const { data: msg } = await supabase
-        .from("messages")
-        .select("conversation_id, sender_id, delivered_to, read_by, conversations(is_group, group_members_count)")
-        .eq("id", messageId)
-        .single();
+      const { error } = await supabase.rpc("update_message_status", {
+        p_message_id: messageId,
+        p_status: status,
+        p_user_id: currentUserId
+      });
 
-      if (!msg) return;
-
-      const isGroup = msg.conversations?.is_group;
-      const totalMembers = msg.conversations?.group_members_count || 2;
-      const targetCount = totalMembers - 1; // Exclude sender
-
-      let updatePayload = {};
-
-      if (status === "delivered") {
-        const deliveredTo = Array.isArray(msg.delivered_to) ? msg.delivered_to : [];
-        if (!deliveredTo.includes(currentUserId) && msg.sender_id !== currentUserId) {
-          const newList = [...deliveredTo, currentUserId];
-          updatePayload.delivered_to = newList;
-          if (!isGroup || newList.length >= targetCount) {
-            updatePayload.status = "delivered";
-            updatePayload.delivered_at = new Date().toISOString();
-          }
-        }
-      } else if (status === "read") {
-        const readBy = Array.isArray(msg.read_by) ? msg.read_by : [];
-        if (!readBy.includes(currentUserId) && msg.sender_id !== currentUserId) {
-          const newList = [...readBy, currentUserId];
-          updatePayload.read_by = newList;
-          if (!isGroup || newList.length >= targetCount) {
-            updatePayload.status = "read";
-            updatePayload.read_at = new Date().toISOString();
-          }
-        }
-      }
-
-      if (Object.keys(updatePayload).length > 0) {
-        await supabase
-          .from("messages")
-          .update(updatePayload)
-          .eq("id", messageId);
-
-        // Sync conversation preview if the final transition happened
-        if (updatePayload.status && msg.sender_id) {
-          await supabase
-            .from("conversations")
-            .update({ last_message_status: updatePayload.status })
-            .eq("id", msg.conversation_id)
-            .eq("last_message_sender_id", msg.sender_id);
-        }
+      if (error) {
+        throw error;
       }
     } catch (e) {
-      console.warn("Delivery state update interrupted:", e);
+      console.warn("Delivery state RPC update interrupted:", e);
     }
   },
 
@@ -429,19 +387,7 @@ export const messageService = {
       
       if (unreadMsgs && unreadMsgs.length > 0) {
         for (const msg of unreadMsgs) {
-          const currentReadBy = Array.isArray(msg.read_by) ? msg.read_by : [];
-          if (!currentReadBy.includes(currentUserId)) {
-            const newList = [...currentReadBy, currentUserId];
-            const isFullyRead = !isGroup || newList.length >= targetCount;
-            
-            await supabase
-              .from("messages")
-              .update({
-                read_by: newList,
-                ...(isFullyRead ? { status: "read", read_at: new Date().toISOString() } : {})
-              })
-              .eq("id", msg.id);
-          }
+          await this.updateStatus(msg.id, "read", currentUserId);
         }
       }
 

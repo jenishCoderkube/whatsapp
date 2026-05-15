@@ -53,6 +53,11 @@ export default function ChatPage() {
     mobileScreenRef.current = mobileScreen;
   }, [mobileScreen]);
 
+  const messagesDictRef = useRef(messagesDict);
+  useEffect(() => {
+    messagesDictRef.current = messagesDict;
+  }, [messagesDict]);
+
   const activeChat = chats.find((c) => c.id === activeChatId);
   const activeMessages = activeChatId ? messagesDict[activeChatId] || [] : [];
 
@@ -78,13 +83,25 @@ export default function ChatPage() {
 
   // Instantly mark targeted unread sequences as read whenever actively viewing a thread
   const markAsReadIfAtBottom = () => {
-    const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
-    const isAppFocused = typeof document !== "undefined" ? document.hasFocus() : true;
-    const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
+    // Only proceed if window and document are defined (client-side)
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const isVisible = document.visibilityState === "visible";
+    const isFocused = document.hasFocus();
+    const isChatActiveView = window.innerWidth < 768
       ? mobileScreenRef.current === "chat"
       : true;
 
-    if (activeChatIdRef.current && user?.id && isAppVisible && isAppFocused && isChatActiveView && isAtBottomRef.current) {
+    // Strict WhatsApp conditions: Conversation must be the active one, 
+    // tab must be focused/visible, and scroll must be at the bottom.
+    if (
+      activeChatIdRef.current && 
+      user?.id && 
+      isVisible && 
+      isFocused && 
+      isChatActiveView && 
+      isAtBottomRef.current
+    ) {
       messageService.markConversationMessagesAsRead(activeChatIdRef.current, user.id);
       setLocalUnreadCount(0);
     }
@@ -94,9 +111,20 @@ export default function ChatPage() {
   useLayoutEffect(() => {
     if (activeChatId && activeMessages.length > 0 && !didInitialScrollRef.current) {
       if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-        didInitialScrollRef.current = true;
-        isAtBottomRef.current = true;
+        // Use double RAF to ensure DOM has rendered and dimensions are stable
+        const scroll = () => {
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+            didInitialScrollRef.current = true;
+            isAtBottomRef.current = true;
+          }
+        };
+        scroll();
+        requestAnimationFrame(() => {
+          scroll();
+          // After positioning, trigger read receipts if conditions met
+          setTimeout(markAsReadIfAtBottom, 100);
+        });
       }
     }
   }, [activeChatId, activeMessages.length]);
@@ -106,7 +134,8 @@ export default function ChatPage() {
     didInitialScrollRef.current = false;
     setHasMore(true);
     setLocalUnreadCount(0);
-    isAtBottomRef.current = true;
+    // Important: Start as false and let the useLayoutEffect set it after positioning
+    isAtBottomRef.current = false; 
     setShowScrollBottom(false);
   }, [activeChatId]);
 
@@ -274,15 +303,24 @@ export default function ChatPage() {
             status: incomingMsg.status,
           })
         );
-        dispatch(
-          updateLastMessage({
-            chatId: targetChatId,
-            text: incomingMsg.text,
-            timestamp: incomingMsg.timestamp,
-            isOutgoing: isMine,
-            status: incomingMsg.status,
-          })
-        );
+        
+        // Sync sidebar preview ONLY if this is actually the latest message in that conversation
+        const messagesForChat = messagesDictRef.current[targetChatId] || [];
+        const isLatest = messagesForChat.length === 0 || 
+                         incomingMsg.id === messagesForChat[messagesForChat.length - 1].id ||
+                         new Date(incomingMsg.createdAt) >= new Date(messagesForChat[messagesForChat.length - 1].createdAt);
+
+        if (isLatest) {
+          dispatch(
+            updateLastMessage({
+              chatId: targetChatId,
+              text: incomingMsg.text,
+              timestamp: incomingMsg.timestamp,
+              isOutgoing: isMine,
+              status: incomingMsg.status,
+            })
+          );
+        }
       }
     });
 
