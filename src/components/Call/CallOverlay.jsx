@@ -10,7 +10,14 @@ import { cn } from "../../utils/cn";
 import { webrtcService } from "../../services/webrtcService";
 
 export const CallOverlay = () => {
-  const { activeCall, incomingCall, handleAnswerCall, handleEndCall } = useVoiceCall();
+  const { 
+    activeCall, 
+    incomingCall, 
+    handleAnswerCall, 
+    handleEndCall,
+    localStream,
+    remoteStream 
+  } = useVoiceCall();
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.auth.user);
   const isMicMuted = useAppSelector((state) => state.call.isMicMuted);
@@ -23,17 +30,18 @@ export const CallOverlay = () => {
     setIsMounted(true);
   }, []);
 
-  // Attach streams to video elements
+  // Attach streams to video elements reactively
   React.useEffect(() => {
-    if (activeCall?.status === "connected") {
-      if (localVideoRef.current && webrtcService.localStream) {
-        localVideoRef.current.srcObject = webrtcService.localStream;
-      }
-      if (remoteVideoRef.current && webrtcService.remoteStream) {
-        remoteVideoRef.current.srcObject = webrtcService.remoteStream;
-      }
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
     }
-  }, [activeCall?.status, isVideoEnabled]);
+  }, [localStream]);
+
+  React.useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   if (!isMounted) return null;
   if (!activeCall && !incomingCall) return null;

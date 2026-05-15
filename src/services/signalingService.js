@@ -1,91 +1,75 @@
 import { supabase } from "../lib/supabaseClient";
 
-let signalingChannel = null;
+class SignalingService {
+  constructor() {
+    this.channel = null;
+    this.onSignal = null;
+  }
 
-export const signalingService = {
   /**
-   * Join the global signaling hub for real-time call coordination.
+   * Initialize personal signaling channel for the current user.
    */
-  async initialize(currentUserId, onCallSignal) {
-    if (signalingChannel) return;
+  async initialize(currentUserId, onSignal) {
+    if (this.channel) {
+      this.cleanup();
+    }
 
-    signalingChannel = supabase.channel(`call_signaling_${currentUserId}`, {
+    this.onSignal = onSignal;
+    this.channel = supabase.channel(`signaling:${currentUserId}`, {
       config: {
-        broadcast: { self: false },
+        broadcast: { self: false, ack: true },
       },
     });
 
-    signalingChannel
-      .on("broadcast", { event: "call_invite" }, (payload) => {
-        onCallSignal("invite", payload.payload);
+    this.channel
+      .on("broadcast", { event: "signal" }, ({ payload }) => {
+        console.log("Signaling received:", payload.type);
+        if (this.onSignal) {
+          this.onSignal(payload.type, payload.data);
+        }
       })
-      .on("broadcast", { event: "call_answer" }, (payload) => {
-        onCallSignal("answer", payload.payload);
-      })
-      .on("broadcast", { event: "call_candidate" }, (payload) => {
-        onCallSignal("candidate", payload.payload);
-      })
-      .on("broadcast", { event: "call_end" }, (payload) => {
-        onCallSignal("end", payload.payload);
-      })
-      .subscribe();
-  },
+      .subscribe((status) => {
+        console.log(`Signaling subscription status for ${currentUserId}:`, status);
+      });
+  }
 
   /**
-   * Broadcast an invitation to a target user.
+   * General purpose sender to a target user.
    */
-  async sendInvite(targetUserId, invitePayload) {
-    const channel = supabase.channel(`call_signaling_${targetUserId}`);
-    return channel.send({
-      type: "broadcast",
-      event: "call_invite",
-      payload: invitePayload,
-    });
-  },
-
-  /**
-   * Broadcast an answer back to the caller.
-   */
-  async sendAnswer(targetUserId, answerPayload) {
-    const channel = supabase.channel(`call_signaling_${targetUserId}`);
-    return channel.send({
-      type: "broadcast",
-      event: "call_answer",
-      payload: answerPayload,
-    });
-  },
-
-  /**
-   * Transmit WebRTC ICE candidates to the peer.
-   */
-  async sendCandidate(targetUserId, candidatePayload) {
-    const channel = supabase.channel(`call_signaling_${targetUserId}`);
-    return channel.send({
-      type: "broadcast",
-      event: "call_candidate",
-      payload: candidatePayload,
-    });
-  },
-
-  /**
-   * Notify peer that the call has been terminated.
-   */
-  async sendCallEnd(targetUserId, endPayload) {
-    const channel = supabase.channel(`call_signaling_${targetUserId}`);
-    return channel.send({
-      type: "broadcast",
-      event: "call_end",
-      payload: endPayload,
-    });
-  },
-
-  /**
-   * Cleanup signaling channel.
-   */
-  cleanup() {
-    if (signalingChannel) {
-      supabase.removeChannel(signalingChannel);
-      signalingChannel = null;
+  async sendSignal(targetUserId, type, data) {
+    // We create a temporary channel to send the broadcast to the target's listening channel
+    const tempChannel = supabase.channel(`signaling:${targetUserId}`);
+    
+    try {
+      await tempChannel.subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await tempChannel.send({
+            type: "broadcast",
+            event: "signal",
+            payload: { type, data },
+          });
+          // Cleanup temp channel after sending
+          supabase.removeChannel(tempChannel);
+        }
+      });
+    } catch (err) {
+      console.error("Signaling send failed:", err);
     }
-  },
-};
+  }
+
+  // Shorthand methods for cleaner hook code
+  async sendInvite(targetUserId, data) { return this.sendSignal(targetUserId, "invite", data); }
+  async sendAnswer(targetUserId, data) { return this.sendSignal(targetUserId, "answer", data); }
+  async sendCandidate(targetUserId, data) { return this.sendSignal(targetUserId, "candidate", data); }
+  async sendEnd(targetUserId, data) { return this.sendSignal(targetUserId, "end", data); }
+
+  cleanup() {
+    if (this.channel) {
+      supabase.removeChannel(this.channel);
+      this.channel = null;
+    }
+    this.onSignal = null;
+  }
+}
+
+export const signalingService = new SignalingService();
