@@ -9,12 +9,18 @@ import { setUserTyping, syncOnlineUsers } from "../redux/slices/chatSlice";
 import { authService } from "../services/authService";
 import { realtimeService } from "../services/realtimeService";
 import { MessageSquare } from "lucide-react";
+import { CallOverlay } from "./Call/CallOverlay";
 
 // Internal gate initializing presence tracking and preventing unauthenticated flicker
 function AuthSessionRecoveryGate({ children }) {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.auth.user);
+  const [isMounted, setIsMounted] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -83,7 +89,7 @@ function AuthSessionRecoveryGate({ children }) {
     };
   }, [user?.id, isHydrating, dispatch]);
 
-  if (isHydrating) {
+  if (!isMounted || isHydrating) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-wa-sidebar select-none transition-colors duration-200">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-wa-primary text-white shadow-lg animate-pulse mb-4">
@@ -102,7 +108,12 @@ function AuthSessionRecoveryGate({ children }) {
     );
   }
 
-  return children;
+  return (
+    <div className="h-full w-full">
+      {children}
+      <CallOverlay />
+    </div>
+  );
 }
 
 export default function Providers({ children }) {

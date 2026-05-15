@@ -14,6 +14,7 @@ import { profileService } from "../../services/profileService";
 import { storageService } from "../../services/storageService";
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
+import { useVoiceCall } from "../../hooks/useVoiceCall";
 
 export function ChatHeader() {
   const dispatch = useAppDispatch();
@@ -45,6 +46,32 @@ export function ChatHeader() {
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   
   const groupAvatarFileInputRef = useRef(null);
+  
+  const { startCall } = useVoiceCall();
+
+  const handleVoiceCallTrigger = () => {
+    if (activeChat && !activeChat.isGroup) {
+      startCall({
+        id: activeChat.peerId,
+        name: activeChat.name,
+        avatar: activeChat.avatar
+      }, activeChat.id);
+    } else {
+      alert("Voice calling for groups is coming soon!");
+    }
+  };
+
+  const handleVideoCallTrigger = () => {
+    if (activeChat && !activeChat.isGroup) {
+      startCall({
+        id: activeChat.peerId,
+        name: activeChat.name,
+        avatar: activeChat.avatar
+      }, activeChat.id, "video");
+    } else {
+      alert("Video calling for groups is coming soon!");
+    }
+  };
 
   useEffect(() => {
     if (infoModal && activeChat?.isGroup) {
@@ -219,7 +246,7 @@ export function ChatHeader() {
   ];
 
   return (
-    <header className="flex items-center justify-between px-4 py-2 bg-wa-header border-b border-wa-border select-none z-10 shrink-0 transition-colors duration-200">
+    <header className="flex items-center justify-between px-4 py-2 bg-wa-header border-b border-wa-border select-none z-[60] shrink-0 transition-colors duration-200">
       <div className="flex items-center gap-3 min-w-0">
         {/* Back navigation support on mobile viewports */}
         <button
@@ -266,11 +293,43 @@ export function ChatHeader() {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 text-wa-muted">
-        <button className="p-2 rounded-full hover:bg-wa-active transition-colors hidden sm:inline-flex" title="Voice Call Placeholder">
+        {/* Mobile: Unified Call Dropdown */}
+        <div className="sm:hidden block">
+          <Dropdown
+            trigger={
+              <button className="p-2 rounded-full hover:bg-wa-active transition-colors">
+                <Phone className="h-4 w-4" />
+              </button>
+            }
+            items={[
+              { 
+                label: "Voice Call", 
+                icon: <Phone className="h-3.5 w-3.5" />, 
+                onClick: handleVoiceCallTrigger 
+              },
+              { 
+                label: "Video Call", 
+                icon: <Video className="h-3.5 w-3.5" />, 
+                onClick: handleVideoCallTrigger 
+              },
+            ]}
+          />
+        </div>
+
+        {/* Desktop: Separate Buttons */}
+        <button 
+          onClick={handleVoiceCallTrigger}
+          className="p-2 rounded-full hover:bg-wa-active transition-colors hidden sm:inline-flex" 
+          title="Voice Call"
+        >
           <Phone className="h-4 w-4" />
         </button>
 
-        <button className="p-2 rounded-full hover:bg-wa-active transition-colors hidden sm:inline-flex" title="Video Call Placeholder">
+        <button 
+          onClick={handleVideoCallTrigger}
+          className="p-2 rounded-full hover:bg-wa-active transition-colors hidden sm:inline-flex" 
+          title="Video Call"
+        >
           <Video className="h-4 w-4" />
         </button>
 
