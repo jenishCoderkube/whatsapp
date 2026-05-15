@@ -121,14 +121,18 @@ const chatSlice = createSlice({
       }
     },
     syncOnlineUsers(state, action) {
-      // Complete dict mapping of currently present users online: { [userId]: true }
-      state.onlineMap = action.payload || {};
-      // Update individual matching chat records dynamically
+      const onlineMap = action.payload;
       state.chats.forEach((chat) => {
-        if (!chat.isGroup && chat.peerId) {
-          chat.online = !!state.onlineMap[chat.peerId];
+        if (!chat.isGroup) {
+          const peerId = chat.peerId;
+          chat.online = !!onlineMap[peerId];
         }
       });
+    },
+    resetChats(state) {
+      state.chats = [];
+      state.activeChatId = null;
+      state.searchQuery = "";
     },
   },
 });
@@ -146,6 +150,7 @@ export const {
   updateChatAvatar,
   setUserTyping,
   syncOnlineUsers,
+  resetChats,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

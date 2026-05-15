@@ -31,18 +31,17 @@ export const ChatCard = React.memo(({ chat }) => {
     dispatch(setMobileScreen("chat"));
   };
 
-  // Prefer the actual message data from Redux messages if it exists, as it is the most granular source of truth
-  const isOutgoing = latestLoadedMsg 
-    ? (latestLoadedMsg.sender_id || latestLoadedMsg.senderId) === currentUserId
-    : chat.lastMessage?.isOutgoing !== undefined
+  // Prioritize the designated "Last Message" preview data from the chat object itself, 
+  // as it is updated first during realtime events to ensure the sidebar feels instant.
+  const isOutgoing = chat.lastMessage?.isOutgoing !== undefined
     ? chat.lastMessage.isOutgoing
+    : latestLoadedMsg
+    ? (latestLoadedMsg.sender_id || latestLoadedMsg.senderId) === currentUserId
     : false;
 
-  const status = latestLoadedMsg 
-    ? latestLoadedMsg.status 
-    : (chat.lastMessage?.status || "sent");
+  const status = chat.lastMessage?.status || (latestLoadedMsg ? latestLoadedMsg.status : "sent");
  
-  const createdAt = latestLoadedMsg ? latestLoadedMsg.createdAt : (chat.lastMessage?.timestamp || chat.updatedAt);
+  const createdAt = chat.lastMessage?.timestamp || latestLoadedMsg?.createdAt || chat.updatedAt;
   const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);
 
   const renderStatus = () => {

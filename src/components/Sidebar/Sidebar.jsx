@@ -29,16 +29,23 @@ import {
   setChats,
   appendChat,
   setActiveChat,
-  removeChat,
+  resetChats,
+  updateLastMessage,
+  incrementUnread,
   updateChatMembership,
   updateChatAvatar,
-  updateLastMessage,
+  setUserTyping,
+  syncOnlineUsers,
 } from "../../redux/slices/chatSlice";
+import { resetMessages } from "../../redux/slices/messageSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
-import { storageService } from "../../services/storageService";
+import { authService } from "../../services/authService";
+import { messageService } from "../../services/messageService";
+import { realtimeService } from "../../services/realtimeService";
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
+import { formatSidebarDate } from "../../utils/dateUtils";
 
 export function Sidebar({ className }) {
   const dispatch = useAppDispatch();
@@ -209,6 +216,33 @@ export function Sidebar({ className }) {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const handleLogout = async () => {
+    try {
+      // 1. Terminate Supabase session and update online status to false
+      await authService.logout();
+      
+      // 2. Clear all Redux slices to prevent stale data upon next login or refresh
+      dispatch(logout());
+      dispatch(resetChats());
+      dispatch(resetMessages());
+      
+      // 3. Absolute cleanup of real-time listeners
+      realtimeService.disconnectGlobalPresence();
+      realtimeService.disconnectGlobalMessages();
+      
+      // 4. Clear all potential sensitive cached items manually
+      if (typeof window !== "undefined") {
+        localStorage.clear(); 
+        sessionStorage.clear();
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      dispatch(logout());
+      dispatch(resetChats());
+      dispatch(resetMessages());
+    }
+  };
+
   const dropdownItems = [
     {
       label: "Profile Info",
@@ -221,7 +255,7 @@ export function Sidebar({ className }) {
     {
       label: "Logout",
       danger: true,
-      onClick: () => dispatch(logout()),
+      onClick: handleLogout,
     },
   ];
 

@@ -106,6 +106,9 @@ const messageSlice = createSlice({
         }
       }
     },
+    resetMessages(state) {
+      state.messages = {};
+    },
   },
 });
 
@@ -116,6 +119,7 @@ export const {
   addMessage,
   updateMessageStatus,
   updateMessage,
+  resetMessages,
 } = messageSlice.actions;
 
 export default messageSlice.reducer;
