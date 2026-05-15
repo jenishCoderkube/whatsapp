@@ -29,10 +29,14 @@ import {
   setChats,
   appendChat,
   setActiveChat,
+  removeChat,
+  updateChatMembership,
+  updateChatAvatar,
 } from "../../redux/slices/chatSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
 import { storageService } from "../../services/storageService";
+import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
 
 export function Sidebar({ className }) {
@@ -41,6 +45,11 @@ export function Sidebar({ className }) {
   const chats = useAppSelector((state) => state.chat.chats);
   const searchQuery = useAppSelector((state) => state.chat.searchQuery);
   const theme = useAppSelector((state) => state.ui.theme);
+
+  const chatsRef = useRef(chats);
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
 
   const [profileModal, setProfileModal] = useState(false);
   const [newChatModal, setNewChatModal] = useState(false);
@@ -86,6 +95,71 @@ export function Sidebar({ className }) {
           });
         }
       });
+
+      // Listen for membership changes (being added, removed, or leaving groups)
+      const membershipChannel = supabase
+        .channel(`membership-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "conversation_members",
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const { eventType, new: newRow, old: oldRow } = payload;
+            
+            if (eventType === "DELETE") {
+              dispatch(removeChat(oldRow.conversation_id));
+            } else if (eventType === "UPDATE" || eventType === "INSERT") {
+              // If it's an update to is_left, sync the slice status
+              const chatId = newRow.conversation_id;
+              const isLeft = newRow.is_left;
+              
+              // Check if we already have this chat
+              const existingChat = chatsRef.current.find(c => c.id === chatId);
+              if (existingChat) {
+                dispatch(updateChatMembership({ chatId, isLeft }));
+              } else if (!isLeft) {
+                // If added to a group we don't have in local state yet, fetch it
+                chatService.getUserChats(user.id).then(allChats => {
+                  const target = allChats.find(c => c.id === chatId);
+                  if (target) dispatch(appendChat(target));
+                });
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      // Listen for conversation metadata updates (Group Avatar/Name changes)
+      const conversationChannel = supabase
+        .channel("global-conversation-updates")
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "conversations",
+          },
+          (payload) => {
+            const updatedConv = payload.new;
+            // Check if this conversation exists in our list
+            const existing = chatsRef.current.find(c => c.id === updatedConv.id);
+            if (existing) {
+              if (updatedConv.avatar !== existing.avatar) {
+                dispatch(updateChatAvatar({ chatId: updatedConv.id, avatar: updatedConv.avatar }));
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(membershipChannel);
+        supabase.removeChannel(conversationChannel);
+      };
     }
   }, [user?.id, dispatch]);
 

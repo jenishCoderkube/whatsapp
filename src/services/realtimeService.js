@@ -116,12 +116,12 @@ export const realtimeService = {
   /**
    * Transmit live keystroke states onto shared global presence hub.
    */
-  broadcastTypingEvent(chatId, userId, isTyping) {
+  broadcastTypingEvent(chatId, userId, isTyping, userName) {
     if (globalChannel && globalChannel.state === "joined") {
       globalChannel.send({
         type: "broadcast",
         event: "typing",
-        payload: { chatId, userId, isTyping },
+        payload: { chatId, userId, isTyping, userName },
       });
     }
   },
@@ -129,9 +129,10 @@ export const realtimeService = {
   /**
    * Disconnect global layer cleanly on explicit logout scenarios.
    */
-  disconnectGlobalPresence() {
+  async disconnectGlobalPresence() {
     if (globalChannel) {
       try {
+        await globalChannel.untrack();
         supabase.removeChannel(globalChannel);
       } catch (e) {}
       globalChannel = null;

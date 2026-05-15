@@ -71,13 +71,34 @@ const chatSlice = createSlice({
         }
       }
     },
+    removeChat(state, action) {
+      const chatId = action.payload;
+      state.chats = state.chats.filter((c) => c.id !== chatId);
+      if (state.activeChatId === chatId) {
+        state.activeChatId = null;
+      }
+    },
+    updateChatMembership(state, action) {
+      const { chatId, isLeft } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.isLeft = isLeft;
+      }
+    },
+    updateChatAvatar(state, action) {
+      const { chatId, avatar } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.avatar = avatar;
+      }
+    },
     setUserTyping(state, action) {
-      const { chatId, userId, isTyping } = action.payload;
+      const { chatId, userId, isTyping, userName } = action.payload;
       if (!state.typingMap[chatId]) {
         state.typingMap[chatId] = {};
       }
       if (isTyping) {
-        state.typingMap[chatId][userId] = true;
+        state.typingMap[chatId][userId] = userName || true;
       } else {
         delete state.typingMap[chatId][userId];
       }
@@ -103,6 +124,9 @@ export const {
   updateLastMessage,
   clearUnread,
   incrementUnread,
+  removeChat,
+  updateChatMembership,
+  updateChatAvatar,
   setUserTyping,
   syncOnlineUsers,
 } = chatSlice.actions;

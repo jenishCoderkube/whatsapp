@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { ChatHeader } from "../../components/Chat/ChatHeader";
 import { MessageBubble } from "../../components/Chat/MessageBubble";
@@ -14,6 +15,7 @@ import { messageService } from "../../services/messageService";
 import { realtimeService } from "../../services/realtimeService";
 import { profileService } from "../../services/profileService";
 import { cn } from "../../utils/cn";
+import { getChatDateLabel } from "../../utils/dateUtils";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -26,8 +28,14 @@ export default function ChatPage() {
   const mobileScreen = useAppSelector((state) => state.ui.mobileScreen);
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [localUnreadCount, setLocalUnreadCount] = useState(0);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  const didInitialScrollRef = useRef(false);
+  const isAtBottomRef = useRef(true);
 
   // Synchronous React refs supporting un-recreated streaming closure pointers
   const activeChatIdRef = useRef(activeChatId);
@@ -40,8 +48,67 @@ export default function ChatPage() {
     chatsRef.current = chats;
   }, [chats]);
 
+  const mobileScreenRef = useRef(mobileScreen);
+  useEffect(() => {
+    mobileScreenRef.current = mobileScreen;
+  }, [mobileScreen]);
+
   const activeChat = chats.find((c) => c.id === activeChatId);
   const activeMessages = activeChatId ? messagesDict[activeChatId] || [] : [];
+
+  // Grouped messages memoization to prevent expensive re-calculates
+  const groupedItems = useMemo(() => {
+    const items = [];
+    let lastDate = null;
+
+    activeMessages.forEach((msg) => {
+      const msgDate = new Date(msg.createdAt || Date.now()).toDateString();
+      if (msgDate !== lastDate) {
+        items.push({
+          type: "date_separator",
+          date: msg.createdAt || Date.now(),
+          id: `date-${msgDate}-${msg.id}`,
+        });
+        lastDate = msgDate;
+      }
+      items.push(msg);
+    });
+    return items;
+  }, [activeMessages]);
+
+  // Instantly mark targeted unread sequences as read whenever actively viewing a thread
+  const markAsReadIfAtBottom = () => {
+    const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+    const isAppFocused = typeof document !== "undefined" ? document.hasFocus() : true;
+    const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
+      ? mobileScreenRef.current === "chat"
+      : true;
+
+    if (activeChatIdRef.current && user?.id && isAppVisible && isAppFocused && isChatActiveView && isAtBottomRef.current) {
+      messageService.markConversationMessagesAsRead(activeChatIdRef.current, user.id);
+      setLocalUnreadCount(0);
+    }
+  };
+
+  // Instantly scroll to bottom on first chat load without flickering
+  useLayoutEffect(() => {
+    if (activeChatId && activeMessages.length > 0 && !didInitialScrollRef.current) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        didInitialScrollRef.current = true;
+        isAtBottomRef.current = true;
+      }
+    }
+  }, [activeChatId, activeMessages.length]);
+
+  // Reset initial scroll ref when switching chats
+  useEffect(() => {
+    didInitialScrollRef.current = false;
+    setHasMore(true);
+    setLocalUnreadCount(0);
+    isAtBottomRef.current = true;
+    setShowScrollBottom(false);
+  }, [activeChatId]);
 
   // Redirect to login if user logs out
   useEffect(() => {
@@ -50,38 +117,17 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, router]);
 
-  const mobileScreenRef = useRef(mobileScreen);
-  useEffect(() => {
-    mobileScreenRef.current = mobileScreen;
-  }, [mobileScreen]);
-
-  // Instantly mark targeted unread sequences as read whenever actively viewing a thread
-  useEffect(() => {
-    const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
-    const isAppFocused = typeof document !== "undefined" ? document.hasFocus() : true;
-    const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
-      ? mobileScreen === "chat"
-      : true;
-
-    if (activeChatId && user?.id && isAppVisible && isAppFocused && isChatActiveView) {
-      messageService.markConversationMessagesAsRead(activeChatId, user.id);
-    }
-  }, [activeChatId, user?.id, mobileScreen]);
-
   // Load initial paginated records on chat switch cleanly
   useEffect(() => {
     if (!activeChatId || !user?.id) return;
 
-    messageService.fetchMessages(activeChatId, null, 20, user.id).then((fetched) => {
+    messageService.fetchMessages(activeChatId, null, 30, user.id).then((fetched) => {
       if (fetched && fetched.length > 0) {
         dispatch(setMessages({ chatId: activeChatId, messages: fetched }));
-        
-        // Acknowledge delivery for incoming messages if not already read
         messageService.markConversationMessagesAsDelivered(activeChatId, user.id);
+      } else {
+        setHasMore(false);
       }
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      }, 50);
     });
   }, [activeChatId, user?.id, dispatch]);
 
@@ -89,11 +135,51 @@ export default function ChatPage() {
   useEffect(() => {
     if (!user?.id) return;
 
-    // Acknowledge all pending deliveries globally on mount or reconnect
     messageService.syncAllPendingDeliveries(user.id);
     
-    const handleOnline = () => {
+    const handleOnline = async () => {
       messageService.syncAllPendingDeliveries(user.id);
+      
+      try {
+        const { indexedDBService } = await import("../../services/indexedDBService");
+        const { storageService } = await import("../../services/storageService");
+        const pendingMsgs = await indexedDBService.getPendingMessages();
+        
+        for (const pMsg of pendingMsgs) {
+          try {
+            let uploadedUrl = pMsg.media_url;
+            const file = await indexedDBService.getPendingFile(pMsg.id);
+            if (file) {
+              uploadedUrl = await storageService.uploadFile(file, pMsg.type + "s");
+            }
+
+            const confirmedRow = await messageService.sendMessage({
+              conversationId: pMsg.conversation_id,
+              senderId: pMsg.sender_id,
+              text: pMsg.text,
+              type: pMsg.type,
+              mediaUrl: uploadedUrl,
+              fileName: pMsg.file_name,
+              fileSize: pMsg.file_size,
+              duration: pMsg.duration,
+              timestampString: pMsg.timestamp_string,
+            });
+
+            dispatch(
+              replaceOptimisticMessage({
+                chatId: pMsg.conversation_id,
+                tempId: pMsg.uiId,
+                confirmedMessage: { ...confirmedRow, isOutgoing: true },
+              })
+            );
+            await indexedDBService.removePendingMessage(pMsg.id);
+          } catch (e) {
+            console.warn("Failed to sync offline msg:", e);
+          }
+        }
+      } catch (e) {
+        console.warn("Offline sync error:", e);
+      }
     };
     window.addEventListener("online", handleOnline);
 
@@ -102,64 +188,53 @@ export default function ChatPage() {
       const targetChatId = incomingMsg.conversationId;
 
       if (eventType === "INSERT") {
-        // 1. If payload targets actively open viewport:
         if (targetChatId === activeChatIdRef.current) {
-          if (!isMine && incomingMsg.senderId) {
-            profileService.getProfileById(incomingMsg.senderId).then((profile) => {
-              dispatch(
-                addMessage({
-                  chatId: targetChatId,
-                  message: {
-                    ...incomingMsg,
-                    isOutgoing: false,
-                    senderName: profile?.name || "Member",
-                    senderAvatar: profile?.avatar,
-                  },
-                })
-              );
-            });
-          } else {
+          const processAndAdd = (profile = null) => {
             dispatch(
               addMessage({
                 chatId: targetChatId,
                 message: {
                   ...incomingMsg,
                   isOutgoing: isMine,
-                  senderName: user?.name,
-                  senderAvatar: user?.avatar,
+                  senderName: isMine ? user?.name : (profile?.name || "Member"),
+                  senderAvatar: isMine ? user?.avatar : profile?.avatar,
                 },
               })
             );
-          }
 
-          if (!isMine) {
-            const isAppVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
-            const isAppFocused = typeof document !== "undefined" ? document.hasFocus() : true;
-            const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
-              ? mobileScreenRef.current === "chat"
-              : true;
-
-            if (isAppVisible && isAppFocused && isChatActiveView) {
-              messageService.markConversationMessagesAsRead(targetChatId, user.id);
-            } else {
-              // Message targets thread but app is minimized, list layout is displayed, or window is backgrounded
-              dispatch(incrementUnread(targetChatId));
+            if (!isMine) {
+              // 1. ALWAYS send delivery acknowledgement immediately
               if (incomingMsg.id) {
-                messageService.updateStatus(incomingMsg.id, "delivered");
+                messageService.updateStatus(incomingMsg.id, "delivered", user.id);
+              }
+              
+              // 2. Handle read status and unread counting separately
+              if (isAtBottomRef.current) {
+                // Defer read slightly to guarantee sequential Tick -> Double Tick -> Blue Tick flow
+                setTimeout(() => {
+                  markAsReadIfAtBottom();
+                }, 500);
+              } else {
+                setLocalUnreadCount((prev) => prev + 1);
+                dispatch(incrementUnread(targetChatId));
               }
             }
+          };
+
+          if (!isMine && incomingMsg.senderId) {
+            profileService.getProfileById(incomingMsg.senderId).then(processAndAdd);
+          } else {
+            processAndAdd();
           }
         } else {
-          // 2. If payload addresses background inactive tab/room:
           if (!isMine) {
             dispatch(incrementUnread(targetChatId));
             if (incomingMsg.id) {
-              messageService.updateStatus(incomingMsg.id, "delivered");
+              messageService.updateStatus(incomingMsg.id, "delivered", user.id);
             }
           }
         }
 
-        // 3. Keep latest chat message preview strip dynamically synced table-wide
         let previewText = incomingMsg.text;
         if (incomingMsg.type === "image") previewText = "📷 Photo";
         if (incomingMsg.type === "video") previewText = "🎥 Video";
@@ -176,7 +251,6 @@ export default function ChatPage() {
           })
         );
 
-        // 4. If conversation item is completely missing from current client hierarchy, trigger refetch
         if (!chatsRef.current.some((c) => c.id === targetChatId)) {
           import("../../services/chatService").then(({ chatService }) => {
             chatService.getUserChats(user.id).then((fetched) => {
@@ -187,15 +261,12 @@ export default function ChatPage() {
           });
         }
       } else if (eventType === "UPDATE") {
-        // Sync live updates for content, reactions, and deletions
         dispatch(
           updateMessage({
             chatId: targetChatId,
             message: incomingMsg,
           })
         );
-
-        // Sync live read receipt updates onto active bubbles
         dispatch(
           updateMessageStatus({
             chatId: targetChatId,
@@ -203,8 +274,6 @@ export default function ChatPage() {
             status: incomingMsg.status,
           })
         );
-
-        // Also sync corresponding sidebar preview strip parity
         dispatch(
           updateLastMessage({
             chatId: targetChatId,
@@ -230,13 +299,7 @@ export default function ChatPage() {
       const isFocused = typeof document !== "undefined" && document.hasFocus();
       
       if (isVisible && isFocused && activeChatIdRef.current && user?.id) {
-        const isChatActiveView = typeof window !== "undefined" && window.innerWidth < 768
-          ? mobileScreenRef.current === "chat"
-          : true;
-
-        if (isChatActiveView) {
-          messageService.markConversationMessagesAsRead(activeChatIdRef.current, user.id);
-        }
+        markAsReadIfAtBottom();
       }
     };
     if (typeof document !== "undefined") {
@@ -249,54 +312,72 @@ export default function ChatPage() {
     }
   }, [user?.id]);
 
-  // Lazy pagination execution when reaching view boundaries
+  // Infinite Scroll and Bottom Detection Handler
   const handleScroll = async (e) => {
     const container = e.target;
-    if (container.scrollTop === 0 && !isFetchingHistory && activeMessages.length >= 20) {
+    const { scrollHeight, scrollTop, clientHeight } = container;
+    
+    // Bottom detection
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+    isAtBottomRef.current = isAtBottom;
+    setShowScrollBottom(!isAtBottom);
+
+    if (isAtBottom && localUnreadCount > 0) {
+      markAsReadIfAtBottom();
+    }
+
+    // Pagination logic
+    if (scrollTop < 200 && !isFetchingHistory && hasMore && activeMessages.length >= 20) {
       const oldestMsg = activeMessages[0];
       if (!oldestMsg?.createdAt) return;
 
       setIsFetchingHistory(true);
-      const previousScrollHeight = container.scrollHeight;
+      const previousScrollHeight = scrollHeight;
 
       try {
         const olderHistory = await messageService.fetchMessages(
           activeChatId,
           oldestMsg.createdAt,
-          20,
+          30,
           user.id
         );
 
         if (olderHistory && olderHistory.length > 0) {
           dispatch(prependMessages({ chatId: activeChatId, messages: olderHistory }));
-          
-          setTimeout(() => {
-            if (scrollContainerRef.current) {
-              const currentScrollHeight = scrollContainerRef.current.scrollHeight;
-              scrollContainerRef.current.scrollTop = currentScrollHeight - previousScrollHeight;
-            }
-          }, 0);
+          if (olderHistory.length < 30) setHasMore(false);
+        } else {
+          setHasMore(false);
         }
       } catch (err) {
-        console.error("Pagination progressive query failed:", err);
+        console.error("Pagination failed:", err);
       } finally {
         setIsFetchingHistory(false);
       }
     }
   };
 
-  // Auto scroll functionality to keep most recent bubbles visible on standard posts
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    setLocalUnreadCount(0);
+    isAtBottomRef.current = true;
+    setShowScrollBottom(false);
+    if (activeChatId && user?.id) {
+      messageService.markConversationMessagesAsRead(activeChatId, user.id);
+    }
+  };
+
+  // Stable realtime auto-scroll
   useEffect(() => {
-    if (scrollContainerRef.current) {
+    if (scrollContainerRef.current && didInitialScrollRef.current) {
       const { scrollHeight, scrollTop, clientHeight } = scrollContainerRef.current;
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-      if (isNearBottom) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (isNearBottom && isAtBottomRef.current) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       }
     }
   }, [activeMessages.length]);
-  if (!isAuthenticated || !user?.id) return null;
 
+  if (!isAuthenticated || !user?.id) return null;
 
   return (
     <div className="fixed inset-0 z-0 flex overflow-hidden bg-wa-bg transition-colors duration-200">
@@ -320,29 +401,57 @@ export default function ChatPage() {
             <>
               <ChatHeader />
 
-              <div
-                ref={scrollContainerRef}
-                onScroll={handleScroll}
-                className="flex-1 overflow-y-auto px-2 sm:px-6 py-4 wa-chat-bg relative select-text"
-              >
-                {isFetchingHistory && (
-                  <div className="text-center py-2 text-xs text-wa-muted animate-pulse">
-                    Loading older messages...
-                  </div>
-                )}
+              <div className="flex-1 relative overflow-hidden">
+                <div
+                  ref={scrollContainerRef}
+                  onScroll={handleScroll}
+                  className="h-full overflow-y-auto px-2 sm:px-6 py-4 wa-chat-bg relative select-text scroll-smooth-gpu"
+                  style={{ overflowAnchor: "auto" }}
+                >
+                  {isFetchingHistory && (
+                    <div className="flex justify-center sticky top-2 z-20">
+                      <div className="bg-wa-sidebar/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] text-wa-muted shadow-sm border border-wa-border animate-pulse">
+                        Loading history...
+                      </div>
+                    </div>
+                  )}
 
-                <div className="flex justify-center mb-4 select-none">
-                  <span className="bg-wa-encrypted text-wa-muted text-[11px] sm:text-xs px-3 py-1.5 rounded-md text-center max-w-md shadow-xs transition-colors">
-                    🔒 Messages and calls are end-to-end encrypted. No one
-                    outside of this chat can read or listen to them.
-                  </span>
+                  <div className="flex justify-center mb-4 select-none">
+                    <span className="bg-wa-encrypted text-wa-muted text-[11px] sm:text-xs px-3 py-1.5 rounded-md text-center max-w-md shadow-xs transition-colors">
+                      🔒 Messages and calls are end-to-end encrypted. No one
+                      outside of this chat can read or listen to them.
+                    </span>
+                  </div>
+
+                  {groupedItems.map((item) => (
+                    item.type === "date_separator" ? (
+                      <div key={item.id} className="flex justify-center my-4 sticky top-0 z-10 select-none">
+                        <span className="bg-[#d1f4cc]/90 dark:bg-wa-sidebar/90 backdrop-blur-md text-wa-muted text-[11px] sm:text-[12px] px-3 py-1.5 rounded-md shadow-xs uppercase tracking-tight font-medium border border-wa-border/30">
+                          {getChatDateLabel(item.date)}
+                        </span>
+                      </div>
+                    ) : (
+                      <MessageBubble key={item.id} message={item} isGroup={activeChat.isGroup} />
+                    )
+                  ))}
+
+                  <div ref={messagesEndRef} className="h-1" />
                 </div>
 
-                {activeMessages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} />
-                ))}
-
-                <div ref={messagesEndRef} className="h-1" />
+                {/* WhatsApp-style Floating Unread Indicator */}
+                {showScrollBottom && (
+                  <button
+                    onClick={scrollToBottom}
+                    className="absolute bottom-4 right-4 sm:right-6 w-10 h-10 bg-wa-sidebar border border-wa-border rounded-full shadow-lg flex items-center justify-center text-wa-muted hover:text-wa-text transition-all animate-scale-up group z-30"
+                  >
+                    <ChevronDown className="h-6 w-6 group-hover:translate-y-0.5 transition-transform" />
+                    {localUnreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-wa-primary text-white text-[10px] font-bold h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center shadow-md animate-bounce-subtle">
+                        {localUnreadCount}
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
 
               <ChatInput />

@@ -14,7 +14,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { addMessage, replaceOptimisticMessage, updateMessageStatus } from "../../redux/slices/messageSlice";
+import {
+  addMessage,
+  replaceOptimisticMessage,
+  updateMessageStatus,
+} from "../../redux/slices/messageSlice";
 import { updateLastMessage } from "../../redux/slices/chatSlice";
 import { messageService } from "../../services/messageService";
 import { storageService } from "../../services/storageService";
@@ -22,15 +26,141 @@ import { realtimeService } from "../../services/realtimeService";
 import { cn } from "../../utils/cn";
 
 const popularEmojis = [
-  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🥲", "😊", "😇", "🙂", "🙃", "😉", "😌",
-  "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎",
-  "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺",
-  "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓",
-  "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲",
-  "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠",
-  "😈", "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "👽", "👾", "🤖", "🎃", "❤️", "🧡", "💛",
-  "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝",
-  "👍", "👎", "👏", "🙌", "👐", "🤲", "🤝", "🙏", "💪", "✨", "🔥", "🎉", "💯", "🚀", "🌟"
+  "😀",
+  "😃",
+  "😄",
+  "😁",
+  "😆",
+  "😅",
+  "😂",
+  "🤣",
+  "🥲",
+  "😊",
+  "😇",
+  "🙂",
+  "🙃",
+  "😉",
+  "😌",
+  "😍",
+  "🥰",
+  "😘",
+  "😗",
+  "😙",
+  "😚",
+  "😋",
+  "😛",
+  "😝",
+  "😜",
+  "🤪",
+  "🤨",
+  "🧐",
+  "🤓",
+  "😎",
+  "🤩",
+  "🥳",
+  "😏",
+  "😒",
+  "😞",
+  "😔",
+  "😟",
+  "😕",
+  "🙁",
+  "☹️",
+  "😣",
+  "😖",
+  "😫",
+  "😩",
+  "🥺",
+  "😢",
+  "😭",
+  "😤",
+  "😠",
+  "😡",
+  "🤬",
+  "🤯",
+  "😳",
+  "🥵",
+  "🥶",
+  "😱",
+  "😨",
+  "😰",
+  "😥",
+  "😓",
+  "🤗",
+  "🤔",
+  "🤭",
+  "🤫",
+  "🤥",
+  "😶",
+  "😐",
+  "😑",
+  "😬",
+  "🙄",
+  "😯",
+  "😦",
+  "😧",
+  "😮",
+  "😲",
+  "🥱",
+  "😴",
+  "🤤",
+  "😪",
+  "😵",
+  "🤐",
+  "🥴",
+  "🤢",
+  "🤮",
+  "🤧",
+  "😷",
+  "🤒",
+  "🤕",
+  "🤑",
+  "🤠",
+  "😈",
+  "👿",
+  "👹",
+  "👺",
+  "🤡",
+  "💩",
+  "👻",
+  "💀",
+  "👽",
+  "👾",
+  "🤖",
+  "🎃",
+  "❤️",
+  "🧡",
+  "💛",
+  "💚",
+  "💙",
+  "💜",
+  "🖤",
+  "🤍",
+  "🤎",
+  "💔",
+  "❣️",
+  "💕",
+  "💞",
+  "💓",
+  "💗",
+  "💖",
+  "💘",
+  "💝",
+  "👍",
+  "👎",
+  "👏",
+  "🙌",
+  "👐",
+  "🤲",
+  "🤝",
+  "🙏",
+  "💪",
+  "✨",
+  "🔥",
+  "🎉",
+  "💯",
+  "🚀",
+  "🌟",
 ];
 
 export function ChatInput() {
@@ -75,13 +205,16 @@ export function ChatInput() {
       setIsRecording(true);
       setRecordingDuration(0);
 
-      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+      if (recordingIntervalRef.current)
+        clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = setInterval(() => {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } catch (err) {
       console.error("Microphone permission denied or device error:", err);
-      setToastError("Microphone access denied. Please allow permissions to record voice notes.");
+      setToastError(
+        "Microphone access denied. Please allow permissions to record voice notes.",
+      );
     }
   };
 
@@ -89,10 +222,13 @@ export function ChatInput() {
     if (mediaRecorderRef.current && isRecording) {
       try {
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+        mediaRecorderRef.current.stream
+          .getTracks()
+          .forEach((track) => track.stop());
       } catch (e) {}
     }
-    if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+    if (recordingIntervalRef.current)
+      clearInterval(recordingIntervalRef.current);
     setIsRecording(false);
     setRecordingDuration(0);
     audioChunksRef.current = [];
@@ -101,12 +237,17 @@ export function ChatInput() {
   const sendVoiceRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.onstop = async () => {
-        if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+        if (recordingIntervalRef.current)
+          clearInterval(recordingIntervalRef.current);
         try {
-          mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+          mediaRecorderRef.current.stream
+            .getTracks()
+            .forEach((track) => track.stop());
         } catch (e) {}
 
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
         setIsRecording(false);
         const finalDurationSeconds = recordingDuration;
         setRecordingDuration(0);
@@ -121,7 +262,11 @@ export function ChatInput() {
         const secs = finalDurationSeconds % 60;
         const durationStr = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 
-        const voiceFile = new File([audioBlob], `voice_note_${Date.now()}.webm`, { type: "audio/webm" });
+        const voiceFile = new File(
+          [audioBlob],
+          `voice_note_${Date.now()}.webm`,
+          { type: "audio/webm" },
+        );
 
         const tempId = "msg-temp-voice-" + Date.now();
         const timeString = new Date().toLocaleTimeString([], {
@@ -149,11 +294,14 @@ export function ChatInput() {
             timestamp: timeString,
             isOutgoing: true,
             status: "sent",
-          })
+          }),
         );
 
         try {
-          const uploadedUrl = await storageService.uploadFile(voiceFile, "voice");
+          const uploadedUrl = await storageService.uploadFile(
+            voiceFile,
+            "voice",
+          );
 
           const confirmedRow = await messageService.sendMessage({
             conversationId: activeChatId,
@@ -173,11 +321,17 @@ export function ChatInput() {
                 ...confirmedRow,
                 isOutgoing: true,
               },
-            })
+            }),
           );
         } catch (err) {
           console.error("Voice file payload storage upload exception:", err);
-          dispatch(updateMessageStatus({ chatId: activeChatId, messageId: tempId, status: "failed" }));
+          dispatch(
+            updateMessageStatus({
+              chatId: activeChatId,
+              messageId: tempId,
+              status: "failed",
+            }),
+          );
         }
       };
 
@@ -189,8 +343,12 @@ export function ChatInput() {
 
   useEffect(() => {
     return () => {
-      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      if (recordingIntervalRef.current)
+        clearInterval(recordingIntervalRef.current);
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
         try {
           mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
         } catch (e) {}
@@ -201,10 +359,18 @@ export function ChatInput() {
   // Auto-close attachment/emoji dropdowns natively on outside clicks and Escape keystrokes
   useEffect(() => {
     const handleOutsideClick = (e) => {
-      if (showAttachments && attachmentsRef.current && !attachmentsRef.current.contains(e.target)) {
+      if (
+        showAttachments &&
+        attachmentsRef.current &&
+        !attachmentsRef.current.contains(e.target)
+      ) {
         setShowAttachments(false);
       }
-      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+      if (
+        showEmojiPicker &&
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target)
+      ) {
         setShowEmojiPicker(false);
       }
     };
@@ -239,14 +405,29 @@ export function ChatInput() {
     if (!activeChatId || !user?.id) return;
 
     if (messageText.trim()) {
-      realtimeService.broadcastTypingEvent(activeChatId, user.id, true);
+      realtimeService.broadcastTypingEvent(
+        activeChatId,
+        user.id,
+        true,
+        user.name,
+      );
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
-        realtimeService.broadcastTypingEvent(activeChatId, user.id, false);
+        realtimeService.broadcastTypingEvent(
+          activeChatId,
+          user.id,
+          false,
+          user.name,
+        );
       }, 2000);
     } else {
-      realtimeService.broadcastTypingEvent(activeChatId, user.id, false);
+      realtimeService.broadcastTypingEvent(
+        activeChatId,
+        user.id,
+        false,
+        user.name,
+      );
     }
 
     return () => {
@@ -267,7 +448,10 @@ export function ChatInput() {
     const handleReply = (e) => {
       const { text: replyText, senderName } = e.detail || {};
       if (replyText) {
-        const snippet = replyText.length > 40 ? replyText.substring(0, 40) + "..." : replyText;
+        const snippet =
+          replyText.length > 40
+            ? replyText.substring(0, 40) + "..."
+            : replyText;
         const prefix = `Replying to ${senderName || "peer"}: "${snippet}"\n`;
         setMessageText((prev) => (prev ? prev + "\n" + prefix : prefix));
         setTimeout(() => textareaRef.current?.focus(), 50);
@@ -286,7 +470,18 @@ export function ChatInput() {
   };
 
   const processFiles = (files) => {
-    const validExtensions = ["png", "jpg", "jpeg", "webp", "pdf", "doc", "docx", "zip", "txt", "mp4"];
+    const validExtensions = [
+      "png",
+      "jpg",
+      "jpeg",
+      "webp",
+      "pdf",
+      "doc",
+      "docx",
+      "zip",
+      "txt",
+      "mp4",
+    ];
     const maxSizeBytes = 20 * 1024 * 1024;
 
     const processed = [];
@@ -315,7 +510,11 @@ export function ChatInput() {
       }
 
       processed.push({
-        id: "file-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+        id:
+          "file-" +
+          Date.now() +
+          "-" +
+          Math.random().toString(36).substring(2, 7),
         file,
         type: resolvedType,
         previewUrl,
@@ -325,9 +524,13 @@ export function ChatInput() {
     });
 
     if (hasOversized) {
-      setToastError("One or more files exceed the maximum allowed size of 20MB.");
+      setToastError(
+        "One or more files exceed the maximum allowed size of 20MB.",
+      );
     } else if (hasInvalidExt) {
-      setToastError("Unsupported format. Allowed: Images, MP4, PDF, DOCX, ZIP, TXT.");
+      setToastError(
+        "Unsupported format. Allowed: Images, MP4, PDF, DOCX, ZIP, TXT.",
+      );
     }
 
     if (processed.length > 0) {
@@ -393,10 +596,19 @@ export function ChatInput() {
     setSelectedFiles([]);
     setShowAttachments(false);
     setShowEmojiPicker(false);
-    realtimeService.broadcastTypingEvent(activeChatId, user.id, false);
+    realtimeService.broadcastTypingEvent(
+      activeChatId,
+      user.id,
+      false,
+      user.name,
+    );
 
     for (const fileObj of filesToSend) {
-      const tempId = "msg-temp-file-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+      const tempId =
+        "msg-temp-file-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).substring(2, 6);
 
       const optimisticMsg = {
         id: tempId,
@@ -416,15 +628,23 @@ export function ChatInput() {
       dispatch(
         updateLastMessage({
           chatId: activeChatId,
-          text: fileObj.type === "image" ? "📷 Photo" : fileObj.type === "video" ? "🎥 Video" : "📎 Document",
+          text:
+            fileObj.type === "image"
+              ? "📷 Photo"
+              : fileObj.type === "video"
+                ? "🎥 Video"
+                : "📎 Document",
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
-        })
+        }),
       );
 
       try {
-        const uploadedAbsoluteUrl = await storageService.uploadFile(fileObj.file, fileObj.type + "s");
+        const uploadedAbsoluteUrl = await storageService.uploadFile(
+          fileObj.file,
+          fileObj.type + "s",
+        );
 
         const confirmedRow = await messageService.sendMessage({
           conversationId: activeChatId,
@@ -445,11 +665,37 @@ export function ChatInput() {
               ...confirmedRow,
               isOutgoing: true,
             },
-          })
+          }),
         );
       } catch (err) {
-        console.error("Storage document transfer failed:", err);
-        dispatch(updateMessageStatus({ chatId: activeChatId, messageId: tempId, status: "failed" }));
+        if (err.message === "OFFLINE_PENDING") {
+          const pendingOfflineMsg = err.pendingMsg || { ...optimisticMsg, status: "pending" };
+          
+          dispatch(
+            replaceOptimisticMessage({
+              chatId: activeChatId,
+              tempId,
+              confirmedMessage: {
+                ...pendingOfflineMsg,
+                id: tempId, // Keep UI ID for now
+                isOutgoing: true,
+              },
+            }),
+          );
+          
+          import("../../services/indexedDBService").then(({ indexedDBService }) => {
+             indexedDBService.savePendingMessage({ ...pendingOfflineMsg, uiId: tempId }, fileObj.file).catch(console.error);
+          });
+        } else {
+          console.error("Storage document transfer failed:", err);
+          dispatch(
+            updateMessageStatus({
+              chatId: activeChatId,
+              messageId: tempId,
+              status: "failed",
+            }),
+          );
+        }
       }
     }
 
@@ -474,7 +720,7 @@ export function ChatInput() {
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
-        })
+        }),
       );
 
       try {
@@ -494,10 +740,36 @@ export function ChatInput() {
               ...confirmedRow,
               isOutgoing: true,
             },
-          })
+          }),
         );
       } catch (err) {
-        dispatch(updateMessageStatus({ chatId: activeChatId, messageId: tempId, status: "failed" }));
+        if (err.message === "OFFLINE_PENDING") {
+          const pendingOfflineMsg = err.pendingMsg || { ...optimisticMsg, status: "pending" };
+          
+          dispatch(
+            replaceOptimisticMessage({
+              chatId: activeChatId,
+              tempId,
+              confirmedMessage: {
+                ...pendingOfflineMsg,
+                id: tempId,
+                isOutgoing: true,
+              },
+            }),
+          );
+          
+          import("../../services/indexedDBService").then(({ indexedDBService }) => {
+             indexedDBService.savePendingMessage({ ...pendingOfflineMsg, uiId: tempId }).catch(console.error);
+          });
+        } else {
+          dispatch(
+            updateMessageStatus({
+              chatId: activeChatId,
+              messageId: tempId,
+              status: "failed",
+            }),
+          );
+        }
       }
     }
   };
@@ -516,6 +788,23 @@ export function ChatInput() {
     }
   };
 
+  const activeChat = useAppSelector((state) =>
+    state.chat.chats.find((c) => c.id === activeChatId),
+  );
+  const isLeft = activeChat?.isLeft;
+
+  if (isLeft) {
+    return (
+      <footer className="relative flex items-center justify-center px-4 py-6 bg-wa-header border-t border-wa-border select-none z-20 w-full shrink-0">
+        {/* <div className="bg-wa-active/50 px-4 py-2 rounded-lg border border-wa-border"> */}
+        <p className="text-sm text-wa-muted font-medium italic">
+          You are no longer a participant in this group
+        </p>
+        {/* </div> */}
+      </footer>
+    );
+  }
+
   return (
     <footer
       onDragOver={handleDragOver}
@@ -526,8 +815,12 @@ export function ChatInput() {
       {isDragging && (
         <div className="absolute inset-0 bg-wa-modal/90 backdrop-blur-xs border-2 border-dashed border-wa-primary rounded-lg m-1.5 z-50 flex flex-col items-center justify-center transition-all pointer-events-none">
           <UploadCloud className="h-10 w-10 text-wa-primary animate-bounce mb-2" />
-          <span className="text-sm font-medium text-wa-text">Drop media or files here to upload</span>
-          <span className="text-xs text-wa-muted mt-1">Maximum size limit: 20MB per item</span>
+          <span className="text-sm font-medium text-wa-text">
+            Drop media or files here to upload
+          </span>
+          <span className="text-xs text-wa-muted mt-1">
+            Maximum size limit: 20MB per item
+          </span>
         </div>
       )}
 
@@ -535,7 +828,10 @@ export function ChatInput() {
         <div className="absolute -top-12 left-4 right-4 bg-red-600 text-white text-xs py-2 px-3 rounded-md shadow-md flex items-center gap-2 z-40 animate-fade-in">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="truncate flex-1">{toastError}</span>
-          <button onClick={() => setToastError("")} className="hover:opacity-80 shrink-0">
+          <button
+            onClick={() => setToastError("")}
+            className="hover:opacity-80 shrink-0"
+          >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -569,8 +865,12 @@ export function ChatInput() {
               )}
 
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-wa-text truncate">{fileObj.file.name}</p>
-                <p className="text-[10px] text-wa-muted truncate">{fileObj.sizeString}</p>
+                <p className="text-[11px] font-medium text-wa-text truncate">
+                  {fileObj.file.name}
+                </p>
+                <p className="text-[10px] text-wa-muted truncate">
+                  {fileObj.sizeString}
+                </p>
               </div>
 
               <button
@@ -591,7 +891,9 @@ export function ChatInput() {
             <div className="flex items-center gap-2.5">
               <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse shrink-0" />
               <span className="text-xs sm:text-sm font-medium text-red-500 font-mono tracking-wider">
-                Recording: {Math.floor(recordingDuration / 60)}:{recordingDuration % 60 < 10 ? "0" : ""}{recordingDuration % 60}
+                Recording: {Math.floor(recordingDuration / 60)}:
+                {recordingDuration % 60 < 10 ? "0" : ""}
+                {recordingDuration % 60}
               </span>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -623,7 +925,7 @@ export function ChatInput() {
                   }}
                   className={cn(
                     "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
-                    showEmojiPicker && "bg-wa-active text-wa-primary"
+                    showEmojiPicker && "bg-wa-active text-wa-primary",
                   )}
                   title="Emojis"
                 >
@@ -632,7 +934,9 @@ export function ChatInput() {
 
                 {showEmojiPicker && (
                   <div className="absolute bottom-12 left-0 w-72 sm:w-80 bg-wa-modal border border-wa-border rounded-2xl shadow-2xl p-3 z-50 animate-fade-in flex flex-col max-h-72 select-none">
-                    <div className="text-xs font-semibold text-wa-muted mb-2 px-1">Frequently Used Emojis</div>
+                    <div className="text-xs font-semibold text-wa-muted mb-2 px-1">
+                      Frequently Used Emojis
+                    </div>
                     <div className="flex-1 overflow-y-auto grid grid-cols-7 gap-1.5 pr-1 rounded-lg">
                       {popularEmojis.map((emoji, idx) => (
                         <button
@@ -660,7 +964,7 @@ export function ChatInput() {
                   }}
                   className={cn(
                     "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
-                    showAttachments && "bg-wa-active text-wa-primary"
+                    showAttachments && "bg-wa-active text-wa-primary",
                   )}
                   title="Attach files"
                 >
@@ -680,7 +984,9 @@ export function ChatInput() {
                     </button>
 
                     <button
-                      onClick={() => triggerFileInput(".pdf,.doc,.docx,.zip,.txt")}
+                      onClick={() =>
+                        triggerFileInput(".pdf,.doc,.docx,.zip,.txt")
+                      }
                       className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
                     >
                       <span className="p-2 bg-[#53bdeb] rounded-full text-white shrink-0">
@@ -700,7 +1006,9 @@ export function ChatInput() {
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={selectedFiles.length > 0 ? "Add a caption..." : "Message"}
+                placeholder={
+                  selectedFiles.length > 0 ? "Add a caption..." : "Message"
+                }
                 className="w-full resize-none rounded-lg bg-wa-input px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-wa-text placeholder:text-wa-muted focus:outline-none max-h-24 block leading-normal transition-colors"
               />
             </div>

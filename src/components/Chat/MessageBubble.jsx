@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
   CheckCheck,
+  Clock,
   Play,
   Pause,
   FileText,
@@ -21,8 +22,9 @@ import { Avatar } from "../ui/Avatar";
 import { useAppSelector } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
 import { cn } from "../../utils/cn";
+import { formatMessageTime } from "../../utils/dateUtils";
 
-export function MessageBubble({ message }) {
+export const MessageBubble = React.memo(function MessageBubble({ message, isGroup }) {
   const {
     id,
     text,
@@ -35,17 +37,24 @@ export function MessageBubble({ message }) {
     duration,
     reactions = {},
     rawText = "",
+    createdAt,
   } = message;
+
+  const displayTime = createdAt ? formatMessageTime(createdAt) : timestamp;
+
+  if (type === "system") {
+    return (
+      <div className="flex justify-center my-3 select-none w-full px-4">
+        <span className="bg-wa-encrypted/50 text-wa-muted text-[11px] sm:text-[12px] px-3 py-1 rounded-md text-center max-w-md shadow-xs backdrop-blur-sm uppercase tracking-tight font-medium">
+          {text}
+        </span>
+      </div>
+    );
+  }
 
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
 
-  const chats = useAppSelector((state) => state.chat.chats);
-  const activeChatId = useAppSelector((state) => state.chat.activeChatId);
-  const activeChat = chats.find((c) => c.id === activeChatId);
-  const isGroup = activeChat?.isGroup;
-
-  // Accurately resolve string/UUID ownership parameters ensuring alignment parity survives refreshing/reconnection
   const normalizedSenderId = message.sender_id || message.senderId;
   const isMsgOutgoing =
     normalizedSenderId && currentUserId
@@ -118,7 +127,6 @@ export function MessageBubble({ message }) {
     };
   }, []);
 
-  // Parse localStorage to check if local user deleted this message for themselves
   useEffect(() => {
     try {
       const stored = JSON.parse(
@@ -130,7 +138,6 @@ export function MessageBubble({ message }) {
     } catch (e) {}
   }, [id]);
 
-  // Global click listener to auto-close dropdown menus and reaction bars gracefully
   useEffect(() => {
     const handleClickOutside = () => {
       if (dropdownConfig.isOpen) {
@@ -155,8 +162,6 @@ export function MessageBubble({ message }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const style = {};
 
-    // Automatic top/bottom edge positioning detection
-    // If distance to bottom of window is less than 220px, display above to prevent vertical overflow
     if (window.innerHeight - rect.bottom < 220) {
       style.bottom = "100%";
       style.marginBottom = "6px";
@@ -165,9 +170,6 @@ export function MessageBubble({ message }) {
       style.marginTop = "6px";
     }
 
-    // Automatic left/right edge positioning to ensure dropdown never goes outside viewport
-    // Since the 3-dots icon sits consistently on the right side of the message bubble:
-    // If close to the screen's right edge (outgoing messages or wide incoming bubbles), anchor right to expand leftward
     if (rect.right > window.innerWidth - 180 || isMsgOutgoing) {
       style.right = 0;
     } else {
@@ -196,8 +198,7 @@ export function MessageBubble({ message }) {
     e.stopPropagation();
     if (!isMsgOutgoing) return;
     try {
-      const targetConvId =
-        message.conversation_id || message.conversationId || activeChatId;
+      const targetConvId = message.conversation_id || message.conversationId;
       await messageService.deleteMessageForEveryone(id, targetConvId);
       setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
     } catch (err) {}
@@ -239,35 +240,28 @@ export function MessageBubble({ message }) {
     if (!isMsgOutgoing || isDeleted) return null;
     if (status === "failed") {
       return (
-        <span
-          className="text-red-500 text-[10px] ml-1 font-medium inline-flex items-center gap-0.5"
-          title="Network delivery error. Retry payload queue triggered."
-        >
+        <span className="text-red-500 text-[10px] ml-1 font-medium inline-flex items-center gap-0.5">
           <AlertCircle className="h-3 w-3 inline" /> Failed
         </span>
       );
     }
+    if (status === "pending") {
+      return (
+        <Clock className="h-3 w-3 text-wa-muted inline-block ml-1 shrink-0" />
+      );
+    }
     if (status === "read") {
       return (
-        <CheckCheck
-          className="h-3.5 w-3.5 text-[#53bdeb] inline-block ml-1 shrink-0"
-          title="Read"
-        />
+        <CheckCheck className="h-3.5 w-3.5 text-[#53bdeb] inline-block ml-1 shrink-0" />
       );
     }
     if (status === "delivered") {
       return (
-        <CheckCheck
-          className="h-3.5 w-3.5 text-wa-muted inline-block ml-1 shrink-0"
-          title="Delivered"
-        />
+        <CheckCheck className="h-3.5 w-3.5 text-wa-muted inline-block ml-1 shrink-0" />
       );
     }
     return (
-      <Check
-        className="h-3.5 w-3.5 text-wa-muted inline-block ml-1 shrink-0"
-        title="Sent"
-      />
+      <Check className="h-3.5 w-3.5 text-wa-muted inline-block ml-1 shrink-0" />
     );
   };
 
@@ -297,10 +291,7 @@ export function MessageBubble({ message }) {
               className="relative group cursor-pointer block overflow-hidden rounded bg-black/10"
             >
               <img
-                src={
-                  mediaUrl ||
-                  "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"
-                }
+                src={mediaUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"}
                 alt="Attachment"
                 className="w-full h-auto object-cover max-h-64 sm:max-h-80 transition-transform duration-300 group-hover:scale-105"
               />
@@ -308,36 +299,13 @@ export function MessageBubble({ message }) {
                 <Maximize2 className="h-6 w-6 text-white drop-shadow-md" />
               </div>
             </div>
-            {text && (
-              <p className="mt-1.5 text-xs sm:text-sm text-wa-text select-text whitespace-pre-wrap">
-                {text}
-              </p>
-            )}
-
-            {/* Native Fullscreen Image Lightbox Preview Modal */}
-            <Modal
-              isOpen={imageModalOpen}
-              onClose={() => setImageModalOpen(false)}
-              title={fileName || "Photo Preview"}
-              className="max-w-4xl"
-            >
+            {text && <p className="mt-1.5 text-xs sm:text-sm text-wa-text select-text whitespace-pre-wrap">{text}</p>}
+            <Modal isOpen={imageModalOpen} onClose={() => setImageModalOpen(false)} title={fileName || "Photo Preview"} className="max-w-4xl">
               <div className="flex flex-col items-center justify-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
-                <img
-                  src={
-                    mediaUrl ||
-                    "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"
-                  }
-                  alt="Fullscreen view"
-                  className="max-h-[70vh] max-w-full object-contain rounded"
-                />
+                <img src={mediaUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"} alt="Fullscreen" className="max-h-[70vh] max-w-full object-contain rounded" />
                 <div className="flex items-center justify-between w-full mt-4 pt-3 border-t border-wa-border">
-                  <span className="text-xs text-wa-muted truncate max-w-xs">
-                    {fileName || "shared_image.png"}
-                  </span>
-                  <button
-                    onClick={handleDownload}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded bg-wa-primary text-white text-xs font-medium hover:bg-wa-primary-hover transition-colors"
-                  >
+                  <span className="text-xs text-wa-muted truncate max-w-xs">{fileName || "shared_image.png"}</span>
+                  <button onClick={handleDownload} className="flex items-center gap-2 px-3 py-1.5 rounded bg-wa-primary text-white text-xs font-medium hover:bg-wa-primary-hover">
                     <Download className="h-3.5 w-3.5" /> Download Original
                   </button>
                 </div>
@@ -345,44 +313,22 @@ export function MessageBubble({ message }) {
             </Modal>
           </div>
         );
-
       case "video":
         return (
           <div className="relative rounded-md overflow-hidden mb-1 max-w-sm sm:max-w-md">
-            <video
-              src={mediaUrl}
-              controls
-              controlsList="nodownload"
-              className="w-full max-h-64 sm:max-h-80 object-cover rounded bg-black"
-            />
-            {text && (
-              <p className="mt-1.5 text-xs sm:text-sm text-wa-text select-text whitespace-pre-wrap">
-                {text}
-              </p>
-            )}
+            <video src={mediaUrl} controls controlsList="nodownload" className="w-full max-h-64 sm:max-h-80 object-cover rounded bg-black" />
+            {text && <p className="mt-1.5 text-xs sm:text-sm text-wa-text select-text whitespace-pre-wrap">{text}</p>}
           </div>
         );
-
       case "voice":
         return (
           <div className="flex items-center gap-3 py-1 min-w-[200px] sm:min-w-[240px] select-none">
-            <button
-              onClick={toggleVoicePlay}
-              className="p-2 rounded-full bg-wa-primary text-white hover:opacity-90 shrink-0 transition-colors cursor-pointer"
-              title={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? (
-                <Pause className="h-4 w-4 fill-white" />
-              ) : (
-                <Play className="h-4 w-4 fill-white" />
-              )}
+            <button onClick={toggleVoicePlay} className="p-2 rounded-full bg-wa-primary text-white hover:opacity-90 shrink-0 transition-colors">
+              {isPlaying ? <Pause className="h-4 w-4 fill-white" /> : <Play className="h-4 w-4 fill-white" />}
             </button>
             <div className="flex-1 min-w-0">
-              <div className="h-1.5 w-full bg-wa-border rounded-full overflow-hidden relative transition-colors">
-                <div
-                  className="absolute left-0 top-0 bottom-0 bg-wa-primary rounded-full transition-all duration-100"
-                  style={{ width: `${playbackProgress || 0}%` }}
-                />
+              <div className="h-1.5 w-full bg-wa-border rounded-full overflow-hidden relative">
+                <div className="absolute left-0 top-0 bottom-0 bg-wa-primary rounded-full transition-all duration-100" style={{ width: `${playbackProgress || 0}%` }} />
               </div>
               <div className="flex justify-between text-[10px] text-wa-muted mt-1 font-mono">
                 <span>{duration || "0:15"}</span>
@@ -391,40 +337,21 @@ export function MessageBubble({ message }) {
             </div>
           </div>
         );
-
       case "file":
         return (
-          <div
-            onClick={handleDownload}
-            className="flex items-center gap-3 p-2 rounded bg-wa-header hover:bg-wa-hover mb-1 cursor-pointer transition-colors group select-none border border-wa-border"
-            title="Click to Download File"
-          >
-            <div className="flex items-center justify-center h-10 w-10 rounded bg-wa-active text-wa-muted shrink-0 group-hover:text-wa-primary transition-colors">
+          <div onClick={handleDownload} className="flex items-center gap-3 p-2 rounded bg-wa-header hover:bg-wa-hover mb-1 cursor-pointer transition-colors group border border-wa-border">
+            <div className="flex items-center justify-center h-10 w-10 rounded bg-wa-active text-wa-muted shrink-0 group-hover:text-wa-primary">
               <FileText className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-wa-text truncate select-text">
-                {fileName || text}
-              </p>
-              <span className="text-[10px] text-wa-muted block truncate">
-                {fileSize || "Attachment"} • Click to retrieve
-              </span>
+              <p className="text-xs sm:text-sm font-medium text-wa-text truncate">{fileName || text}</p>
+              <span className="text-[10px] text-wa-muted block truncate">{fileSize || "Attachment"}</span>
             </div>
-            <button
-              onClick={handleDownload}
-              className="p-1.5 rounded hover:bg-wa-active text-wa-muted group-hover:text-wa-primary transition-colors"
-            >
-              <Download className="h-4 w-4" />
-            </button>
+            <Download className="h-4 w-4 text-wa-muted group-hover:text-wa-primary" />
           </div>
         );
-
       default:
-        return (
-          <p className="text-sm sm:text-base text-wa-text leading-snug whitespace-pre-wrap break-words">
-            {text}
-          </p>
-        );
+        return <p className="text-sm sm:text-base text-wa-text leading-snug whitespace-pre-wrap break-words">{text}</p>;
     }
   };
 
@@ -442,100 +369,54 @@ export function MessageBubble({ message }) {
         isMsgOutgoing ? "justify-end" : "justify-start",
       )}
     >
-      {/* Group Chat Incoming Avatar mapping */}
       {isGroup && !isMsgOutgoing && (
         <div className="mr-1.5 sm:mr-2 shrink-0 self-start mt-0.5 select-none">
-          <Avatar
-            src={message.senderAvatar}
-            fallback={message.senderName?.[0] || "U"}
-            size="sm"
-            className="ring-1 ring-wa-border shadow-xs"
-          />
+          <Avatar src={message.senderAvatar} fallback={message.senderName?.[0] || "U"} size="sm" className="ring-1 ring-wa-border shadow-xs" />
         </div>
       )}
 
-      {/* Outer Flex Container keeping core Bubble followed consistently by the 3-dots action icon on the right side */}
       <div className="flex items-center gap-1 sm:gap-1.5 relative max-w-full flex-row">
-        {/* Core Message Bubble Container */}
-        <div
-          className={cn(
-            "relative rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200 shrink min-w-0 max-w-full",
-            isMsgOutgoing
-              ? "bg-wa-bubble-out text-wa-text rounded-tr-none"
-              : "bg-wa-bubble-in text-wa-text rounded-tl-none",
-            reactionEmojis.length > 0 && "mb-3", // Leave space for trailing overlapping reactions
-          )}
-        >
-          {/* Tail graphic rendering */}
-          <span
-            className={cn(
-              "absolute top-0 w-0 h-0 border-solid border-t-[10px] transition-colors duration-200",
-              isMsgOutgoing
-                ? "right-[-8px] border-r-[8px] border-t-wa-bubble-out border-r-transparent"
-                : "left-[-8px] border-l-[8px] border-t-wa-bubble-in border-l-transparent",
-            )}
-          />
+        <div className={cn(
+          "relative rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200 shrink min-w-0 max-w-full",
+          isMsgOutgoing ? "bg-wa-bubble-out text-wa-text rounded-tr-none" : "bg-wa-bubble-in text-wa-text rounded-tl-none",
+          reactionEmojis.length > 0 && "mb-3",
+        )}>
+          <span className={cn(
+            "absolute top-0 w-0 h-0 border-solid border-t-[10px] transition-colors duration-200",
+            isMsgOutgoing ? "right-[-8px] border-r-[8px] border-t-wa-bubble-out border-r-transparent" : "left-[-8px] border-l-[8px] border-t-wa-bubble-in border-l-transparent",
+          )} />
 
-          {/* Group sender name overlay inside bubble */}
           {isGroup && !isMsgOutgoing && !isDeleted && (
-            <div className="text-xs font-semibold text-wa-primary mb-0.5 select-none truncate max-w-xs">
-              {message.senderName || "Group Member"}
-            </div>
+            <div className="text-xs font-semibold text-wa-primary mb-0.5 truncate max-w-xs">{message.senderName || "Group Member"}</div>
           )}
 
           {renderMediaContent()}
 
-          {/* Timestamp metadata */}
           <div className="flex items-center justify-end gap-1 mt-0.5 float-right clear-both ml-3 -mb-0.5 select-none">
-            <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans">
-              {timestamp}
-            </span>
+            <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans">{displayTime}</span>
             {renderStatusTicks()}
           </div>
 
-          {/* Pop-out Horizontal Reaction Picker Strip centered beautifully */}
           {showReactionBar && !isDeleted && (
-            <div
-              className={cn(
-                "absolute -top-12 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50 select-none animate-scale-up",
-                isMsgOutgoing ? "right-0" : "left-0",
-              )}
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className={cn(
+              "absolute -top-12 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50 animate-scale-up",
+              isMsgOutgoing ? "right-0" : "left-0",
+            )} onClick={(e) => e.stopPropagation()}>
               {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => handleToggleReaction(emoji)}
-                  className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5"
-                >
-                  {emoji}
-                </button>
+                <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
               ))}
             </div>
           )}
 
-          {/* Grouped Overlapping Active Reactions Pill */}
           {reactionEmojis.length > 0 && (
-            <div className="absolute -bottom-2.5 right-2 bg-wa-sidebar border border-wa-border rounded-full px-1.5 py-0.5 flex items-center gap-1 shadow-xs select-none z-10 scale-95 sm:scale-100">
+            <div className="absolute -bottom-2.5 right-2 bg-wa-sidebar border border-wa-border rounded-full px-1.5 py-0.5 flex items-center gap-1 shadow-xs z-10 scale-95 sm:scale-100">
               {reactionEmojis.map((emoji) => {
                 const count = reactions[emoji].length;
                 const hasReacted = reactions[emoji].includes(currentUserId);
                 return (
-                  <button
-                    key={emoji}
-                    onClick={() => handleToggleReaction(emoji)}
-                    className={cn(
-                      "text-xs hover:scale-110 transition-transform cursor-pointer inline-flex items-center gap-0.5 leading-none",
-                      hasReacted && "bg-wa-primary/20 rounded-full px-1 py-0.5",
-                    )}
-                    title={hasReacted ? "Remove reaction" : "React"}
-                  >
+                  <button key={emoji} onClick={() => handleToggleReaction(emoji)} className={cn("text-xs hover:scale-110 transition-transform cursor-pointer inline-flex items-center gap-0.5 leading-none", hasReacted && "bg-wa-primary/20 rounded-full px-1 py-0.5")}>
                     <span>{emoji}</span>
-                    {count > 1 && (
-                      <span className="text-[9px] text-wa-muted font-bold font-sans">
-                        {count}
-                      </span>
-                    )}
+                    {count > 1 && <span className="text-[9px] text-wa-muted font-bold">{count}</span>}
                   </button>
                 );
               })}
@@ -543,68 +424,22 @@ export function MessageBubble({ message }) {
           )}
         </div>
 
-        {/* Persistent 3-dots icon positioned consistently immediately after (right side of) the message bubble */}
         {!isDeleted && (
-          <div className="relative self-center shrink-0 select-none">
-            <button
-              onClick={handleOpenMenu}
-              className="p-1 text-wa-muted hover:text-wa-text hover:bg-wa-active rounded-full transition-colors cursor-pointer flex items-center justify-center"
-              title="Message options"
-            >
+          <div className={cn(
+            "relative shrink-0 select-none",
+            (type === "image" || type === "video" || type === "file") ? "self-start mt-1.5" : "self-center"
+          )}>
+            <button onClick={handleOpenMenu} className="p-1 text-wa-muted hover:text-wa-text hover:bg-wa-active rounded-full transition-colors">
               <MoreVertical className="h-4 w-4" />
             </button>
-
-            {/* Contextual Dropdown Menu */}
             <AnimatePresence>
               {dropdownConfig.isOpen && (
-                <motion.div
-                  initial={{
-                    opacity: 0,
-                    scale: 0.95,
-                    y: dropdownConfig.style.bottom ? 4 : -4,
-                  }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.12, ease: "easeOut" }}
-                  style={dropdownConfig.style}
-                  className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs select-none overflow-hidden"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={handleReplyAction}
-                    className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors cursor-pointer font-sans flex items-center gap-2"
-                  >
-                    <Reply className="h-3.5 w-3.5 text-wa-muted shrink-0" />
-                    <span>Reply</span>
-                  </button>
-
-                  <button
-                    onClick={handleOpenReactions}
-                    className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors cursor-pointer font-sans flex items-center gap-2"
-                  >
-                    <Smile className="h-3.5 w-3.5 text-wa-muted shrink-0" />
-                    <span>React</span>
-                  </button>
-
+                <motion.div initial={{ opacity: 0, scale: 0.95, y: dropdownConfig.style.bottom ? 4 : -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.12 }} style={dropdownConfig.style} className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={handleReplyAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Reply className="h-3.5 w-3.5 text-wa-muted" /><span>Reply</span></button>
+                  <button onClick={handleOpenReactions} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Smile className="h-3.5 w-3.5 text-wa-muted" /><span>React</span></button>
                   <div className="border-t border-wa-border my-1" />
-
-                  <button
-                    onClick={handleDeleteForMe}
-                    className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors cursor-pointer font-sans flex items-center gap-2"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-wa-muted shrink-0" />
-                    <span>Delete for me</span>
-                  </button>
-
-                  {isMsgOutgoing && (
-                    <button
-                      onClick={handleDeleteForEveryone}
-                      className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors cursor-pointer font-sans font-medium flex items-center gap-2"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                      <span>Delete for everyone</span>
-                    </button>
-                  )}
+                  <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>Delete for me</span></button>
+                  {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>Delete for everyone</span></button>}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -613,4 +448,10 @@ export function MessageBubble({ message }) {
       </div>
     </motion.div>
   );
-}
+}, (prevProps, nextProps) => {
+  return prevProps.message.id === nextProps.message.id && 
+         prevProps.message.status === nextProps.message.status &&
+         prevProps.message.text === nextProps.message.text &&
+         JSON.stringify(prevProps.message.reactions) === JSON.stringify(nextProps.message.reactions) &&
+         prevProps.isGroup === nextProps.isGroup;
+});

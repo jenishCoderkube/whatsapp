@@ -16,6 +16,7 @@ export const chatService = {
         .select(`
           unread_count,
           conversation_id,
+          is_left,
           conversations (*)
         `)
         .eq("user_id", userId);
@@ -33,7 +34,7 @@ export const chatService = {
         let name = conv.name || "Chat";
         let avatar = conv.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80";
         let online = false;
-        let phoneNumber = conv.is_group ? "Group Chat" : "Contact";
+        let phoneNumber = conv.is_group ? `${conv.group_members_count || 2} members` : "Contact";
         let peerId = null;
         let lastSeen = null;
 
@@ -69,6 +70,7 @@ export const chatService = {
           name,
           avatar,
           unreadCount: item.unread_count || 0,
+          isLeft: item.is_left || false,
           lastMessage: conv.last_message_text ? {
             text: conv.last_message_text,
             timestamp: conv.last_message_timestamp || "",
@@ -80,6 +82,8 @@ export const chatService = {
           peerId,
           lastSeen,
           isGroup: conv.is_group || false,
+          groupCreatorId: conv.group_creator_id,
+          groupMembersCount: conv.group_members_count || 0,
           updatedAt: conv.updated_at,
         });
       }
@@ -132,6 +136,7 @@ export const chatService = {
             peerId: targetUser.id,
             lastSeen: targetUser.last_seen,
             isGroup: false,
+            groupCreatorId: null,
           };
         }
       }
@@ -192,6 +197,8 @@ export const chatService = {
           last_message_timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           last_message_status: "sent",
           last_message_sender_id: currentUserId,
+          group_creator_id: currentUserId,
+          group_members_count: Array.from(new Set([currentUserId, ...memberIds])).length,
           updated_at: new Date().toISOString(),
         })
         .select()
@@ -220,11 +227,168 @@ export const chatService = {
           isOutgoing: true,
         },
         online: false,
-        phoneNumber: "Group Chat",
+        phoneNumber: `${allMembers.length} members`,
         isGroup: true,
+        groupCreatorId: newGroup.group_creator_id,
+        groupMembersCount: allMembers.length,
+        updatedAt: newGroup.updated_at,
       };
     } catch (error) {
       throw new Error("Group pipeline construction aborted: " + error.message);
     }
+  },
+
+  /**
+   * Fetch all members of a specific group room.
+   */
+  async getGroupMembers(conversationId) {
+    const { data, error } = await supabase
+      .from("conversation_members")
+      .select("user_id, is_left, profiles(*)")
+      .eq("conversation_id", conversationId)
+      .eq("is_left", false);
+    
+    if (error) throw error;
+    return data.map(m => m.profiles);
+  },
+
+  /**
+   * Add new participants to an existing group.
+   */
+  async addGroupMembers(conversationId, memberIds, adminId) {
+    try {
+      const uniqueIds = Array.from(new Set(memberIds));
+      
+      // 0. Fetch existing memberships to filter out those who are already active members
+      const { data: currentMemberships } = await supabase
+        .from("conversation_members")
+        .select("user_id, is_left")
+        .eq("conversation_id", conversationId)
+        .in("user_id", uniqueIds);
+
+      const alreadyActiveIds = currentMemberships?.filter(m => !m.is_left).map(m => m.user_id) || [];
+      const leftMemberIds = currentMemberships?.filter(m => m.is_left).map(m => m.user_id) || [];
+      
+      // We only want to process users who aren't already active participants
+      const usersToProcess = uniqueIds.filter(id => !alreadyActiveIds.includes(id));
+      if (usersToProcess.length === 0) return;
+
+      const newMemberIds = usersToProcess.filter(id => !leftMemberIds.includes(id));
+      const membersToReactivate = usersToProcess.filter(id => leftMemberIds.includes(id));
+
+      // 1. Reactivate left members
+      if (membersToReactivate.length > 0) {
+        await supabase
+          .from("conversation_members")
+          .update({ is_left: false, unread_count: 0 })
+          .eq("conversation_id", conversationId)
+          .in("user_id", membersToReactivate);
+      }
+
+      // 2. Insert brand new members
+      if (newMemberIds.length > 0) {
+        const insertPayloads = newMemberIds.map((uid) => ({
+          conversation_id: conversationId,
+          user_id: uid,
+        }));
+        await supabase.from("conversation_members").insert(insertPayloads);
+      }
+
+      // 3. Update count in parent conversations table
+      const { data: members } = await supabase
+        .from("conversation_members")
+        .select("user_id")
+        .eq("conversation_id", conversationId)
+        .eq("is_left", false);
+      
+      await supabase
+        .from("conversations")
+        .update({ group_members_count: members.length, updated_at: new Date().toISOString() })
+        .eq("id", conversationId);
+
+      // Create system messages for each processed member
+      for (const uid of usersToProcess) {
+        const { data: profile } = await supabase.from("profiles").select("name").eq("id", uid).single();
+        const { data: adminProfile } = await supabase.from("profiles").select("name").eq("id", adminId).single();
+        
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          sender_id: adminId,
+          text: `${adminProfile?.name || "Admin"} added ${profile?.name || "Member"}`,
+          type: "system",
+          status: "sent",
+          delivered_to: [],
+          read_by: []
+        });
+      }
+    } catch (err) {
+      console.error("Add group members failed:", err);
+      throw err;
+    }
+  },
+
+  /**
+   * Remove a member from a group (Soft delete/Leave).
+   */
+  async removeGroupMember(conversationId, userId, adminId) {
+    try {
+      const { data: profile } = await supabase.from("profiles").select("name").eq("id", userId).single();
+      const { data: adminProfile } = await supabase.from("profiles").select("name").eq("id", adminId).single();
+
+      // Soft leave instead of hard delete
+      const { error } = await supabase
+        .from("conversation_members")
+        .update({ is_left: true, unread_count: 0 })
+        .eq("conversation_id", conversationId)
+        .eq("user_id", userId);
+      
+      if (error) throw error;
+
+      // Update count in parent
+      const { data: members } = await supabase
+        .from("conversation_members")
+        .select("user_id")
+        .eq("conversation_id", conversationId)
+        .eq("is_left", false);
+      
+      await supabase
+        .from("conversations")
+        .update({ group_members_count: members.length, updated_at: new Date().toISOString() })
+        .eq("id", conversationId);
+
+      // System message
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: adminId,
+        text: adminId === userId ? `${profile?.name} left` : `${adminProfile?.name || "Admin"} removed ${profile?.name}`,
+        type: "system",
+        status: "sent",
+        delivered_to: [],
+        read_by: []
+      });
+    } catch (err) {
+      console.error("Remove group member failed:", err);
+      throw err;
+    }
+  },
+
+  /**
+   * Leave a group room.
+   */
+  async leaveGroup(conversationId, userId) {
+    return this.removeGroupMember(conversationId, userId, userId);
+  },
+
+  /**
+   * Update group avatar.
+   */
+  async updateGroupAvatar(conversationId, avatarUrl) {
+    const { error } = await supabase
+      .from("conversations")
+      .update({ avatar: avatarUrl, updated_at: new Date().toISOString() })
+      .eq("id", conversationId);
+    
+    if (error) throw error;
+    return true;
   },
 };

@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { setActiveChat } from "../../redux/slices/chatSlice";
 import { setMobileScreen } from "../../redux/slices/uiSlice";
 import { cn } from "../../utils/cn";
+import { formatSidebarDate } from "../../utils/dateUtils";
 
 export const ChatCard = React.memo(({ chat }) => {
   const dispatch = useAppDispatch();
@@ -38,8 +39,9 @@ export const ChatCard = React.memo(({ chat }) => {
     : false;
 
   const status = chat.lastMessage?.status || (latestLoadedMsg ? latestLoadedMsg.status : "sent");
-
-  const displayTimestamp = chat.lastMessage?.timestamp || (latestLoadedMsg ? latestLoadedMsg.timestamp : "");
+ 
+  const createdAt = latestLoadedMsg ? latestLoadedMsg.createdAt : chat.updatedAt;
+  const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);
 
   const renderStatus = () => {
     if (isPeerTyping) return null;
