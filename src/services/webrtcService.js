@@ -252,8 +252,12 @@ class WebRTCService {
         this.remoteStream.addTrack(event.track);
       }
 
+      // Instantiate a fresh MediaStream reference with all tracks to guarantee
+      // that React detects the reference change and binds elements correctly.
+      const freshStreamRef = new MediaStream(this.remoteStream.getTracks());
+
       if (this.onTrack) {
-        this.onTrack(this.remoteStream);
+        this.onTrack(freshStreamRef);
       }
     };
 

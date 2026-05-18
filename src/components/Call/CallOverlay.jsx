@@ -80,30 +80,35 @@ export const CallOverlay = () => {
     }
   }, []);
 
-  // Attach local stream reactively (re-runs when camera is toggled or stream changes)
+  // Attach local stream reactively (re-runs when stream changes)
   React.useEffect(() => {
     if (localVideoRef.current) {
-      if (isVideoEnabled && hasCamera && localStream) {
+      if (localStream) {
         localVideoRef.current.srcObject = localStream;
+        console.log("[CallUI] Local stream attached successfully.");
       } else {
         localVideoRef.current.srcObject = null;
       }
     }
 
     // Refresh device capabilities whenever stream state changes
-    // (e.g., after permission was just granted)
     webrtcService.checkDevices().then((caps) => {
       setHasCamera(caps.hasCam);
       setHasMicrophone(caps.hasMic);
     });
-  }, [localStream, isVideoEnabled, hasCamera]);
+  }, [localStream]);
 
   // Attach remote stream reactively (re-runs when remote stream track changes)
   React.useEffect(() => {
-    if (!remoteVideoDisabled && remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    if (remoteVideoRef.current) {
+      if (remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        console.log("[CallUI] Remote stream attached successfully.");
+      } else {
+        remoteVideoRef.current.srcObject = null;
+      }
     }
-  }, [remoteStream, remoteVideoDisabled]);
+  }, [remoteStream]);
 
   if (!isMounted) return null;
   if (!activeCall && !incomingCall) return null;
@@ -126,16 +131,20 @@ export const CallOverlay = () => {
         <div className="absolute inset-0 z-0 bg-black">
           {isConnected && isVideoCall ? (
             <>
-              {/* Remote Video (Full Screen) */}
-              {!remoteVideoDisabled ? (
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-[#0b141a]">
+              {/* Remote Video (Full Screen) - Persistently mounted to guarantee continuous audio/video playback */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className={cn(
+                  "w-full h-full object-cover transition-all duration-500",
+                  remoteVideoDisabled ? "opacity-0 absolute pointer-events-none scale-95" : "opacity-100 scale-100"
+                )}
+              />
+
+              {/* Remote Avatar Fallback Layer when video is paused/disabled by peer */}
+              {remoteVideoDisabled && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0b141a] z-10 transition-opacity duration-300">
                   <Avatar
                     src={currentPeer?.avatar}
                     size="xl"
@@ -153,16 +162,21 @@ export const CallOverlay = () => {
                 dragMomentum={false}
                 className="absolute top-6 right-6 w-28 sm:w-36 h-40 sm:h-48 bg-black rounded-2xl overflow-hidden border border-white/20 shadow-2xl z-40 cursor-move ring-1 ring-black/50"
               >
-                {isVideoEnabled && hasCamera && localStream ? (
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover scale-x-[-1]"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#202c33] gap-1">
+                {/* Local Video Tag - Persistently mounted to hold hardware track configurations */}
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={cn(
+                    "w-full h-full object-cover scale-x-[-1] transition-all duration-300",
+                    (isVideoEnabled && hasCamera && localStream) ? "opacity-100 scale-100" : "opacity-0 absolute pointer-events-none scale-95"
+                  )}
+                />
+
+                {/* Local Avatar Fallback when camera is disabled or missing */}
+                {(!isVideoEnabled || !hasCamera || !localStream) && (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#202c33] gap-1 transition-opacity duration-300">
                     <Avatar src={user?.avatar} size="sm" />
                     {!localStream && (
                       <span className="text-[9px] text-white/40 uppercase tracking-wider">
