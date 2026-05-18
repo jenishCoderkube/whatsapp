@@ -60,6 +60,7 @@ export function Sidebar({ className }) {
     chatsRef.current = chats;
   }, [chats]);
 
+  const [isChatsLoading, setIsChatsLoading] = useState(true);
   const [profileModal, setProfileModal] = useState(false);
   const [linkedDevicesModalOpen, setLinkedDevicesModalOpen] = useState(false);
   const [activeDevices, setActiveDevices] = useState([
@@ -91,11 +92,15 @@ export function Sidebar({ className }) {
   const handleLogoutDevice = async (dev) => {
     if (dev.active) {
       if (window.confirm("Are you sure you want to log out of your current session on this computer?")) {
-        await authService.logout();
+        try {
+          await authService.logout();
+        } catch (e) {
+          console.warn("Signout request had error:", e);
+        }
         dispatch(logout());
         dispatch(resetChats());
         dispatch(resetMessages());
-        window.location.reload();
+        window.location.href = "/login";
       }
     } else {
       if (window.confirm(`Are you sure you want to log out ${dev.name}?`)) {
@@ -105,18 +110,21 @@ export function Sidebar({ className }) {
   };
 
   const handleLogoutAllDevices = async () => {
-    if (window.confirm("Are you sure you want to log out of all active devices? This will close all session instances and log you out of this computer.")) {
-      await authService.logout();
-      dispatch(logout());
-      dispatch(resetChats());
-      dispatch(resetMessages());
-      window.location.reload();
+    try {
+      await authService.logoutAllDevices();
+    } catch (e) {
+      console.warn("Global signout request had error, forcing local cleanup:", e);
     }
+    dispatch(logout());
+    dispatch(resetChats());
+    dispatch(resetMessages());
+    window.location.href = "/login";
   };
 
   // Fetch linked database conversations dynamically upon load
   useEffect(() => {
     if (user?.id) {
+      setIsChatsLoading(true);
       chatService.getUserChats(user.id).then((fetchedChats) => {
         if (fetchedChats && fetchedChats.length > 0) {
           dispatch(setChats(fetchedChats));
@@ -139,6 +147,10 @@ export function Sidebar({ className }) {
             }
           });
         }
+        setIsChatsLoading(false);
+      }).catch((err) => {
+        console.error("Failed loading user conversations:", err);
+        setIsChatsLoading(false);
       });
 
       // Listen for membership changes (being added, removed, or leaving groups)
@@ -588,7 +600,19 @@ export function Sidebar({ className }) {
 
       {/* Scrollable contact records */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200">
-        {activeChats.length > 0 ? (
+        {isChatsLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none h-full gap-4">
+            <div className="animate-spin text-wa-primary flex items-center justify-center">
+              <svg className="h-9 w-9 text-wa-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-85" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+            <span className="text-xs sm:text-sm text-wa-muted font-medium tracking-wide animate-pulse">
+              Loading chats...
+            </span>
+          </div>
+        ) : activeChats.length > 0 ? (
           activeChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
         ) : (
           <div className="p-6 text-center text-xs sm:text-sm text-wa-muted">

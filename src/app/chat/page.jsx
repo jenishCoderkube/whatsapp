@@ -9,8 +9,9 @@ import { MessageBubble } from "../../components/Chat/MessageBubble";
 import { ChatInput } from "../../components/Chat/ChatInput";
 import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { setMessages, prependMessages, addMessage, updateMessageStatus, updateMessage } from "../../redux/slices/messageSlice";
+import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage } from "../../redux/slices/messageSlice";
 import { updateLastMessage, incrementUnread, setChats } from "../../redux/slices/chatSlice";
+import { setActiveSearchPanelOpen, setMobileScreen } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { realtimeService } from "../../services/realtimeService";
 import { profileService } from "../../services/profileService";
@@ -32,6 +33,8 @@ export default function ChatPage() {
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [hasMoreNewer, setHasMoreNewer] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [localUnreadCount, setLocalUnreadCount] = useState(0);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [forwardingMsg, setForwardingMsg] = useState(null);
@@ -61,6 +64,11 @@ export default function ChatPage() {
   useEffect(() => {
     messagesDictRef.current = messagesDict;
   }, [messagesDict]);
+
+  const hasMoreNewerRef = useRef(hasMoreNewer);
+  useEffect(() => {
+    hasMoreNewerRef.current = hasMoreNewer;
+  }, [hasMoreNewer]);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
   const activeMessages = activeChatId ? messagesDict[activeChatId] || [] : [];
@@ -137,6 +145,8 @@ export default function ChatPage() {
   useEffect(() => {
     didInitialScrollRef.current = false;
     setHasMore(true);
+    setHasMoreNewer(false);
+    setHighlightedMessageId(null);
     setLocalUnreadCount(0);
     // Important: Start as false and let the useLayoutEffect set it after positioning
     isAtBottomRef.current = false; 
@@ -223,17 +233,19 @@ export default function ChatPage() {
       if (eventType === "INSERT") {
         if (targetChatId === activeChatIdRef.current) {
           const processAndAdd = (profile = null) => {
-            dispatch(
-              addMessage({
-                chatId: targetChatId,
-                message: {
-                  ...incomingMsg,
-                  isOutgoing: isMine,
-                  senderName: isMine ? user?.name : (profile?.name || "Member"),
-                  senderAvatar: isMine ? user?.avatar : profile?.avatar,
-                },
-              })
-            );
+            if (!hasMoreNewerRef.current) {
+              dispatch(
+                addMessage({
+                  chatId: targetChatId,
+                  message: {
+                    ...incomingMsg,
+                    isOutgoing: isMine,
+                    senderName: isMine ? user?.name : (profile?.name || "Member"),
+                    senderAvatar: isMine ? user?.avatar : profile?.avatar,
+                  },
+                })
+              );
+            }
 
             if (!isMine) {
               // 1. ALWAYS send delivery acknowledgement immediately
@@ -380,7 +392,7 @@ export default function ChatPage() {
       markAsReadIfAtBottom();
     }
 
-    // Pagination logic
+    // Pagination logic: Scrolling UP (loads older messages)
     if (scrollTop < 200 && !isFetchingHistory && hasMore && activeMessages.length >= 20) {
       const oldestMsg = activeMessages[0];
       if (!oldestMsg?.createdAt) return;
@@ -399,11 +411,50 @@ export default function ChatPage() {
         if (olderHistory && olderHistory.length > 0) {
           dispatch(prependMessages({ chatId: activeChatId, messages: olderHistory }));
           if (olderHistory.length < 30) setHasMore(false);
+
+          // Maintain scroll position after prepending
+          setTimeout(() => {
+            if (scrollContainerRef.current) {
+              const diff = scrollContainerRef.current.scrollHeight - previousScrollHeight;
+              scrollContainerRef.current.scrollTop += diff;
+            }
+          }, 0);
         } else {
           setHasMore(false);
         }
       } catch (err) {
         console.error("Pagination failed:", err);
+      } finally {
+        setIsFetchingHistory(false);
+      }
+    }
+
+    // Pagination logic: Scrolling DOWN (loads newer messages)
+    const isNearBottomForNewer = scrollHeight - scrollTop - clientHeight < 200;
+    if (isNearBottomForNewer && !isFetchingHistory && hasMoreNewer && activeMessages.length >= 20) {
+      const newestMsg = activeMessages[activeMessages.length - 1];
+      if (!newestMsg?.createdAt) return;
+
+      setIsFetchingHistory(true);
+
+      try {
+        const newerHistory = await messageService.fetchNewerMessages(
+          activeChatId,
+          newestMsg.createdAt,
+          30,
+          user.id
+        );
+
+        if (newerHistory && newerHistory.length > 0) {
+          dispatch(appendMessages({ chatId: activeChatId, messages: newerHistory }));
+          if (newerHistory.length < 30) {
+            setHasMoreNewer(false);
+          }
+        } else {
+          setHasMoreNewer(false);
+        }
+      } catch (err) {
+        console.error("Fetching newer history failed:", err);
       } finally {
         setIsFetchingHistory(false);
       }
@@ -417,6 +468,66 @@ export default function ChatPage() {
     setShowScrollBottom(false);
     if (activeChatId && user?.id) {
       messageService.markConversationMessagesAsRead(activeChatId, user.id);
+    }
+  };
+
+  const handleJumpToMessage = async (msgId) => {
+    // Automatically close search panel and focus chat view on mobile/small screens
+    if (window.innerWidth < 768) {
+      dispatch(setActiveSearchPanelOpen(false));
+      dispatch(setMobileScreen("chat"));
+    }
+
+    // 1. WhatsApp style visual flash highlight helper
+    const triggerHighlight = (id) => {
+      setHighlightedMessageId(id);
+      setTimeout(() => {
+        const el = document.getElementById(`msg-${id}`);
+        if (el) {
+          el.classList.add("wa-message-highlight");
+          setTimeout(() => {
+            el.classList.remove("wa-message-highlight");
+            setHighlightedMessageId(null);
+          }, 2500);
+        }
+      }, 50);
+    };
+
+    // 2. Check if the element is already in the loaded messages array in memory
+    const existingElement = document.getElementById(`msg-${msgId}`);
+    if (existingElement) {
+      existingElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      triggerHighlight(msgId);
+      return;
+    }
+
+    // 3. Not in memory: perform contextual database query
+    setIsFetchingHistory(true);
+    try {
+      const contextMessages = await messageService.fetchMessageContext(
+        msgId,
+        20,
+        user.id
+      );
+
+      if (contextMessages && contextMessages.length > 0) {
+        dispatch(setMessages({ chatId: activeChatId, messages: contextMessages }));
+        setHasMore(true);
+        setHasMoreNewer(true);
+
+        // Scroll to the element after DOM updates
+        setTimeout(() => {
+          const targetEl = document.getElementById(`msg-${msgId}`);
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: "auto", block: "center" });
+            triggerHighlight(msgId);
+          }
+        }, 120);
+      }
+    } catch (e) {
+      console.warn("Failed to jump and load message context:", e);
+    } finally {
+      setIsFetchingHistory(false);
     }
   };
 
@@ -516,7 +627,7 @@ export default function ChatPage() {
         </div>
 
         {activeSearchPanelOpen && activeChat && (
-          <MessageSearchPanel chat={activeChat} messages={activeMessages} />
+          <MessageSearchPanel chat={activeChat} onJumpToMessage={handleJumpToMessage} />
         )}
 
         {forwardingMsg && (
@@ -525,6 +636,20 @@ export default function ChatPage() {
             onClose={() => setForwardingMsg(null)} 
           />
         )}
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes waHighlightFlash {
+            0% {
+              background-color: rgba(253, 224, 71, 0.45) !important;
+            }
+            100% {
+              background-color: transparent !important;
+            }
+          }
+          .wa-message-highlight {
+            animation: waHighlightFlash 2.5s ease-out forwards !important;
+            border-radius: 4px;
+          }
+        `}} />
       </main>
     </div>
   );

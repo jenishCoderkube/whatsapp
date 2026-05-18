@@ -522,4 +522,183 @@ export const messageService = {
       return null;
     }
   },
+
+  /**
+   * Search conversation messages dynamically directly in the PostgreSQL database.
+   */
+  async searchConversationMessages(conversationId, queryTerm) {
+    try {
+      if (!conversationId || !queryTerm?.trim()) return [];
+      
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*, profiles:sender_id(name, avatar)")
+        .eq("conversation_id", conversationId)
+        .ilike("text", `%${queryTerm.trim()}%`)
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      if (!data) return [];
+
+      return data.map((msg) => {
+        const { text: cleanText } = parseMessageText(msg.text || "");
+        return {
+          id: msg.id,
+          text: cleanText,
+          rawText: msg.text,
+          createdAt: msg.created_at,
+          senderName: msg.profiles?.name || "Member",
+        };
+      });
+    } catch (e) {
+      console.warn("searchConversationMessages database error:", e);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch context messages surrounding a target message by ID.
+   * Gets up to `limitCount` older and `limitCount` newer messages.
+   */
+  async fetchMessageContext(messageId, limitCount = 20, currentUserId = null) {
+    try {
+      if (!messageId) return [];
+
+      const { data: targetMsg, error: targetError } = await supabase
+        .from("messages")
+        .select("*, profiles:sender_id(name, avatar)")
+        .eq("id", messageId)
+        .single();
+
+      if (targetError || !targetMsg) throw targetError || new Error("Target message not found");
+
+      const conversationId = targetMsg.conversation_id;
+      const targetCreatedAt = targetMsg.created_at;
+
+      const { data: beforeData, error: beforeError } = await supabase
+        .from("messages")
+        .select("*, profiles:sender_id(name, avatar)")
+        .eq("conversation_id", conversationId)
+        .lt("created_at", targetCreatedAt)
+        .order("created_at", { ascending: false })
+        .limit(limitCount);
+
+      if (beforeError) throw beforeError;
+
+      const { data: afterData, error: afterError } = await supabase
+        .from("messages")
+        .select("*, profiles:sender_id(name, avatar)")
+        .eq("conversation_id", conversationId)
+        .gt("created_at", targetCreatedAt)
+        .order("created_at", { ascending: true })
+        .limit(limitCount);
+
+      if (afterError) throw afterError;
+
+      const mapMessage = (msg) => {
+        const isMine = currentUserId ? msg.sender_id === currentUserId : false;
+        const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(msg.text || "");
+        return {
+          id: msg.id,
+          conversationId: msg.conversation_id,
+          conversation_id: msg.conversation_id,
+          text: cleanText,
+          rawText: msg.text || "",
+          reactions,
+          replyTo: msg.reply_to || replyTo,
+          isForwarded: msg.is_forwarded || isForwarded,
+          timestamp:
+            msg.timestamp_string ||
+            new Date(msg.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          isOutgoing: isMine,
+          status: msg.status || "sent",
+          type: msg.type || "text",
+          mediaUrl: msg.media_url,
+          fileName: msg.file_name,
+          fileSize: msg.file_size,
+          duration: msg.duration,
+          senderId: msg.sender_id,
+          sender_id: msg.sender_id,
+          senderName: msg.profiles?.name || "Member",
+          senderAvatar: msg.profiles?.avatar,
+          createdAt: msg.created_at,
+        };
+      };
+
+      const chronologicalBefore = (beforeData || []).reverse().map(mapMessage);
+      const targetMapped = mapMessage(targetMsg);
+      const chronologicalAfter = (afterData || []).map(mapMessage);
+
+      return [...chronologicalBefore, targetMapped, ...chronologicalAfter];
+    } catch (e) {
+      console.warn("fetchMessageContext error:", e);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch newer messages in chronological ascending order subsequent to cursor created_at timestamp.
+   */
+  async fetchNewerMessages(
+    conversationId,
+    afterCreatedAtCursor,
+    limitCount = 20,
+    currentUserId = null,
+  ) {
+    try {
+      if (!conversationId || !afterCreatedAtCursor) return [];
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*, profiles:sender_id(name, avatar)")
+        .eq("conversation_id", conversationId)
+        .gt("created_at", afterCreatedAtCursor)
+        .order("created_at", { ascending: true })
+        .limit(limitCount);
+
+      if (error) throw error;
+      if (!data) return [];
+
+      return data.map((msg) => {
+        const isMine = currentUserId ? msg.sender_id === currentUserId : false;
+        const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(msg.text || "");
+
+        return {
+          id: msg.id,
+          conversationId: msg.conversation_id,
+          conversation_id: msg.conversation_id,
+          text: cleanText,
+          rawText: msg.text || "",
+          reactions,
+          replyTo: msg.reply_to || replyTo,
+          isForwarded: msg.is_forwarded || isForwarded,
+          timestamp:
+            msg.timestamp_string ||
+            new Date(msg.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          isOutgoing: isMine,
+          status: msg.status || "sent",
+          type: msg.type || "text",
+          mediaUrl: msg.media_url,
+          fileName: msg.file_name,
+          fileSize: msg.file_size,
+          duration: msg.duration,
+          senderId: msg.sender_id,
+          sender_id: msg.sender_id,
+          senderName: msg.profiles?.name || "Member",
+          senderAvatar: msg.profiles?.avatar,
+          createdAt: msg.created_at,
+        };
+      });
+    } catch (error) {
+      console.warn("fetchNewerMessages error:", error);
+      return [];
+    }
+  },
 };

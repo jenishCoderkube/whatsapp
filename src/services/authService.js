@@ -138,6 +138,58 @@ export const authService = {
   },
 
   /**
+   * Terminate all session mappings globally and invalidate tokens across all devices.
+   */
+  async logoutAllDevices() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user?.id) {
+        const userId = session.user.id;
+
+        // 1. Update online status in database profiles
+        await supabase
+          .from("profiles")
+          .update({ online: false, last_seen: new Date().toISOString() })
+          .eq("id", userId);
+
+        // 2. Broadcast the realtime logout event with self: false and a 800ms socket flush delay
+        const channel = supabase.channel(`auth-session:${userId}`, {
+          config: { broadcast: { self: false } }
+        });
+        
+        await new Promise((resolve) => {
+          channel.subscribe(async (status) => {
+            if (status === "SUBSCRIBED") {
+              await channel.send({
+                type: "broadcast",
+                event: "logout-all",
+                payload: { userId },
+              });
+              // Wait 800ms to guarantee WebSocket packet is fully flushed before connection teardown
+              setTimeout(resolve, 800);
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        // 3. Perform native global signOut to invalidate all tokens server-side
+        await supabase.auth.signOut({ scope: "global" });
+      } else {
+        await supabase.auth.signOut({ scope: "global" });
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Global signout error:", error);
+      return { success: false };
+    }
+  },
+
+  /**
    * Refresh current actual auth session mapping cache dynamically.
    */
   async getCurrentUser() {

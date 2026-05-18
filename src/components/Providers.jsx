@@ -12,12 +12,12 @@ import { MessageSquare } from "lucide-react";
 import { CallOverlay } from "./Call/CallOverlay";
 
 // Core call handling imports
-import { 
-  setIncomingCall, 
-  setCallStatus, 
-  endCall, 
-  setRemoteMuted, 
-  setRemoteVideoDisabled 
+import {
+  setIncomingCall,
+  setCallStatus,
+  endCall,
+  setRemoteMuted,
+  setRemoteVideoDisabled,
 } from "../redux/slices/callSlice";
 import { signalingService } from "../services/signalingService";
 import { webrtcService } from "../services/webrtcService";
@@ -35,19 +35,26 @@ function AuthSessionRecoveryGate({ children }) {
   const activeCallRef = useRef(activeCall);
   const incomingCallRef = useRef(incomingCall);
 
-  useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
-  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
+  useEffect(() => {
+    incomingCallRef.current = incomingCall;
+  }, [incomingCall]);
 
   useEffect(() => {
     setIsMounted(true);
-    
+
     // Register PWA Service Worker
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("/sw.js")
           .then((registration) => {
-            console.log("PWA Service Worker registered with scope:", registration.scope);
+            console.log(
+              "PWA Service Worker registered with scope:",
+              registration.scope,
+            );
           })
           .catch((err) => {
             console.warn("PWA Service Worker registration failed:", err);
@@ -82,18 +89,20 @@ function AuthSessionRecoveryGate({ children }) {
     recoverSession();
 
     // Listen to Supabase native token updates
-    const subscription = authService.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      if (event === "SIGNED_OUT" || !session) {
-        realtimeService.disconnectGlobalPresence();
-        dispatch(logout());
-      } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        const currentUser = await authService.getCurrentUser();
-        if (currentUser && mounted) {
-          dispatch(loginSuccess({ user: currentUser }));
+    const subscription = authService.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+        if (event === "SIGNED_OUT" || !session) {
+          realtimeService.disconnectGlobalPresence();
+          dispatch(logout());
+        } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          const currentUser = await authService.getCurrentUser();
+          if (currentUser && mounted) {
+            dispatch(loginSuccess({ user: currentUser }));
+          }
         }
-      }
-    });
+      },
+    );
 
     return () => {
       mounted = false;
@@ -113,7 +122,7 @@ function AuthSessionRecoveryGate({ children }) {
       },
       (typingPayload) => {
         dispatch(setUserTyping(typingPayload));
-      }
+      },
     );
 
     return () => {
@@ -127,8 +136,11 @@ function AuthSessionRecoveryGate({ children }) {
 
     const logCallMessage = async (callData, statusOverride = null) => {
       if (!callData?.conversationId || !user?.id) return;
-      const duration = callData.startTime ? Math.floor((Date.now() - callData.startTime) / 1000) : 0;
-      const finalStatus = statusOverride || (duration > 0 ? "completed" : "missed");
+      const duration = callData.startTime
+        ? Math.floor((Date.now() - callData.startTime) / 1000)
+        : 0;
+      const finalStatus =
+        statusOverride || (duration > 0 ? "completed" : "missed");
       const isVideo = callData.type === "video";
       const callLabel = isVideo ? "Video call" : "Voice call";
 
@@ -136,25 +148,32 @@ function AuthSessionRecoveryGate({ children }) {
         await messageService.sendMessage({
           conversationId: callData.conversationId,
           senderId: user.id,
-          text: finalStatus === "completed" ? `${callLabel} (${duration}s)` : `Missed ${callLabel.toLowerCase()}`,
+          text:
+            finalStatus === "completed"
+              ? `${callLabel} (${duration}s)`
+              : `Missed ${callLabel.toLowerCase()}`,
           type: "voice_call",
           metadata: {
             callStatus: finalStatus,
             duration,
-            callType: callData.type || "voice"
-          }
+            callType: callData.type || "voice",
+          },
         });
       } catch (err) {
-        console.error("Failed to log call message in global signaling handler:", err);
+        console.error(
+          "Failed to log call message in global signaling handler:",
+          err,
+        );
       }
     };
 
     const handleEndCall = () => {
-      const peerId = activeCallRef.current?.peer?.id || incomingCallRef.current?.caller?.id;
+      const peerId =
+        activeCallRef.current?.peer?.id || incomingCallRef.current?.caller?.id;
       if (peerId) {
         signalingService.sendEnd(peerId, { reason: "ended" });
       }
-      
+
       if (activeCallRef.current) {
         logCallMessage(activeCallRef.current);
       } else if (incomingCallRef.current) {
@@ -171,7 +190,9 @@ function AuthSessionRecoveryGate({ children }) {
       if (state === "connected") {
         dispatch(setCallStatus("connected"));
       } else if (state === "disconnected" || state === "failed") {
-        console.warn("Call connection disconnected/failed. Ending call gracefully.");
+        console.warn(
+          "Call connection disconnected/failed. Ending call gracefully.",
+        );
         handleEndCall();
       }
     };

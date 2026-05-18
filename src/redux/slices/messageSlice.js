@@ -30,6 +30,15 @@ const messageSlice = createSlice({
       const newUnique = messages.filter((m) => !existingIds.has(m.id));
       state.messages[chatId] = [...newUnique, ...state.messages[chatId]];
     },
+    appendMessages(state, action) {
+      const { chatId, messages } = action.payload;
+      if (!state.messages[chatId]) {
+        state.messages[chatId] = [];
+      }
+      const existingIds = new Set(state.messages[chatId].map((m) => m.id));
+      const newUnique = messages.filter((m) => !existingIds.has(m.id));
+      state.messages[chatId] = [...state.messages[chatId], ...newUnique];
+    },
     replaceOptimisticMessage(state, action) {
       const { chatId, tempId, confirmedMessage } = action.payload;
       const list = state.messages[chatId];
@@ -115,6 +124,7 @@ const messageSlice = createSlice({
 export const {
   setMessages,
   prependMessages,
+  appendMessages,
   replaceOptimisticMessage,
   addMessage,
   updateMessageStatus,
