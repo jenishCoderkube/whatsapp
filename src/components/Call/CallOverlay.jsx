@@ -82,17 +82,20 @@ export const CallOverlay = () => {
 
   // Attach local stream reactively (re-runs when camera is toggled or stream changes)
   React.useEffect(() => {
-    if (isVideoEnabled && hasCamera && localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+    if (localVideoRef.current) {
+      if (isVideoEnabled && hasCamera && localStream) {
+        localVideoRef.current.srcObject = localStream;
+      } else {
+        localVideoRef.current.srcObject = null;
+      }
     }
 
-    // Refresh devices upon stream change to catch updated permissions
-    if (localStream) {
-      webrtcService.checkDevices().then((caps) => {
-        setHasCamera(caps.hasCam);
-        setHasMicrophone(caps.hasMic);
-      });
-    }
+    // Refresh device capabilities whenever stream state changes
+    // (e.g., after permission was just granted)
+    webrtcService.checkDevices().then((caps) => {
+      setHasCamera(caps.hasCam);
+      setHasMicrophone(caps.hasMic);
+    });
   }, [localStream, isVideoEnabled, hasCamera]);
 
   // Attach remote stream reactively (re-runs when remote stream track changes)
@@ -150,7 +153,7 @@ export const CallOverlay = () => {
                 dragMomentum={false}
                 className="absolute top-6 right-6 w-28 sm:w-36 h-40 sm:h-48 bg-black rounded-2xl overflow-hidden border border-white/20 shadow-2xl z-40 cursor-move ring-1 ring-black/50"
               >
-                {isVideoEnabled && hasCamera ? (
+                {isVideoEnabled && hasCamera && localStream ? (
                   <video
                     ref={localVideoRef}
                     autoPlay
@@ -159,8 +162,13 @@ export const CallOverlay = () => {
                     className="w-full h-full object-cover scale-x-[-1]"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-[#202c33]">
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#202c33] gap-1">
                     <Avatar src={user?.avatar} size="sm" />
+                    {!localStream && (
+                      <span className="text-[9px] text-white/40 uppercase tracking-wider">
+                        Receive only
+                      </span>
+                    )}
                   </div>
                 )}
               </motion.div>
