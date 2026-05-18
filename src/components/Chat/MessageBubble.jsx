@@ -28,11 +28,13 @@ import {
   Trash2,
   Phone,
   Video,
+  ArrowRight,
 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
-import { useAppSelector } from "../../hooks/useRedux";
+import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
+import { setReplyingMessage } from "../../redux/slices/uiSlice";
 import { cn } from "../../utils/cn";
 import { formatMessageTime } from "../../utils/dateUtils";
 
@@ -64,6 +66,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     );
   }
 
+  const dispatch = useAppDispatch();
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
   const theme = useAppSelector((state) => state.ui.theme);
@@ -226,11 +229,22 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const handleReplyAction = (e) => {
     e.stopPropagation();
     setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
-    const customEvent = new CustomEvent("wa_reply_trigger", {
-      detail: {
+    dispatch(
+      setReplyingMessage({
+        id,
         text,
         senderName: message.senderName || (isMsgOutgoing ? "You" : "Peer"),
-      },
+        type,
+        mediaUrl,
+      })
+    );
+  };
+
+  const handleForwardAction = (e) => {
+    e.stopPropagation();
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    const customEvent = new CustomEvent("wa_forward_trigger", {
+      detail: { message },
     });
     window.dispatchEvent(customEvent);
   };
@@ -407,13 +421,27 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     (k) => Array.isArray(reactions[k]) && reactions[k].length > 0,
   );
 
+  const handleScrollToQuotedMessage = (e) => {
+    e.stopPropagation();
+    if (!message.replyTo?.id) return;
+    const targetElement = document.getElementById(`msg-${message.replyTo.id}`);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      targetElement.classList.add("bg-wa-primary/20", "scale-102");
+      setTimeout(() => {
+        targetElement.classList.remove("bg-wa-primary/20", "scale-102");
+      }, 1500);
+    }
+  };
+
   return (
     <motion.div
+      id={`msg-${id}`}
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.15, ease: "easeOut" }}
       className={cn(
-        "flex w-full mb-1.5 sm:mb-2.5 px-2 sm:px-4 select-text relative",
+        "flex w-full mb-1.5 sm:mb-2.5 px-2 sm:px-4 select-text relative transition-all duration-300 rounded-lg",
         isMsgOutgoing ? "justify-end" : "justify-start",
       )}
     >
@@ -436,6 +464,34 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
           {isGroup && !isMsgOutgoing && !isDeleted && (
             <div className="text-xs font-semibold text-wa-primary mb-0.5 truncate max-w-xs">{message.senderName || "Group Member"}</div>
+          )}
+
+          {message.isForwarded && (
+            <div className="flex items-center gap-1 text-[10px] text-wa-muted/80 italic mb-1.5 select-none">
+              <svg viewBox="0 0 24 24" width="12" height="12" className="fill-wa-muted/70 inline shrink-0 rotate-[-45deg]">
+                <path d="M15 5l-1.41 1.41L18.17 11H2V13h16.17l-4.59 4.59L15 19l7-7-7-7z" />
+              </svg>
+              <span>Forwarded</span>
+            </div>
+          )}
+
+          {message.replyTo && (
+            <div 
+              onClick={handleScrollToQuotedMessage}
+              className="mb-1.5 p-1.5 rounded bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary cursor-pointer select-none text-[11px] sm:text-xs flex flex-col gap-0.5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            >
+              <span className="font-semibold text-wa-primary">
+                {message.replyTo.senderName}
+              </span>
+              <span className="text-wa-muted truncate max-w-[240px] sm:max-w-md">
+                {message.replyTo.text || (
+                  message.replyTo.type === "image" ? "📷 Photo" :
+                  message.replyTo.type === "video" ? "🎥 Video" :
+                  message.replyTo.type === "voice" ? "🎤 Voice Note" :
+                  message.replyTo.type === "file" ? "📎 Document" : "Attachment"
+                )}
+              </span>
+            </div>
           )}
 
           {renderMediaContent()}
@@ -535,6 +591,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                 <motion.div initial={{ opacity: 0, scale: 0.95, y: dropdownConfig.style.bottom ? 4 : -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.12 }} style={dropdownConfig.style} className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs overflow-hidden" onClick={(e) => e.stopPropagation()}>
                   <button onClick={handleReplyAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Reply className="h-3.5 w-3.5 text-wa-muted" /><span>Reply</span></button>
                   <button onClick={handleOpenReactions} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Smile className="h-3.5 w-3.5 text-wa-muted" /><span>React</span></button>
+                  <button onClick={handleForwardAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><ArrowRight className="h-3.5 w-3.5 text-wa-muted" /><span>Forward</span></button>
                   <div className="border-t border-wa-border my-1" />
                   <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>Delete for me</span></button>
                   {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>Delete for everyone</span></button>}

@@ -1,16 +1,19 @@
 "use client";
 
-import React from "react";
-import { Check, CheckCheck, Ban } from "lucide-react";
+import React, { useState } from "react";
+import { Check, CheckCheck, Ban, Pin, ChevronDown } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
+import { Dropdown } from "../ui/Dropdown";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { setActiveChat } from "../../redux/slices/chatSlice";
+import { setActiveChat, togglePinChat, toggleArchiveChat, removeChat } from "../../redux/slices/chatSlice";
 import { setMobileScreen } from "../../redux/slices/uiSlice";
+import { chatService } from "../../services/chatService";
 import { cn } from "../../utils/cn";
 import { formatSidebarDate } from "../../utils/dateUtils";
 
 export const ChatCard = React.memo(({ chat }) => {
   const dispatch = useAppDispatch();
+  const [menuOpen, setMenuOpen] = useState(false);
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
   const typingMap = useAppSelector((state) => state.chat.typingMap[chat.id] || {});
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
@@ -85,9 +88,39 @@ export const ChatCard = React.memo(({ chat }) => {
     return baseText || "No messages yet";
   };
 
+  const cardDropdownItems = [
+    {
+      label: chat.isPinned ? "Unpin chat" : "Pin chat",
+      onClick: async (e) => {
+        e.stopPropagation();
+        await chatService.togglePinChat(chat.id, currentUserId, !chat.isPinned);
+        dispatch(togglePinChat(chat.id));
+      }
+    },
+    {
+      label: chat.isArchived ? "Unarchive chat" : "Archive chat",
+      onClick: async (e) => {
+        e.stopPropagation();
+        await chatService.toggleArchiveChat(chat.id, currentUserId, !chat.isArchived);
+        dispatch(toggleArchiveChat(chat.id));
+      }
+    },
+    {
+      label: "Delete chat",
+      danger: true,
+      onClick: (e) => {
+        e.stopPropagation();
+        if (window.confirm("Are you sure you want to delete this chat?")) {
+          dispatch(removeChat(chat.id));
+        }
+      }
+    }
+  ];
+
   return (
     <div
       onClick={handleClick}
+      onMouseLeave={() => setMenuOpen(false)}
       className={cn(
         "flex items-center gap-3 pl-3 pr-4 py-2.5 cursor-pointer transition-colors relative select-none group",
         isActive ? "bg-wa-active" : "hover:bg-wa-hover"
@@ -110,17 +143,42 @@ export const ChatCard = React.memo(({ chat }) => {
           </span>
         </div>
 
-        <div className="flex items-center justify-between">
-          <p className="text-xs sm:text-sm text-wa-muted truncate flex-1 pr-1">
+        <div className="flex items-center justify-between relative">
+          <p className="text-xs sm:text-sm text-wa-muted truncate flex-1 pr-8">
             {renderStatus()}
             {renderPreviewText()}
           </p>
 
-          {chat.unreadCount > 0 && (
-            <span className="flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-wa-unread text-white text-[11px] font-medium shrink-0">
-              {chat.unreadCount}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0 select-none ml-2">
+            {chat.isPinned && (
+              <Pin className="h-3.5 w-3.5 text-wa-muted rotate-45 shrink-0" />
+            )}
+            {chat.unreadCount > 0 && (
+              <span className="flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-wa-unread text-white text-[11px] font-medium shrink-0">
+                {chat.unreadCount}
+              </span>
+            )}
+          </div>
+
+          {/* Dynamic hover context dropdown trigger button */}
+          <div className={cn(
+            "transition-all absolute right-0 top-1/2 -translate-y-1/2 z-20",
+            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}>
+            <Dropdown
+              isOpen={menuOpen}
+              onOpenChange={setMenuOpen}
+              trigger={
+                <button 
+                  className="p-1 rounded-full bg-wa-sidebar/95 hover:bg-wa-hover shadow-md border border-wa-border text-wa-muted hover:text-wa-text transition-colors flex items-center justify-center"
+                  title="Menu"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              }
+              items={cardDropdownItems}
+            />
+          </div>
         </div>
       </div>
     </div>

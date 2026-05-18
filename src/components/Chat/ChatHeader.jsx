@@ -7,7 +7,7 @@ import { Dropdown } from "../ui/Dropdown";
 import { Modal } from "../ui/Modal";
 import { Input } from "../ui/Input";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { setMobileScreen } from "../../redux/slices/uiSlice";
+import { setMobileScreen, setActiveSearchPanelOpen } from "../../redux/slices/uiSlice";
 import { clearUnread, setActiveChat, removeChat, updateChatAvatar } from "../../redux/slices/chatSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
@@ -333,7 +333,11 @@ export function ChatHeader() {
           <Video className="h-4 w-4" />
         </button>
 
-        <button className="p-2 rounded-full hover:bg-wa-active transition-colors" title="Search Messages">
+        <button 
+          onClick={() => dispatch(setActiveSearchPanelOpen(true))}
+          className="p-2 rounded-full hover:bg-wa-active transition-colors" 
+          title="Search Messages"
+        >
           <Search className="h-4 w-4" />
         </button>
 

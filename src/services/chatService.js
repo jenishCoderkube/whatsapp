@@ -10,21 +10,42 @@ export const chatService = {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
       if (!userId || !isUuid) return [];
 
-      // Query real database membership associations
-      const { data: members, error: membersError } = await supabase
-        .from("conversation_members")
-        .select(`
-          unread_count,
-          conversation_id,
-          is_left,
-          conversations (*)
-        `)
-        .eq("user_id", userId);
+      // Resilient check: Query columns if migrated, fallback if not
+      let members = [];
+      try {
+        const { data, error } = await supabase
+          .from("conversation_members")
+          .select(`
+            unread_count,
+            conversation_id,
+            is_left,
+            is_pinned,
+            pinned_at,
+            is_archived,
+            archived_at,
+            conversations (*)
+          `)
+          .eq("user_id", userId);
 
-      if (membersError) throw membersError;
-      if (!members || members.length === 0) return [];
+        if (error) throw error;
+        members = data || [];
+      } catch (err) {
+        const { data, error } = await supabase
+          .from("conversation_members")
+          .select(`
+            unread_count,
+            conversation_id,
+            is_left,
+            conversations (*)
+          `)
+          .eq("user_id", userId);
 
-      // Extract valid conversations natively
+        if (error) throw error;
+        members = data || [];
+      }
+
+      if (members.length === 0) return [];
+
       const mappedChats = [];
 
       for (const item of members) {
@@ -38,7 +59,29 @@ export const chatService = {
         let peerId = null;
         let lastSeen = null;
 
-        // For 1-to-1, resolve the dynamic peer profile schema natively
+        // Fallbacks for Pin/Archive states
+        let isPinned = item.is_pinned || false;
+        let pinnedAt = item.pinned_at || null;
+        let isArchived = item.is_archived || false;
+        let archivedAt = item.archived_at || null;
+
+        if (typeof window !== "undefined") {
+          try {
+            const pinnedList = JSON.parse(localStorage.getItem("wa_pinned_chats") || "[]");
+            const archivedList = JSON.parse(localStorage.getItem("wa_archived_chats") || "[]");
+            
+            if (pinnedList.includes(conv.id)) {
+              isPinned = true;
+              if (!pinnedAt) pinnedAt = new Date().toISOString();
+            }
+            if (archivedList.includes(conv.id)) {
+              isArchived = true;
+              if (!archivedAt) archivedAt = new Date().toISOString();
+            }
+          } catch (e) {}
+        }
+
+        // For 1-to-1, resolve the dynamic peer profile profile details
         if (!conv.is_group) {
           const { data: peerMembers } = await supabase
             .from("conversation_members")
@@ -71,6 +114,10 @@ export const chatService = {
           avatar,
           unreadCount: item.unread_count || 0,
           isLeft: item.is_left || false,
+          isPinned,
+          pinnedAt,
+          isArchived,
+          archivedAt,
           lastMessage: conv.last_message_text ? {
             text: conv.last_message_text,
             timestamp: conv.last_message_timestamp || "",
@@ -88,8 +135,15 @@ export const chatService = {
         });
       }
 
-      // Sort natively pushing latest updated active threads upwards
-      return mappedChats.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+      // Sort natively pushing pinned first, then sorting chronologically
+      return mappedChats.sort((a, b) => {
+        if (a.isPinned && b.isPinned) {
+          return new Date(b.pinnedAt || b.updatedAt || 0) - new Date(a.pinnedAt || a.updatedAt || 0);
+        }
+        if (a.isPinned) return -1;
+        if (b.isPinned) return 1;
+        return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+      });
     } catch (error) {
       console.warn("Dynamic user chats sync database exception:", error);
       return [];
@@ -390,5 +444,74 @@ export const chatService = {
     
     if (error) throw error;
     return true;
+  },
+
+  async togglePinChat(chatId, userId, isPinned) {
+    try {
+      // 1. Local fallbacks
+      if (typeof window !== "undefined") {
+        const pinnedList = JSON.parse(localStorage.getItem("wa_pinned_chats") || "[]");
+        if (isPinned) {
+          if (!pinnedList.includes(chatId)) pinnedList.push(chatId);
+        } else {
+          const idx = pinnedList.indexOf(chatId);
+          if (idx > -1) pinnedList.splice(idx, 1);
+        }
+        localStorage.setItem("wa_pinned_chats", JSON.stringify(pinnedList));
+      }
+
+      // 2. DB Update
+      await supabase
+        .from("conversation_members")
+        .update({
+          is_pinned: isPinned,
+          pinned_at: isPinned ? new Date().toISOString() : null
+        })
+        .eq("conversation_id", chatId)
+        .eq("user_id", userId);
+    } catch (e) {
+      console.warn("Resilient pin sync bypass exception:", e);
+    }
+  },
+
+  async toggleArchiveChat(chatId, userId, isArchived) {
+    try {
+      // 1. Local fallbacks
+      if (typeof window !== "undefined") {
+        const archivedList = JSON.parse(localStorage.getItem("wa_archived_chats") || "[]");
+        if (isArchived) {
+          if (!archivedList.includes(chatId)) archivedList.push(chatId);
+          // Auto unpin
+          const pinnedList = JSON.parse(localStorage.getItem("wa_pinned_chats") || "[]");
+          const pinIdx = pinnedList.indexOf(chatId);
+          if (pinIdx > -1) {
+            pinnedList.splice(pinIdx, 1);
+            localStorage.setItem("wa_pinned_chats", JSON.stringify(pinnedList));
+          }
+        } else {
+          const idx = archivedList.indexOf(chatId);
+          if (idx > -1) archivedList.splice(idx, 1);
+        }
+        localStorage.setItem("wa_archived_chats", JSON.stringify(archivedList));
+      }
+
+      // 2. DB Update
+      const updatePayload = {
+        is_archived: isArchived,
+        archived_at: isArchived ? new Date().toISOString() : null
+      };
+      if (isArchived) {
+        updatePayload.is_pinned = false;
+        updatePayload.pinned_at = null;
+      }
+
+      await supabase
+        .from("conversation_members")
+        .update(updatePayload)
+        .eq("conversation_id", chatId)
+        .eq("user_id", userId);
+    } catch (e) {
+      console.warn("Resilient archive sync bypass exception:", e);
+    }
   },
 };

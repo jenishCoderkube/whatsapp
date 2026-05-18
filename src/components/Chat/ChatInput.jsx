@@ -33,6 +33,7 @@ import { updateLastMessage } from "../../redux/slices/chatSlice";
 import { messageService } from "../../services/messageService";
 import { storageService } from "../../services/storageService";
 import { realtimeService } from "../../services/realtimeService";
+import { setReplyingMessage } from "../../redux/slices/uiSlice";
 import { cn } from "../../utils/cn";
 
 const popularEmojis = [
@@ -178,6 +179,7 @@ export function ChatInput() {
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
   const user = useAppSelector((state) => state.auth.user);
   const theme = useAppSelector((state) => state.ui.theme);
+  const replyingMessage = useAppSelector((state) => state.ui.replyingMessage);
 
   const [messageText, setMessageText] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
@@ -455,23 +457,12 @@ export function ChatInput() {
     }
   }, [toastError]);
 
-  // Support Reply action natively
+  // Auto-focus input when replying to a message
   useEffect(() => {
-    const handleReply = (e) => {
-      const { text: replyText, senderName } = e.detail || {};
-      if (replyText) {
-        const snippet =
-          replyText.length > 40
-            ? replyText.substring(0, 40) + "..."
-            : replyText;
-        const prefix = `Replying to ${senderName || "peer"}: "${snippet}"\n`;
-        setMessageText((prev) => (prev ? prev + "\n" + prefix : prefix));
-        setTimeout(() => textareaRef.current?.focus(), 50);
-      }
-    };
-    window.addEventListener("wa_reply_trigger", handleReply);
-    return () => window.removeEventListener("wa_reply_trigger", handleReply);
-  }, []);
+    if (replyingMessage) {
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+  }, [replyingMessage]);
 
   const formatBytes = (bytes) => {
     if (bytes === 0) return "0 Bytes";
@@ -616,6 +607,19 @@ export function ChatInput() {
       user.name,
     );
 
+    // Capture reply message payload and clear state instantly
+    const activeReplyPayload = replyingMessage ? {
+      id: replyingMessage.id,
+      text: replyingMessage.text,
+      senderName: replyingMessage.senderName,
+      type: replyingMessage.type,
+      mediaUrl: replyingMessage.mediaUrl,
+    } : null;
+
+    if (replyingMessage) {
+      dispatch(setReplyingMessage(null));
+    }
+
     for (const fileObj of filesToSend) {
       const tempId =
         "msg-temp-file-" +
@@ -635,6 +639,7 @@ export function ChatInput() {
         fileSize: fileObj.sizeString,
         senderId: user.id,
         createdAt: new Date().toISOString(),
+        replyTo: activeReplyPayload,
       };
 
       dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
@@ -668,6 +673,7 @@ export function ChatInput() {
           fileName: fileObj.file.name,
           fileSize: fileObj.sizeString,
           timestampString: timeString,
+          replyTo: activeReplyPayload,
         });
 
         dispatch(
@@ -723,6 +729,7 @@ export function ChatInput() {
         type: "text",
         senderId: user.id,
         createdAt: new Date().toISOString(),
+        replyTo: activeReplyPayload,
       };
 
       dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
@@ -743,6 +750,7 @@ export function ChatInput() {
           text: textToSend,
           type: "text",
           timestampString: timeString,
+          replyTo: activeReplyPayload,
         });
 
         dispatch(
@@ -895,6 +903,30 @@ export function ChatInput() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {replyingMessage && (
+        <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary p-2 mb-2 rounded text-xs select-none animate-fade-in relative">
+          <div className="flex flex-col min-w-0">
+            <span className="font-semibold text-wa-primary truncate">
+              Replying to {replyingMessage.senderName}
+            </span>
+            <span className="text-wa-muted truncate max-w-[280px] sm:max-w-md">
+              {replyingMessage.text || (
+                replyingMessage.type === "image" ? "📷 Photo" :
+                replyingMessage.type === "video" ? "🎥 Video" :
+                replyingMessage.type === "voice" ? "🎤 Voice Note" :
+                replyingMessage.type === "file" ? "📎 Document" : "Attachment"
+              )}
+            </span>
+          </div>
+          <button 
+            onClick={() => dispatch(setReplyingMessage(null))}
+            className="p-1 text-wa-muted hover:text-wa-text rounded-full hover:bg-wa-hover transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 

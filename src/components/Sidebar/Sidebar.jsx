@@ -24,7 +24,7 @@ import { SearchBar } from "./SearchBar";
 import { ChatCard } from "./ChatCard";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
-import { toggleTheme } from "../../redux/slices/uiSlice";
+import { toggleTheme, setArchivedViewOpen } from "../../redux/slices/uiSlice";
 import {
   setChats,
   appendChat,
@@ -53,6 +53,7 @@ export function Sidebar({ className }) {
   const chats = useAppSelector((state) => state.chat.chats);
   const searchQuery = useAppSelector((state) => state.chat.searchQuery);
   const theme = useAppSelector((state) => state.ui.theme);
+  const archivedViewOpen = useAppSelector((state) => state.ui.archivedViewOpen);
 
   const chatsRef = useRef(chats);
   useEffect(() => {
@@ -60,6 +61,11 @@ export function Sidebar({ className }) {
   }, [chats]);
 
   const [profileModal, setProfileModal] = useState(false);
+  const [linkedDevicesModalOpen, setLinkedDevicesModalOpen] = useState(false);
+  const [activeDevices, setActiveDevices] = useState([
+    { id: "chrome", name: "Google Chrome (Windows)", active: true, desc: "Last active: Just now • Bengaluru, India", isBrowser: true },
+    { id: "iphone", name: "iPhone 15 Pro Max", active: false, desc: "Last active: Yesterday at 9:45 PM • California, US", isBrowser: false }
+  ]);
   const [newChatModal, setNewChatModal] = useState(false);
   const [activeTab, setActiveTab] = useState("direct"); // 'direct' | 'group'
 
@@ -82,6 +88,32 @@ export function Sidebar({ className }) {
   const [profileMessage, setProfileMessage] = useState("");
   const profileFileInputRef = useRef(null);
 
+  const handleLogoutDevice = async (dev) => {
+    if (dev.active) {
+      if (window.confirm("Are you sure you want to log out of your current session on this computer?")) {
+        await authService.logout();
+        dispatch(logout());
+        dispatch(resetChats());
+        dispatch(resetMessages());
+        window.location.reload();
+      }
+    } else {
+      if (window.confirm(`Are you sure you want to log out ${dev.name}?`)) {
+        setActiveDevices(activeDevices.filter((d) => d.id !== dev.id));
+      }
+    }
+  };
+
+  const handleLogoutAllDevices = async () => {
+    if (window.confirm("Are you sure you want to log out of all active devices? This will close all session instances and log you out of this computer.")) {
+      await authService.logout();
+      dispatch(logout());
+      dispatch(resetChats());
+      dispatch(resetMessages());
+      window.location.reload();
+    }
+  };
+
   // Fetch linked database conversations dynamically upon load
   useEffect(() => {
     if (user?.id) {
@@ -96,9 +128,14 @@ export function Sidebar({ className }) {
               !chat.lastMessage.isOutgoing &&
               chat.lastMessage.status === "sent"
             ) {
-              import("../../services/messageService").then(({ messageService }) => {
-                messageService.markConversationMessagesAsDelivered(chat.id, user.id);
-              });
+              import("../../services/messageService").then(
+                ({ messageService }) => {
+                  messageService.markConversationMessagesAsDelivered(
+                    chat.id,
+                    user.id,
+                  );
+                },
+              );
             }
           });
         }
@@ -117,27 +154,29 @@ export function Sidebar({ className }) {
           },
           (payload) => {
             const { eventType, new: newRow, old: oldRow } = payload;
-            
+
             if (eventType === "DELETE") {
               dispatch(removeChat(oldRow.conversation_id));
             } else if (eventType === "UPDATE" || eventType === "INSERT") {
               // If it's an update to is_left, sync the slice status
               const chatId = newRow.conversation_id;
               const isLeft = newRow.is_left;
-              
+
               // Check if we already have this chat
-              const existingChat = chatsRef.current.find(c => c.id === chatId);
+              const existingChat = chatsRef.current.find(
+                (c) => c.id === chatId,
+              );
               if (existingChat) {
                 dispatch(updateChatMembership({ chatId, isLeft }));
               } else if (!isLeft) {
                 // If added to a group we don't have in local state yet, fetch it
-                chatService.getUserChats(user.id).then(allChats => {
-                  const target = allChats.find(c => c.id === chatId);
+                chatService.getUserChats(user.id).then((allChats) => {
+                  const target = allChats.find((c) => c.id === chatId);
                   if (target) dispatch(appendChat(target));
                 });
               }
             }
-          }
+          },
         )
         .subscribe();
 
@@ -154,29 +193,40 @@ export function Sidebar({ className }) {
           (payload) => {
             const updatedConv = payload.new;
             // Check if this conversation exists in our list
-            const existing = chatsRef.current.find(c => c.id === updatedConv.id);
+            const existing = chatsRef.current.find(
+              (c) => c.id === updatedConv.id,
+            );
             if (existing) {
               // Update avatar if changed
               if (updatedConv.avatar !== existing.avatar) {
-                dispatch(updateChatAvatar({ chatId: updatedConv.id, avatar: updatedConv.avatar }));
+                dispatch(
+                  updateChatAvatar({
+                    chatId: updatedConv.id,
+                    avatar: updatedConv.avatar,
+                  }),
+                );
               }
-              
+
               // Update last message preview and status (ticks) if changed
               if (
                 updatedConv.last_message_text !== existing.lastMessage?.text ||
-                updatedConv.last_message_status !== existing.lastMessage?.status ||
-                updatedConv.last_message_timestamp !== existing.lastMessage?.timestamp
+                updatedConv.last_message_status !==
+                  existing.lastMessage?.status ||
+                updatedConv.last_message_timestamp !==
+                  existing.lastMessage?.timestamp
               ) {
-                dispatch(updateLastMessage({
-                  chatId: updatedConv.id,
-                  text: updatedConv.last_message_text,
-                  timestamp: updatedConv.last_message_timestamp,
-                  isOutgoing: updatedConv.last_message_sender_id === user.id,
-                  status: updatedConv.last_message_status
-                }));
+                dispatch(
+                  updateLastMessage({
+                    chatId: updatedConv.id,
+                    text: updatedConv.last_message_text,
+                    timestamp: updatedConv.last_message_timestamp,
+                    isOutgoing: updatedConv.last_message_sender_id === user.id,
+                    status: updatedConv.last_message_status,
+                  }),
+                );
               }
             }
-          }
+          },
         )
         .subscribe();
 
@@ -216,23 +266,26 @@ export function Sidebar({ className }) {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const activeChats = filteredChats.filter((chat) => !chat.isArchived);
+  const archivedChats = filteredChats.filter((chat) => chat.isArchived);
+
   const handleLogout = async () => {
     try {
       // 1. Terminate Supabase session and update online status to false
       await authService.logout();
-      
+
       // 2. Clear all Redux slices to prevent stale data upon next login or refresh
       dispatch(logout());
       dispatch(resetChats());
       dispatch(resetMessages());
-      
+
       // 3. Absolute cleanup of real-time listeners
       realtimeService.disconnectGlobalPresence();
       realtimeService.disconnectGlobalMessages();
-      
+
       // 4. Clear all potential sensitive cached items manually
       if (typeof window !== "undefined") {
-        localStorage.clear(); 
+        localStorage.clear();
         sessionStorage.clear();
       }
     } catch (error) {
@@ -247,6 +300,10 @@ export function Sidebar({ className }) {
     {
       label: "Profile Info",
       onClick: () => setProfileModal(true),
+    },
+    {
+      label: "Linked Devices",
+      onClick: () => setLinkedDevicesModalOpen(true),
     },
     {
       label: theme === "light" ? "Dark Theme" : "Light Theme",
@@ -411,6 +468,48 @@ export function Sidebar({ className }) {
     }
   };
 
+  if (archivedViewOpen) {
+    return (
+      <aside
+        className={cn(
+          "flex flex-col h-full bg-wa-sidebar border-r border-wa-border select-none transition-colors duration-200",
+          className,
+        )}
+      >
+        {/* Archived view header strip matching WhatsApp Web */}
+        <header className="flex items-center gap-6 px-4 py-4 bg-wa-primary text-white shrink-0">
+          <button
+            onClick={() => dispatch(setArchivedViewOpen(false))}
+            className="p-1 rounded-full hover:bg-white/10 transition-colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              className="fill-white rotate-180"
+            >
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"></path>
+            </svg>
+          </button>
+          <span className="font-semibold text-base sm:text-lg">Archived</span>
+        </header>
+
+        {/* Scrollable list of archived chats */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200">
+          {archivedChats.length > 0 ? (
+            archivedChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-wa-muted select-none">
+              <span className="text-xs sm:text-sm font-medium">
+                No archived chats
+              </span>
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside
       className={cn(
@@ -458,10 +557,39 @@ export function Sidebar({ className }) {
       {/* Filter engine */}
       <SearchBar />
 
+      {/* Archived Chats Folder Banner */}
+      {archivedChats.length > 0 && (
+        <div
+          onClick={() => dispatch(setArchivedViewOpen(true))}
+          className="flex items-center justify-between px-4 py-3 hover:bg-wa-hover cursor-pointer border-b border-wa-border/40 select-none group transition-colors duration-150 shrink-0"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-wa-primary flex items-center justify-center">
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                className="fill-wa-primary"
+              >
+                <path d="M4 3h16a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm1 14h14v-7H5v7zm-2-9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zm7 3h4a1 1 0 0 1 0 2h-4a1 1 0 0 1 0-2z"></path>
+              </svg>
+            </span>
+            <span className="font-medium text-sm sm:text-base text-wa-text">
+              Archived
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-wa-primary font-semibold">
+              {archivedChats.length}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Scrollable contact records */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200">
-        {filteredChats.length > 0 ? (
-          filteredChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
+        {activeChats.length > 0 ? (
+          activeChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
         ) : (
           <div className="p-6 text-center text-xs sm:text-sm text-wa-muted">
             No chats or contacts found matching "{searchQuery}"
@@ -814,6 +942,106 @@ export function Sidebar({ className }) {
               </Button>
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={linkedDevicesModalOpen}
+        onClose={() => setLinkedDevicesModalOpen(false)}
+        title="Linked Devices"
+      >
+        <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-4 select-none">
+          {/* Main Visual Graphic (laptop + phone sync mockup) */}
+          <div className="flex flex-col items-center justify-center text-center py-6 px-4 bg-wa-header/20 border border-wa-border/50 rounded-2xl w-full mb-6 relative overflow-hidden">
+            <div className="h-16 w-16 rounded-full bg-wa-primary/10 flex items-center justify-center mb-3">
+              <svg
+                viewBox="0 0 24 24"
+                width="32"
+                height="32"
+                className="fill-wa-primary animate-pulse"
+              >
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"></path>
+              </svg>
+            </div>
+            <h4 className="text-sm sm:text-base font-semibold text-wa-text">
+              Active Login Sessions
+            </h4>
+            <p className="text-xs text-wa-muted mt-1 max-w-sm leading-relaxed">
+              Your account is currently active on the following instances. You can remotely close any of these active sessions below.
+            </p>
+          </div>
+
+          {/* Linked Sessions List */}
+          <div className="w-full text-left">
+            <span className="text-xs text-wa-muted font-bold uppercase tracking-wider block mb-3 px-1">
+              Active Sessions
+            </span>
+
+            <div className="flex flex-col gap-2.5">
+              {activeDevices.map((dev) => (
+                <div 
+                  key={dev.id} 
+                  className={cn(
+                    "flex items-center gap-3.5 p-3 rounded-xl bg-wa-header border border-wa-border/40 transition-all",
+                    dev.active ? "border-wa-border/60" : "opacity-75 group hover:opacity-100"
+                  )}
+                >
+                  <div className="h-10 w-10 rounded-full bg-wa-active flex items-center justify-center shrink-0 text-wa-muted">
+                    {dev.isBrowser ? (
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        className="fill-wa-primary"
+                      >
+                        <path d="M20 4H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-2 12H6V6h12v10z"></path>
+                      </svg>
+                    ) : (
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        className="fill-wa-muted"
+                      >
+                        <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"></path>
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-sm font-semibold text-wa-text flex items-center gap-2">
+                      {dev.name}
+                      {dev.active && (
+                        <>
+                          <span className="h-2 w-2 rounded-full bg-green-500 shrink-0 inline-block animate-ping" />
+                          <span className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">
+                            Active
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-wa-muted truncate mt-0.5">
+                      {dev.desc}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleLogoutDevice(dev)}
+                    className="text-[10px] sm:text-xs font-bold text-red-500 hover:underline shrink-0 block"
+                  >
+                    Log out
+                  </button>
+                </div>
+              ))}
+
+              {activeDevices.length > 0 && (
+                <button
+                  onClick={handleLogoutAllDevices}
+                  className="w-full mt-4 py-2.5 rounded-xl border border-red-500/30 hover:bg-red-500/10 text-red-500 font-bold text-xs sm:text-sm transition-all text-center block outline-none"
+                >
+                  Log out from all devices
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </Modal>
     </aside>

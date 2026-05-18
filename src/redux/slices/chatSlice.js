@@ -1,5 +1,20 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+const sortChatsHelper = (chats) => {
+  return [...chats].sort((a, b) => {
+    // 1. Both pinned: sort by pinnedAt or updatedAt
+    if (a.isPinned && b.isPinned) {
+      return new Date(b.pinnedAt || b.updatedAt || 0) - new Date(a.pinnedAt || a.updatedAt || 0);
+    }
+    // 2. Only A pinned: goes first
+    if (a.isPinned) return -1;
+    // 3. Only B pinned: goes first
+    if (b.isPinned) return 1;
+    // 4. Neither pinned: sort by updatedAt
+    return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+  });
+};
+
 const initialState = {
   chats: [],
   activeChatId: null,
@@ -14,11 +29,7 @@ const chatSlice = createSlice({
   reducers: {
     setChats(state, action) {
       if (action.payload) {
-        const sorted = [...action.payload].sort(
-          (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
-        );
-        state.chats = sorted;
-        // Verify activeChatId stays bound cleanly without auto-selecting an initial chat
+        state.chats = sortChatsHelper(action.payload);
         if (
           state.activeChatId &&
           !state.chats.some((c) => c.id === state.activeChatId)
@@ -29,14 +40,12 @@ const chatSlice = createSlice({
     },
     appendChat(state, action) {
       const newChat = action.payload;
-      // Filter out duplication
       const filtered = state.chats.filter((c) => c.id !== newChat.id);
-      state.chats = [newChat, ...filtered];
+      state.chats = sortChatsHelper([newChat, ...filtered]);
       state.activeChatId = newChat.id;
     },
     setActiveChat(state, action) {
       state.activeChatId = action.payload;
-      // Clear unread count when opening chat
       const chat = state.chats.find((c) => c.id === action.payload);
       if (chat) {
         chat.unreadCount = 0;
@@ -52,8 +61,6 @@ const chatSlice = createSlice({
         let finalStatus = status;
         const oldMessage = chat.lastMessage;
         
-        // Only apply status weight priority if we are updating the SAME message.
-        // If the text or timestamp changed, it's a new message and should reset to 'sent' or 'delivered'.
         const isSameMessage = oldMessage && 
                              oldMessage.text === text && 
                              oldMessage.timestamp === timestamp;
@@ -70,7 +77,64 @@ const chatSlice = createSlice({
         chat.lastMessage = { text, timestamp, isOutgoing, status: finalStatus };
         chat.updatedAt = new Date().toISOString();
         const filtered = state.chats.filter((c) => c.id !== chatId);
-        state.chats = [chat, ...filtered];
+        state.chats = sortChatsHelper([chat, ...filtered]);
+      }
+    },
+    togglePinChat(state, action) {
+      const chatId = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.isPinned = !chat.isPinned;
+        chat.pinnedAt = chat.isPinned ? new Date().toISOString() : null;
+        state.chats = sortChatsHelper(state.chats);
+        
+        // Sync custom localStorage fallbacks to remain 100% resilient across sessions
+        if (typeof window !== "undefined") {
+          try {
+            const currentPinned = JSON.parse(localStorage.getItem("wa_pinned_chats") || "[]");
+            if (chat.isPinned) {
+              if (!currentPinned.includes(chatId)) currentPinned.push(chatId);
+            } else {
+              const idx = currentPinned.indexOf(chatId);
+              if (idx > -1) currentPinned.splice(idx, 1);
+            }
+            localStorage.setItem("wa_pinned_chats", JSON.stringify(currentPinned));
+          } catch (e) {}
+        }
+      }
+    },
+    toggleArchiveChat(state, action) {
+      const chatId = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.isArchived = !chat.isArchived;
+        chat.archivedAt = chat.isArchived ? new Date().toISOString() : null;
+        
+        // Automatically unpin if archived (WhatsApp logic)
+        if (chat.isArchived && chat.isPinned) {
+          chat.isPinned = false;
+          chat.pinnedAt = null;
+        }
+
+        state.chats = sortChatsHelper(state.chats);
+
+        if (chat.isArchived && state.activeChatId === chatId) {
+          state.activeChatId = null;
+        }
+
+        // Sync custom localStorage fallbacks to remain 100% resilient across sessions
+        if (typeof window !== "undefined") {
+          try {
+            const currentArchived = JSON.parse(localStorage.getItem("wa_archived_chats") || "[]");
+            if (chat.isArchived) {
+              if (!currentArchived.includes(chatId)) currentArchived.push(chatId);
+            } else {
+              const idx = currentArchived.indexOf(chatId);
+              if (idx > -1) currentArchived.splice(idx, 1);
+            }
+            localStorage.setItem("wa_archived_chats", JSON.stringify(currentArchived));
+          } catch (e) {}
+        }
       }
     },
     clearUnread(state, action) {
@@ -85,6 +149,23 @@ const chatSlice = createSlice({
         const chat = state.chats.find((c) => c.id === chatId);
         if (chat) {
           chat.unreadCount = (chat.unreadCount || 0) + 1;
+          
+          // Auto un-archive if archived and gets a new message (WhatsApp Web native style!)
+          if (chat.isArchived) {
+            chat.isArchived = false;
+            chat.archivedAt = null;
+            state.chats = sortChatsHelper(state.chats);
+            if (typeof window !== "undefined") {
+              try {
+                const currentArchived = JSON.parse(localStorage.getItem("wa_archived_chats") || "[]");
+                const idx = currentArchived.indexOf(chatId);
+                if (idx > -1) {
+                  currentArchived.splice(idx, 1);
+                  localStorage.setItem("wa_archived_chats", JSON.stringify(currentArchived));
+                }
+              } catch (e) {}
+            }
+          }
         }
       }
     },
@@ -143,6 +224,8 @@ export const {
   setActiveChat,
   setSearchQuery,
   updateLastMessage,
+  togglePinChat,
+  toggleArchiveChat,
   clearUnread,
   incrementUnread,
   removeChat,

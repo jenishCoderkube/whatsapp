@@ -5,6 +5,10 @@ const initialState = {
   theme: "light", // 'light' | 'dark'
   profileOpen: false, // sidebar profile drawer
   attachmentMenuOpen: false,
+  replyingMessage: null, // message object to reply to
+  activeSearchPanelOpen: false, // in-chat search panel
+  archivedViewOpen: false, // archived chats sidebar list
+  linkedDevicesOpen: false, // linked devices modal state
 };
 
 const uiSlice = createSlice({
@@ -16,7 +20,6 @@ const uiSlice = createSlice({
     },
     toggleTheme(state) {
       state.theme = state.theme === "light" ? "dark" : "light";
-      // Ensure dark class is applied to root html/body dynamically if needed
       if (typeof document !== "undefined") {
         if (state.theme === "dark") {
           document.documentElement.classList.add("dark");
@@ -47,6 +50,18 @@ const uiSlice = createSlice({
     setAttachmentMenuOpen(state, action) {
       state.attachmentMenuOpen = action.payload;
     },
+    setReplyingMessage(state, action) {
+      state.replyingMessage = action.payload;
+    },
+    setActiveSearchPanelOpen(state, action) {
+      state.activeSearchPanelOpen = action.payload;
+    },
+    setArchivedViewOpen(state, action) {
+      state.archivedViewOpen = action.payload;
+    },
+    setLinkedDevicesOpen(state, action) {
+      state.linkedDevicesOpen = action.payload;
+    },
   },
 });
 
@@ -56,6 +71,10 @@ export const {
   setTheme,
   setProfileOpen,
   setAttachmentMenuOpen,
+  setReplyingMessage,
+  setActiveSearchPanelOpen,
+  setArchivedViewOpen,
+  setLinkedDevicesOpen,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

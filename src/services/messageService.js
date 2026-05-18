@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { parseMessageText, encodeMessageText } from "../utils/messageParser";
 
 export const messageService = {
   /**
@@ -40,15 +41,7 @@ export const messageService = {
       // Map rows directly to frontend expectations, reversing so earliest is first natively
       return data.reverse().map((msg) => {
         const isMine = currentUserId ? msg.sender_id === currentUserId : false;
-        let cleanText = msg.text || "";
-        let reactions = {};
-        if (cleanText.includes("|||R:")) {
-          const parts = cleanText.split("|||R:");
-          cleanText = parts[0];
-          try {
-            reactions = JSON.parse(parts[1] || "{}");
-          } catch (e) {}
-        }
+        const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(msg.text || "");
 
         return {
           id: msg.id,
@@ -57,6 +50,8 @@ export const messageService = {
           text: cleanText,
           rawText: msg.text || "",
           reactions,
+          replyTo: msg.reply_to || replyTo,
+          isForwarded: msg.is_forwarded || isForwarded,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -100,6 +95,8 @@ export const messageService = {
     fileSize,
     duration,
     timestampString,
+    replyTo = null,
+    isForwarded = false,
   }) {
     try {
       const isUuid =
@@ -115,10 +112,12 @@ export const messageService = {
       // Offline detection logic
       const isOnline = typeof window !== 'undefined' ? navigator.onLine : true;
 
+      const encodedText = encodeMessageText(text, replyTo, isForwarded);
+
       const insertPayload = {
         conversation_id: conversationId,
         sender_id: senderId,
-        text,
+        text: encodedText,
         type,
         media_url: mediaUrl,
         file_name: fileName,
@@ -132,6 +131,8 @@ export const messageService = {
             minute: "2-digit",
             hour12: true,
           }),
+        reply_to: replyTo,
+        is_forwarded: isForwarded,
       };
 
       if (!isOnline) {
@@ -210,13 +211,17 @@ export const messageService = {
         );
       }
 
+      const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward } = parseMessageText(newMsg.text || "");
+
       return {
         id: newMsg.id,
         conversationId: newMsg.conversation_id,
         conversation_id: newMsg.conversation_id,
-        text: newMsg.text || "",
+        text: cleanText,
         rawText: newMsg.text || "",
         reactions: {},
+        replyTo: newMsg.reply_to || parsedReplyTo || replyTo,
+        isForwarded: newMsg.is_forwarded || parsedIsForward || isForwarded,
         timestamp: newMsg.timestamp_string,
         status: newMsg.status,
         type: newMsg.type,

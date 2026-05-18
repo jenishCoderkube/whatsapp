@@ -16,6 +16,8 @@ import { realtimeService } from "../../services/realtimeService";
 import { profileService } from "../../services/profileService";
 import { cn } from "../../utils/cn";
 import { getChatDateLabel } from "../../utils/dateUtils";
+import { ForwardModal } from "../../components/Chat/ForwardModal";
+import { MessageSearchPanel } from "../../components/Chat/MessageSearchPanel";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -26,11 +28,13 @@ export default function ChatPage() {
   const chats = useAppSelector((state) => state.chat.chats);
   const messagesDict = useAppSelector((state) => state.message.messages);
   const mobileScreen = useAppSelector((state) => state.ui.mobileScreen);
+  const activeSearchPanelOpen = useAppSelector((state) => state.ui.activeSearchPanelOpen);
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [localUnreadCount, setLocalUnreadCount] = useState(0);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [forwardingMsg, setForwardingMsg] = useState(null);
   
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -350,6 +354,18 @@ export default function ChatPage() {
     }
   }, [user?.id]);
 
+  // Capture forward triggers and mount the forwarding dialog overlay
+  useEffect(() => {
+    const handleForwardTrigger = (e) => {
+      const { message } = e.detail || {};
+      if (message) {
+        setForwardingMsg(message);
+      }
+    };
+    window.addEventListener("wa_forward_trigger", handleForwardTrigger);
+    return () => window.removeEventListener("wa_forward_trigger", handleForwardTrigger);
+  }, []);
+
   // Infinite Scroll and Bottom Detection Handler
   const handleScroll = async (e) => {
     const container = e.target;
@@ -498,6 +514,17 @@ export default function ChatPage() {
             <EmptyState />
           )}
         </div>
+
+        {activeSearchPanelOpen && activeChat && (
+          <MessageSearchPanel chat={activeChat} messages={activeMessages} />
+        )}
+
+        {forwardingMsg && (
+          <ForwardModal 
+            messageToForward={forwardingMsg} 
+            onClose={() => setForwardingMsg(null)} 
+          />
+        )}
       </main>
     </div>
   );

@@ -4,9 +4,29 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "../../utils/cn";
 
-export function Dropdown({ trigger, items = [], align = "right", className }) {
-  const [isOpen, setIsOpen] = useState(false);
+export function Dropdown({ 
+  trigger, 
+  items = [], 
+  align = "right", 
+  className, 
+  closeOnMouseLeave = false,
+  isOpen: controlledIsOpen,
+  onOpenChange
+}) {
+  const [localIsOpen, setLocalIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const dropdownRef = useRef(null);
+
+  const isControlled = controlledIsOpen !== undefined;
+  const isOpen = isControlled ? controlledIsOpen : localIsOpen;
+
+  const setIsOpen = (val) => {
+    if (isControlled) {
+      if (onOpenChange) onOpenChange(val);
+    } else {
+      setLocalIsOpen(val);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -16,15 +36,35 @@ export function Dropdown({ trigger, items = [], align = "right", className }) {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isControlled, onOpenChange]);
+
+  const handleToggle = (e) => {
+    e.stopPropagation();
+    if (!isOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      // If the trigger element is near the bottom of the screen (within 200px), open upward!
+      if (rect.bottom > viewportHeight - 200) {
+        setOpenUpward(true);
+      } else {
+        setOpenUpward(false);
+      }
+    }
+    setIsOpen(!isOpen);
+  };
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
+    <div 
+      className="relative inline-block text-left" 
+      ref={dropdownRef}
+      onMouseLeave={() => {
+        if (closeOnMouseLeave) {
+          setIsOpen(false);
+        }
+      }}
+    >
       <div
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
+        onClick={handleToggle}
         className="cursor-pointer"
       >
         {trigger}
@@ -33,12 +73,13 @@ export function Dropdown({ trigger, items = [], align = "right", className }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -5 }}
+            initial={{ opacity: 0, scale: 0.95, y: openUpward ? 5 : -5 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -5 }}
+            exit={{ opacity: 0, scale: 0.95, y: openUpward ? 5 : -5 }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             className={cn(
-              "absolute z-50 mt-2 w-48 rounded-sm bg-wa-modal py-2 shadow-lg border border-wa-border transition-colors",
+              "absolute z-50 w-48 rounded-sm bg-wa-modal py-2 shadow-lg border border-wa-border transition-colors",
+              openUpward ? "bottom-full mb-2" : "top-full mt-2",
               align === "right" ? "right-0" : "left-0",
               className
             )}
@@ -49,7 +90,7 @@ export function Dropdown({ trigger, items = [], align = "right", className }) {
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsOpen(false);
-                  if (item.onClick) item.onClick();
+                  if (item.onClick) item.onClick(e);
                 }}
                 className={cn(
                   "block w-full px-4 py-2 text-left text-sm text-wa-text hover:bg-wa-hover transition-colors",

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { parseMessageText } from "../utils/messageParser";
 
 let globalChannel = null;
 let globalMessagesChannel = null;
@@ -21,15 +22,7 @@ export const realtimeService = {
           if (!payload.new) return;
           const row = payload.new;
 
-          let cleanText = row.text || "";
-          let reactions = {};
-          if (cleanText.includes("|||R:")) {
-            const parts = cleanText.split("|||R:");
-            cleanText = parts[0];
-            try {
-              reactions = JSON.parse(parts[1] || "{}");
-            } catch (e) {}
-          }
+          const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(row.text || "");
 
           const uniformMsg = {
             id: row.id,
@@ -37,6 +30,8 @@ export const realtimeService = {
             text: cleanText,
             rawText: row.text || "",
             reactions,
+            replyTo: row.reply_to || replyTo,
+            isForwarded: row.is_forwarded || isForwarded,
             timestamp: row.timestamp_string || new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
             status: row.status || "sent",
             type: row.type || "text",
