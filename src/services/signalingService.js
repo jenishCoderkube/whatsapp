@@ -4,6 +4,7 @@ class SignalingService {
   constructor() {
     this.channel = null;
     this.onSignal = null;
+    this.targetChannels = new Map();
   }
 
   /**
@@ -34,40 +35,59 @@ class SignalingService {
   }
 
   /**
-   * General purpose sender to a target user.
+   * General purpose cached sender to a target user.
    */
   async sendSignal(targetUserId, type, data) {
-    // We create a temporary channel to send the broadcast to the target's listening channel
-    const tempChannel = supabase.channel(`signaling:${targetUserId}`);
-    
-    try {
-      await tempChannel.subscribe(async (status) => {
+    let targetChannel = this.targetChannels.get(targetUserId);
+
+    if (!targetChannel) {
+      targetChannel = supabase.channel(`signaling:${targetUserId}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      });
+      this.targetChannels.set(targetUserId, targetChannel);
+      
+      // Subscribe once
+      targetChannel.subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          await tempChannel.send({
+          targetChannel.send({
             type: "broadcast",
             event: "signal",
             payload: { type, data },
           });
-          // Cleanup temp channel after sending
-          supabase.removeChannel(tempChannel);
         }
       });
-    } catch (err) {
-      console.error("Signaling send failed:", err);
+    } else {
+      // Channel already exists and is subscribed, just send directly
+      targetChannel.send({
+        type: "broadcast",
+        event: "signal",
+        payload: { type, data },
+      }).catch(err => {
+        console.warn("Retrying signaling send after broadcast fail:", err);
+      });
     }
   }
 
-  // Shorthand methods for cleaner hook code
+  // Shorthand methods for clean, standard calling code
   async sendInvite(targetUserId, data) { return this.sendSignal(targetUserId, "invite", data); }
   async sendAnswer(targetUserId, data) { return this.sendSignal(targetUserId, "answer", data); }
   async sendCandidate(targetUserId, data) { return this.sendSignal(targetUserId, "candidate", data); }
   async sendEnd(targetUserId, data) { return this.sendSignal(targetUserId, "end", data); }
+  async sendMuteStatus(targetUserId, data) { return this.sendSignal(targetUserId, "mute_status", data); }
+  async sendVideoStatus(targetUserId, data) { return this.sendSignal(targetUserId, "video_status", data); }
 
   cleanup() {
     if (this.channel) {
       supabase.removeChannel(this.channel);
       this.channel = null;
     }
+    // Cleanup target channels cache
+    for (const [targetUserId, ch] of this.targetChannels.entries()) {
+      supabase.removeChannel(ch);
+    }
+    this.targetChannels.clear();
     this.onSignal = null;
   }
 }

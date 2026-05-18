@@ -17,6 +17,7 @@ import {
   Reply,
   Trash2,
   Phone,
+  Video,
 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
@@ -353,20 +354,25 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         );
       case "voice_call":
         const isMissed = message.metadata?.callStatus === "missed" || message.metadata?.callStatus === "declined";
+        const isVideo = message.metadata?.callType === "video" || message.text?.toLowerCase().includes("video");
         return (
           <div className="flex items-center gap-3 py-1.5 min-w-[200px] select-none">
             <div className={cn(
               "p-2.5 rounded-full shrink-0",
               isMissed ? "bg-red-500/10 text-red-500" : "bg-wa-primary/10 text-wa-primary"
             )}>
-              <Phone className={cn("h-5 w-5", isMissed && "rotate-[135deg]")} />
+              {isVideo ? (
+                <Video className="h-5 w-5" />
+              ) : (
+                <Phone className={cn("h-5 w-5", isMissed && "rotate-[135deg]")} />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className={cn(
                 "text-sm font-medium",
                 isMissed ? "text-red-500" : "text-wa-text"
               )}>
-                {isMissed ? "Missed voice call" : "Voice call"}
+                {isMissed ? (isVideo ? "Missed video call" : "Missed voice call") : (isVideo ? "Video call" : "Voice call")}
               </p>
               <span className="text-[11px] text-wa-muted">
                 {message.metadata?.duration ? `${message.metadata.duration}s` : ""}

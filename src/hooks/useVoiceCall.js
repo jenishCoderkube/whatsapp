@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import { 
   setIncomingCall, 
@@ -20,91 +20,46 @@ export const useVoiceCall = () => {
   const [localStream, setLocalStreamState] = useState(null);
   const [remoteStream, setRemoteStreamState] = useState(null);
 
-  const activeCallRef = useRef(null);
-  const incomingCallRef = useRef(null);
+  // Sync hook stream state with webrtcService values
+  useEffect(() => {
+    const streamSyncTimer = setInterval(() => {
+      if (webrtcService.localStream !== localStream) {
+        setLocalStreamState(webrtcService.localStream);
+      }
+      if (webrtcService.remoteStream !== remoteStream) {
+        setRemoteStreamState(webrtcService.remoteStream);
+      }
+    }, 300);
 
-  // Sync refs with state for use in callbacks
-  useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
-  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
+    return () => clearInterval(streamSyncTimer);
+  }, [localStream, remoteStream]);
 
   /**
-   * Log call to chat history
+   * Log call to conversation history
    */
-  const logCallMessage = useCallback(async (callData, statusOverride = null) => {
+  const logCallMessage = async (callData, statusOverride = null) => {
     if (!callData?.conversationId || !user?.id) return;
-
     const duration = callData.startTime ? Math.floor((Date.now() - callData.startTime) / 1000) : 0;
     const finalStatus = statusOverride || (duration > 0 ? "completed" : "missed");
+    const isVideo = callData.type === "video";
+    const callLabel = isVideo ? "Video call" : "Voice call";
 
     try {
       await messageService.sendMessage({
         conversationId: callData.conversationId,
         senderId: user.id,
-        text: finalStatus === "completed" ? `Voice call (${duration}s)` : "Missed voice call",
+        text: finalStatus === "completed" ? `${callLabel} (${duration}s)` : `Missed ${callLabel.toLowerCase()}`,
         type: "voice_call",
         metadata: {
           callStatus: finalStatus,
           duration,
+          callType: callData.type || "voice"
         }
       });
     } catch (err) {
       console.error("Failed to log call message:", err);
     }
-  }, [user?.id]);
-
-  /**
-   * Handle Signal Events
-   */
-  const handleSignal = useCallback(async (type, data) => {
-    switch (type) {
-      case "invite":
-        if (activeCallRef.current || incomingCallRef.current) {
-          signalingService.sendEnd(data.caller.id, { reason: "busy" });
-          return;
-        }
-        dispatch(setIncomingCall(data));
-        break;
-
-      case "answer":
-        if (activeCallRef.current?.status === "outgoing") {
-          await webrtcService.setRemoteAnswer(data.sdp);
-          dispatch(setCallStatus("connected"));
-        }
-        break;
-
-      case "candidate":
-        if (activeCallRef.current || incomingCallRef.current) {
-          await webrtcService.addIceCandidate(data.candidate);
-        }
-        break;
-
-      case "end":
-        console.log("Call ended by peer");
-        if (activeCallRef.current) {
-          logCallMessage(activeCallRef.current);
-        } else if (incomingCallRef.current) {
-          logCallMessage(incomingCallRef.current, "missed");
-        }
-        webrtcService.cleanup();
-        setLocalStreamState(null);
-        setRemoteStreamState(null);
-        dispatch(endCall());
-        break;
-
-      default:
-        console.warn("Unknown signal type:", type);
-    }
-  }, [dispatch, logCallMessage]);
-
-  /**
-   * Initialize Signaling
-   */
-  useEffect(() => {
-    if (user?.id) {
-      signalingService.initialize(user.id, handleSignal);
-    }
-    return () => signalingService.cleanup();
-  }, [user?.id, handleSignal]);
+  };
 
   /**
    * Start Outgoing Call
@@ -125,7 +80,6 @@ export const useVoiceCall = () => {
         },
         (remoteStream) => {
           setRemoteStreamState(remoteStream);
-          // Play remote audio automatically for voice calls
           if (type === "voice") {
             const audio = new Audio();
             audio.srcObject = remoteStream;
@@ -210,24 +164,6 @@ export const useVoiceCall = () => {
     setRemoteStreamState(null);
     dispatch(endCall());
   };
-
-  /**
-   * Cleanup on Unmount
-   */
-  useEffect(() => {
-    const handleUnload = () => {
-      const peerId = activeCallRef.current?.peer?.id || incomingCallRef.current?.caller?.id;
-      if (peerId) {
-        signalingService.sendEnd(peerId, { reason: "disconnected" });
-      }
-      webrtcService.cleanup();
-    };
-
-    window.addEventListener("beforeunload", handleUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleUnload);
-    };
-  }, []);
 
   return {
     startCall,

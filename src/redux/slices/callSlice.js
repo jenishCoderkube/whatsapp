@@ -8,6 +8,8 @@ const initialState = {
   isVideoEnabled: true,
   isCameraFront: true,
   isSpeakerOn: true,
+  remoteMuted: false,
+  remoteVideoDisabled: false,
   permissions: {
     audio: "prompt", // 'prompt', 'granted', 'denied'
     video: "prompt",
@@ -28,6 +30,10 @@ const callSlice = createSlice({
         startTime: null,
       };
       state.incomingCall = null;
+      state.isMicMuted = false;
+      state.isVideoEnabled = true;
+      state.remoteMuted = false;
+      state.remoteVideoDisabled = false;
     },
     acceptCall(state) {
       if (state.incomingCall) {
@@ -38,6 +44,10 @@ const callSlice = createSlice({
           startTime: Date.now(),
         };
         state.incomingCall = null;
+        state.isMicMuted = false;
+        state.isVideoEnabled = true;
+        state.remoteMuted = false;
+        state.remoteVideoDisabled = false;
       }
     },
     setCallStatus(state, action) {
@@ -59,12 +69,22 @@ const callSlice = createSlice({
       state.activeCall = null;
       state.incomingCall = null;
       state.isMicMuted = false;
+      state.isVideoEnabled = true;
+      state.isCameraFront = true;
+      state.remoteMuted = false;
+      state.remoteVideoDisabled = false;
     },
     toggleMic(state) {
       state.isMicMuted = !state.isMicMuted;
     },
     toggleVideo(state) {
       state.isVideoEnabled = !state.isVideoEnabled;
+    },
+    setRemoteMuted(state, action) {
+      state.remoteMuted = action.payload;
+    },
+    setRemoteVideoDisabled(state, action) {
+      state.remoteVideoDisabled = action.payload;
     },
     switchCamera(state) {
       state.isCameraFront = !state.isCameraFront;
@@ -86,6 +106,8 @@ export const {
   endCall,
   toggleMic,
   toggleVideo,
+  setRemoteMuted,
+  setRemoteVideoDisabled,
   switchCamera,
   setAudioPermission,
   clearCallHistory,
