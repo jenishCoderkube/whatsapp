@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Check, CheckCheck } from "lucide-react";
+import { Check, CheckCheck, Ban } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { setActiveChat } from "../../redux/slices/chatSlice";
@@ -31,6 +31,9 @@ export const ChatCard = React.memo(({ chat }) => {
     dispatch(setMobileScreen("chat"));
   };
 
+  const isDeleted = chat.lastMessage?.text === "This message was deleted" || 
+                    (latestLoadedMsg && (latestLoadedMsg.type === "deleted" || latestLoadedMsg.text === "This message was deleted"));
+
   // Prioritize the designated "Last Message" preview data from the chat object itself, 
   // as it is updated first during realtime events to ensure the sidebar feels instant.
   const isOutgoing = chat.lastMessage?.isOutgoing !== undefined
@@ -45,6 +48,7 @@ export const ChatCard = React.memo(({ chat }) => {
   const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);
 
   const renderStatus = () => {
+    if (isDeleted) return null;
     if (isPeerTyping) return null;
     if (!isOutgoing) return null;
     if (status === "read") {
@@ -63,6 +67,15 @@ export const ChatCard = React.memo(({ chat }) => {
 
     const baseText = chat.lastMessage?.text || (latestLoadedMsg ? latestLoadedMsg.text : "");
     const type = latestLoadedMsg ? latestLoadedMsg.type : "text";
+
+    if (isDeleted) {
+      return (
+        <span className="italic text-wa-muted/70 inline-flex items-center gap-1">
+          <Ban className="h-3.5 w-3.5 inline shrink-0" />
+          This message was deleted
+        </span>
+      );
+    }
 
     // Dynamic type icon labeling support matching standard WhatsApp lists
     if (baseText === "📷 Photo" || type === "image") return "📷 Photo";

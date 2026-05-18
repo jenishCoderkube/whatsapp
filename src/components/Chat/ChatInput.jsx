@@ -1,6 +1,16 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
+
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-[320px] h-[380px] bg-wa-modal flex items-center justify-center text-xs text-wa-muted">
+      Loading Emojis...
+    </div>
+  ),
+});
 import {
   Smile,
   Paperclip,
@@ -167,6 +177,7 @@ export function ChatInput() {
   const dispatch = useAppDispatch();
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
   const user = useAppSelector((state) => state.auth.user);
+  const theme = useAppSelector((state) => state.ui.theme);
 
   const [messageText, setMessageText] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
@@ -272,6 +283,7 @@ export function ChatInput() {
         const timeString = new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
+          hour12: true,
         });
 
         const optimisticMsg = {
@@ -590,6 +602,7 @@ export function ChatInput() {
     const timeString = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: true,
     });
 
     setMessageText("");
@@ -933,24 +946,18 @@ export function ChatInput() {
                 </button>
 
                 {showEmojiPicker && (
-                  <div className="absolute bottom-12 left-0 w-72 sm:w-80 bg-wa-modal border border-wa-border rounded-2xl shadow-2xl p-3 z-50 animate-fade-in flex flex-col max-h-72 select-none">
-                    <div className="text-xs font-semibold text-wa-muted mb-2 px-1">
-                      Frequently Used Emojis
-                    </div>
-                    <div className="flex-1 overflow-y-auto grid grid-cols-7 gap-1.5 pr-1 rounded-lg">
-                      {popularEmojis.map((emoji, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setMessageText((prev) => prev + emoji);
-                            setTimeout(() => textareaRef.current?.focus(), 0);
-                          }}
-                          className="text-lg sm:text-xl hover:bg-wa-active rounded transition-transform hover:scale-125 flex items-center justify-center p-1 cursor-pointer"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="absolute bottom-12 left-0 z-50 shadow-2xl rounded-2xl border border-wa-border bg-wa-modal overflow-hidden animate-fade-in select-none">
+                    <EmojiPicker
+                      theme={theme === "dark" ? "dark" : "light"}
+                      onEmojiClick={(emojiData) => {
+                        setMessageText((prev) => prev + emojiData.emoji);
+                        setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                      width={320}
+                      height={380}
+                      skinTonesDisabled
+                      previewConfig={{ showPreview: false }}
+                    />
                   </div>
                 )}
               </div>

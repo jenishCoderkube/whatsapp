@@ -37,7 +37,7 @@ export const realtimeService = {
             text: cleanText,
             rawText: row.text || "",
             reactions,
-            timestamp: row.timestamp_string || new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            timestamp: row.timestamp_string || new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
             status: row.status || "sent",
             type: row.type || "text",
             mediaUrl: row.media_url,

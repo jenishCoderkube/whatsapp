@@ -5,6 +5,16 @@ import "./globals.css";
 export const metadata = {
   title: "WhatsApp Web",
   description: "Production-level WhatsApp Web inspired chat application",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "WhatsApp",
+  },
 };
 
 export default function RootLayout({ children }) {

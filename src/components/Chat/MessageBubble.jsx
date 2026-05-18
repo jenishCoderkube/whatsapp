@@ -1,7 +1,17 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
+
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-[280px] h-[350px] bg-wa-modal flex items-center justify-center text-xs text-wa-muted">
+      Loading Emojis...
+    </div>
+  ),
+});
 import {
   Check,
   CheckCheck,
@@ -56,6 +66,10 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
+  const theme = useAppSelector((state) => state.ui.theme);
+
+  const [showFullReactionPicker, setShowFullReactionPicker] = useState(false);
+  const [pickerDirection, setPickerDirection] = useState("up");
 
   const normalizedSenderId = message.sender_id || message.senderId;
   const isMsgOutgoing =
@@ -148,10 +162,13 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       if (showReactionBar) {
         setShowReactionBar(false);
       }
+      if (showFullReactionPicker) {
+        setShowFullReactionPicker(false);
+      }
     };
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [dropdownConfig.isOpen, showReactionBar]);
+  }, [dropdownConfig.isOpen, showReactionBar, showFullReactionPicker]);
 
   if (isDeletedForMe) return null;
 
@@ -436,6 +453,56 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
               {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
                 <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
               ))}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const spaceAbove = rect.top;
+                  const spaceBelow = window.innerHeight - rect.bottom;
+                  // If space above is less than 390px (picker height + padding) and there's more space below, open down!
+                  if (spaceAbove < 390 && spaceBelow > spaceAbove) {
+                    setPickerDirection("down");
+                  } else {
+                    setPickerDirection("up");
+                  }
+                  setShowFullReactionPicker(true);
+                }} 
+                className="text-wa-primary hover:scale-130 transition-transform cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover"
+                title="React with any emoji"
+              >
+                +
+              </button>
+            </div>
+          )}
+
+          {showFullReactionPicker && !isDeleted && (
+            <div className={cn(
+              "fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 select-none transition-colors",
+              "sm:absolute sm:inset-auto sm:bg-transparent sm:p-0 sm:shadow-2xl sm:rounded-2xl sm:border sm:border-wa-border sm:bg-wa-modal sm:overflow-hidden sm:animate-scale-up",
+              isMsgOutgoing ? "sm:right-0" : "sm:left-0",
+              pickerDirection === "down" ? "sm:top-8 sm:bottom-auto" : "sm:bottom-8 sm:top-auto",
+            )} onClick={(e) => {
+              e.stopPropagation();
+              setShowFullReactionPicker(false);
+              setShowReactionBar(false);
+            }}>
+              <div 
+                className="bg-wa-modal rounded-2xl border border-wa-border shadow-2xl overflow-hidden w-[300px] sm:w-[280px] h-[380px] sm:h-[350px] animate-scale-up sm:animate-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EmojiPicker
+                  theme={theme === "dark" ? "dark" : "light"}
+                  onEmojiClick={(emojiData) => {
+                    handleToggleReaction(emojiData.emoji);
+                    setShowFullReactionPicker(false);
+                    setShowReactionBar(false);
+                  }}
+                  width="100%"
+                  height="100%"
+                  skinTonesDisabled
+                  previewConfig={{ showPreview: false }}
+                />
+              </div>
             </div>
           )}
 

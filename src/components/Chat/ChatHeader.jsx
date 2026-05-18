@@ -216,7 +216,7 @@ export function ChatHeader() {
     yesterday.setDate(now.getDate() - 1);
     const isYesterday = date.toDateString() === yesterday.toDateString();
 
-    const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
 
     if (isToday) {
       return `last seen today at ${timeStr}`;

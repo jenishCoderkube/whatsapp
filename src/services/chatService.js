@@ -194,7 +194,7 @@ export const chatService = {
           avatar,
           is_group: true,
           last_message_text: "Group created.",
-          last_message_timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          last_message_timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
           last_message_status: "sent",
           last_message_sender_id: currentUserId,
           group_creator_id: currentUserId,

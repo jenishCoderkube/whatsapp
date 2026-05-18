@@ -52,6 +52,8 @@ export const messageService = {
 
         return {
           id: msg.id,
+          conversationId: msg.conversation_id,
+          conversation_id: msg.conversation_id,
           text: cleanText,
           rawText: msg.text || "",
           reactions,
@@ -128,6 +130,7 @@ export const messageService = {
           new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
+            hour12: true,
           }),
       };
 
@@ -209,6 +212,8 @@ export const messageService = {
 
       return {
         id: newMsg.id,
+        conversationId: newMsg.conversation_id,
+        conversation_id: newMsg.conversation_id,
         text: newMsg.text || "",
         rawText: newMsg.text || "",
         reactions: {},
