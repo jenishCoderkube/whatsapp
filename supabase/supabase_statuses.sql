@@ -35,9 +35,28 @@ CREATE POLICY "Statuses are viewable by authenticated users"
         AND (
             user_id = auth.uid()
             OR privacy = 'everyone'
-            OR (privacy = 'contacts') -- In a production app, check contact relationships. Here, viewable by authenticated users.
+            OR (
+                privacy = 'contacts' 
+                AND EXISTS (
+                    SELECT 1 
+                    FROM public.conversation_members cm1
+                    JOIN public.conversation_members cm2 ON cm1.conversation_id = cm2.conversation_id
+                    WHERE cm1.user_id = public.statuses.user_id 
+                      AND cm2.user_id = auth.uid()
+                )
+            )
             OR (privacy = 'selected' AND auth.uid() = ANY(privacy_list))
-            OR (privacy = 'hide' AND NOT (auth.uid() = ANY(privacy_list)))
+            OR (
+                privacy = 'hide' 
+                AND NOT (auth.uid() = ANY(privacy_list))
+                AND EXISTS (
+                    SELECT 1 
+                    FROM public.conversation_members cm1
+                    JOIN public.conversation_members cm2 ON cm1.conversation_id = cm2.conversation_id
+                    WHERE cm1.user_id = public.statuses.user_id 
+                      AND cm2.user_id = auth.uid()
+                )
+            )
         )
     );
 

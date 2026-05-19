@@ -9,6 +9,37 @@ let useLocalFallback = false;
 
 export const statusService = {
   /**
+   * Get all user IDs that have an existing conversation with the current user.
+   */
+  async getUserContactIds(currentUserId) {
+    try {
+      if (!currentUserId) return [];
+      
+      const { data: userConvs, error: convsError } = await supabase
+        .from("conversation_members")
+        .select("conversation_id")
+        .eq("user_id", currentUserId);
+
+      if (convsError || !userConvs || userConvs.length === 0) return [];
+
+      const conversationIds = userConvs.map((c) => c.conversation_id);
+      
+      const { data: peers, error: peersError } = await supabase
+        .from("conversation_members")
+        .select("user_id")
+        .in("conversation_id", conversationIds)
+        .neq("user_id", currentUserId);
+
+      if (peersError || !peers) return [];
+      
+      return [...new Set(peers.map((p) => p.user_id))];
+    } catch (e) {
+      console.warn("Failed to fetch user contact IDs:", e);
+      return [];
+    }
+  },
+
+  /**
    * Resiliently check if statuses table exists, and fallback to localStorage if not.
    */
   async checkTableExists() {
@@ -107,6 +138,7 @@ export const statusService = {
     await this.checkTableExists();
 
     const nowIso = new Date().toISOString();
+    const contactIds = await this.getUserContactIds(currentUserId);
 
     if (useLocalFallback) {
       const localStatuses = JSON.parse(localStorage.getItem("wa_local_statuses") || "[]");
@@ -116,9 +148,24 @@ export const statusService = {
       const activeStatuses = localStatuses.filter((s) => new Date(s.expires_at) > new Date());
       localStorage.setItem("wa_local_statuses", JSON.stringify(activeStatuses));
 
+      const visibleStatuses = activeStatuses.filter((status) => {
+        const statusUserId = status.user_id;
+        if (statusUserId === currentUserId) return true;
+        
+        const privacy = status.privacy || "contacts";
+        const privacyList = status.privacy_list || [];
+        
+        if (privacy === "everyone") return true;
+        if (privacy === "contacts") return contactIds.includes(statusUserId);
+        if (privacy === "selected") return privacyList.includes(currentUserId);
+        if (privacy === "hide") return contactIds.includes(statusUserId) && !privacyList.includes(currentUserId);
+        
+        return false;
+      });
+
       // Get user profiles
       // Fetch all unique profiles from database so that statuses display valid user info
-      const uniqueUserIds = [...new Set(activeStatuses.map((s) => s.user_id))];
+      const uniqueUserIds = [...new Set(visibleStatuses.map((s) => s.user_id))];
       const profilesMap = {};
       
       for (const uid of uniqueUserIds) {
@@ -134,7 +181,7 @@ export const statusService = {
       // Group statuses by user
       const groups = {};
       
-      activeStatuses.forEach((status) => {
+      visibleStatuses.forEach((status) => {
         const uid = status.user_id;
         const profile = profilesMap[uid] || { id: uid, name: "Contact", avatar: "" };
         
@@ -204,8 +251,23 @@ export const statusService = {
       if (statusesError) throw statusesError;
       if (!statusesData) return [];
 
+      const visibleStatuses = statusesData.filter((status) => {
+        const statusUserId = status.user_id;
+        if (statusUserId === currentUserId) return true;
+        
+        const privacy = status.privacy || "contacts";
+        const privacyList = status.privacy_list || [];
+        
+        if (privacy === "everyone") return true;
+        if (privacy === "contacts") return contactIds.includes(statusUserId);
+        if (privacy === "selected") return privacyList.includes(currentUserId);
+        if (privacy === "hide") return contactIds.includes(statusUserId) && !privacyList.includes(currentUserId);
+        
+        return false;
+      });
+
       // 2. Fetch views for these active statuses
-      const statusIds = statusesData.map((s) => s.id);
+      const statusIds = visibleStatuses.map((s) => s.id);
       let viewsData = [];
       
       if (statusIds.length > 0) {
@@ -238,7 +300,7 @@ export const statusService = {
       // Group statuses by user
       const groups = {};
 
-      statusesData.forEach((status) => {
+      visibleStatuses.forEach((status) => {
         const uid = status.user_id;
         const profile = status.profiles || { id: uid, name: "Contact", avatar: "" };
         const viewsForStatus = viewsByStatus[status.id] || [];

@@ -45,6 +45,7 @@ import { profileService } from "../../services/profileService";
 import { authService } from "../../services/authService";
 import { messageService } from "../../services/messageService";
 import { realtimeService } from "../../services/realtimeService";
+import { storageService } from "../../services/storageService";
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
 import { formatSidebarDate } from "../../utils/dateUtils";
@@ -56,6 +57,7 @@ export function Sidebar({ className }) {
   const searchQuery = useAppSelector((state) => state.chat.searchQuery);
   const theme = useAppSelector((state) => state.ui.theme);
   const archivedViewOpen = useAppSelector((state) => state.ui.archivedViewOpen);
+  const onlineMap = useAppSelector((state) => state.chat.onlineMap);
 
   const chatsRef = useRef(chats);
   useEffect(() => {
@@ -867,7 +869,7 @@ export function Sidebar({ className }) {
                         src={profile.avatar}
                         fallback={profile.name[0]}
                         size="md"
-                        isOnline={profile.online}
+                        isOnline={!!onlineMap[profile.id]}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-medium text-wa-text truncate">
