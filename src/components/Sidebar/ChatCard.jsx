@@ -86,6 +86,8 @@ export const ChatCard = React.memo(({ chat }) => {
     if (baseText === "🎥 Video" || type === "video") return "🎥 Video";
     if (baseText === "📎 Document" || type === "file") return "📎 Document";
     if (baseText === "🎤 Voice Message" || type === "voice") return "🎤 Voice Message";
+    if (type === "live_location" || baseText?.includes("live location")) return "📍 Live Location";
+    if (type === "location" || baseText?.includes("Current Location")) return "📍 Location";
     
     if (!baseText) return "No messages yet";
 
