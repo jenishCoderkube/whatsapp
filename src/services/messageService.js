@@ -41,7 +41,7 @@ export const messageService = {
       // Map rows directly to frontend expectations, reversing so earliest is first natively
       return data.reverse().map((msg) => {
         const isMine = currentUserId ? msg.sender_id === currentUserId : false;
-        const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(msg.text || "");
+        const { text: cleanText, reactions, replyTo, isForwarded, noPreview } = parseMessageText(msg.text || "");
 
         return {
           id: msg.id,
@@ -52,6 +52,7 @@ export const messageService = {
           reactions,
           replyTo: msg.reply_to || replyTo,
           isForwarded: msg.is_forwarded || isForwarded,
+          noPreview: msg.no_preview || noPreview,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -97,6 +98,7 @@ export const messageService = {
     timestampString,
     replyTo = null,
     isForwarded = false,
+    noPreview = false,
   }) {
     try {
       const isUuid =
@@ -112,7 +114,7 @@ export const messageService = {
       // Offline detection logic
       const isOnline = typeof window !== 'undefined' ? navigator.onLine : true;
 
-      const encodedText = encodeMessageText(text, replyTo, isForwarded);
+      const encodedText = encodeMessageText(text, replyTo, isForwarded, {}, noPreview);
 
       const insertPayload = {
         conversation_id: conversationId,
@@ -211,7 +213,7 @@ export const messageService = {
         );
       }
 
-      const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward } = parseMessageText(newMsg.text || "");
+      const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward, noPreview: parsedNoPreview } = parseMessageText(newMsg.text || "");
 
       return {
         id: newMsg.id,
@@ -222,6 +224,7 @@ export const messageService = {
         reactions: {},
         replyTo: newMsg.reply_to || parsedReplyTo || replyTo,
         isForwarded: newMsg.is_forwarded || parsedIsForward || isForwarded,
+        noPreview: newMsg.no_preview || parsedNoPreview || noPreview,
         timestamp: newMsg.timestamp_string,
         status: newMsg.status,
         type: newMsg.type,
@@ -598,7 +601,7 @@ export const messageService = {
 
       const mapMessage = (msg) => {
         const isMine = currentUserId ? msg.sender_id === currentUserId : false;
-        const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(msg.text || "");
+        const { text: cleanText, reactions, replyTo, isForwarded, noPreview } = parseMessageText(msg.text || "");
         return {
           id: msg.id,
           conversationId: msg.conversation_id,
@@ -608,6 +611,7 @@ export const messageService = {
           reactions,
           replyTo: msg.reply_to || replyTo,
           isForwarded: msg.is_forwarded || isForwarded,
+          noPreview: msg.no_preview || noPreview,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -665,7 +669,7 @@ export const messageService = {
 
       return data.map((msg) => {
         const isMine = currentUserId ? msg.sender_id === currentUserId : false;
-        const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(msg.text || "");
+        const { text: cleanText, reactions, replyTo, isForwarded, noPreview } = parseMessageText(msg.text || "");
 
         return {
           id: msg.id,
@@ -676,6 +680,7 @@ export const messageService = {
           reactions,
           replyTo: msg.reply_to || replyTo,
           isForwarded: msg.is_forwarded || isForwarded,
+          noPreview: msg.no_preview || noPreview,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -701,4 +706,49 @@ export const messageService = {
       return [];
     }
   },
+
+  /**
+   * Remove quoted reply context from a message.
+   */
+  async removeMessageReplyContext(messageId) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      if (!messageId || !isUuid) return;
+
+      // 1. Fetch current raw text
+      const { data: msg } = await supabase
+        .from("messages")
+        .select("text")
+        .eq("id", messageId)
+        .single();
+      
+      if (!msg) return;
+
+      // 2. Parse and strip out the ReplyTo: part
+      let cleanText = msg.text || "";
+      if (cleanText.includes("|||ReplyTo:")) {
+        const parts = cleanText.split("|||ReplyTo:");
+        // Keep reactions or other parts if present
+        let afterPart = "";
+        if (parts[1] && parts[1].includes("|||R:")) {
+          const rParts = parts[1].split("|||R:");
+          afterPart = "|||R:" + rParts[1];
+        }
+        cleanText = parts[0] + afterPart;
+      }
+
+      // 3. Update in database
+      const { error } = await supabase
+        .from("messages")
+        .update({
+          text: cleanText,
+          reply_to: null
+        })
+        .eq("id", messageId);
+      
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Failed to remove reply context:", e);
+    }
+  }
 };

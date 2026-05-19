@@ -40,6 +40,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [avatarFile, setAvatarFile] = useState(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -60,7 +61,16 @@ export default function RegisterPage() {
 
   const strengthScore = calculateStrength();
 
-  const handleAvatarFileSelect = async (e) => {
+  // Cleanup object URLs on unmount or preview changes
+  useEffect(() => {
+    return () => {
+      if (avatarPreview && avatarPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreview);
+      }
+    };
+  }, [avatarPreview]);
+
+  const handleAvatarFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -69,21 +79,19 @@ export default function RegisterPage() {
       return;
     }
 
-    setIsUploadingAvatar(true);
     setValidationError("");
+    setAvatarFile(file);
 
-    try {
-      const uploadedAbsoluteUrl = await storageService.uploadFile(file, "avatars");
-      if (uploadedAbsoluteUrl) {
-        setAvatarPreview(uploadedAbsoluteUrl);
-      }
-    } catch (err) {
-      console.error("Storage document transfer failed:", err);
-      setValidationError("Failed to upload profile photo. Please try again.");
-    } finally {
-      setIsUploadingAvatar(false);
-      e.target.value = "";
+    // Revoke old blob URL to avoid memory leak
+    if (avatarPreview && avatarPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(avatarPreview);
     }
+
+    // Create a local blob URL for instant preview without uploading immediately
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreview(previewUrl);
+
+    e.target.value = "";
   };
 
   const triggerAvatarInput = () => {
@@ -118,21 +126,29 @@ export default function RegisterPage() {
     }
 
     dispatch(loginStart());
+    if (avatarFile) {
+      setIsUploadingAvatar(true);
+    }
 
-    // Execute absolute backend signup workflow storing profile fields dynamically
-    const result = await authService.register({
-      email,
-      password,
-      name,
-      avatar: avatarPreview || "https://images.unsplash.com/photo-1534528741775-53994a69daeb",
-    });
+    try {
+      // Execute absolute backend signup workflow storing profile fields dynamically after authenticating
+      const result = await authService.register({
+        email,
+        password,
+        name,
+        avatar: avatarPreview && !avatarPreview.startsWith("blob:") ? avatarPreview : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+        avatarFile,
+      });
 
-    if (result.error) {
-      dispatch(loginFailure(result.error));
-      setValidationError(result.error);
-    } else if (result.user) {
-      dispatch(registerSuccess({ user: result.user }));
-      router.push("/chat");
+      if (result.error) {
+        dispatch(loginFailure(result.error));
+        setValidationError(result.error);
+      } else if (result.user) {
+        dispatch(registerSuccess({ user: result.user }));
+        router.push("/chat");
+      }
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 

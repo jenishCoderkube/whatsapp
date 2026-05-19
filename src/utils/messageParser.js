@@ -7,6 +7,7 @@ export function parseMessageText(rawText) {
   let reactions = {};
   let replyTo = null;
   let isForwarded = false;
+  let noPreview = false;
 
   // 1. Check for Forwarded prefix
   if (text.startsWith("|||FWD|||")) {
@@ -14,7 +15,13 @@ export function parseMessageText(rawText) {
     text = text.slice(9);
   }
 
-  // 2. Check for reactions suffix (must handle both order combinations safely)
+  // 2. Check for NoPreview flag
+  if (text.includes("|||NP|||")) {
+    noPreview = true;
+    text = text.replace("|||NP|||", "");
+  }
+
+  // 3. Check for reactions suffix (must handle both order combinations safely)
   if (text.includes("|||R:")) {
     const parts = text.split("|||R:");
     text = parts[0];
@@ -23,7 +30,7 @@ export function parseMessageText(rawText) {
     } catch (e) {}
   }
 
-  // 3. Check for reply_to suffix
+  // 4. Check for reply_to suffix
   if (text.includes("|||ReplyTo:")) {
     const parts = text.split("|||ReplyTo:");
     text = parts[0];
@@ -32,14 +39,18 @@ export function parseMessageText(rawText) {
     } catch (e) {}
   }
 
-  return { text, reactions, replyTo, isForwarded };
+  return { text, reactions, replyTo, isForwarded, noPreview };
 }
 
 /**
  * Encodes clean message strings with reply and reaction payloads for backwards compatibility.
  */
-export function encodeMessageText(cleanText, replyTo = null, isForwarded = false, reactions = {}) {
+export function encodeMessageText(cleanText, replyTo = null, isForwarded = false, reactions = {}, noPreview = false) {
   let encoded = cleanText || "";
+  
+  if (noPreview) {
+    encoded = encoded + "|||NP|||";
+  }
   
   if (isForwarded) {
     encoded = "|||FWD|||" + encoded;

@@ -35,10 +35,276 @@ import { Avatar } from "../ui/Avatar";
 import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
 import { setReplyingMessage } from "../../redux/slices/uiSlice";
+import { updateMessage } from "../../redux/slices/messageSlice";
 import { cn } from "../../utils/cn";
 import { formatMessageTime } from "../../utils/dateUtils";
 
-export const MessageBubble = React.memo(function MessageBubble({ message, isGroup }) {
+// Simple client-side cache for link previews
+const linkPreviewCache = {};
+
+function LinkPreviewCard({ url }) {
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!url) return;
+
+    if (linkPreviewCache[url]) {
+      setPreview(linkPreviewCache[url]);
+      return;
+    }
+
+    setLoading(true);
+    setError(false);
+
+    const fetchPreview = async () => {
+      try {
+        const cleanUrl = url.trim();
+        const res = await fetch(`/api/link-preview?url=${encodeURIComponent(cleanUrl)}`);
+        if (!res.ok) throw new Error("Failed to load preview");
+        
+        const data = await res.json();
+        if (data && !data.error) {
+          linkPreviewCache[url] = data;
+          setPreview(data);
+        } else {
+          setError(true);
+        }
+      } catch (err) {
+        console.warn("Fetch link preview failed:", err);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPreview();
+  }, [url]);
+
+  if (loading || error || !preview) return null;
+
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex gap-2 p-1.5 bg-black/5 dark:bg-white/5 border border-wa-border/50 rounded-lg mt-2 mb-1 hover:bg-black/10 dark:hover:bg-white/10 transition-colors select-none max-w-[170px] min-[375px]:max-w-[200px] sm:max-w-[240px] md:max-w-[280px] cursor-pointer decoration-none"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {preview.image && (
+        <img
+          src={preview.image}
+          alt={preview.title}
+          className="w-10 sm:w-14 h-10 sm:h-14 object-cover rounded-md bg-black/10 shrink-0 self-center"
+        />
+      )}
+      <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
+        <span className="text-[9px] sm:text-[10px] text-wa-muted font-sans font-medium uppercase tracking-wider block truncate">
+          {preview.siteName || preview.domain}
+        </span>
+        <h4 className="text-[11px] sm:text-xs font-semibold text-wa-primary truncate mt-0.5">
+          {preview.title}
+        </h4>
+        {preview.description && (
+          <p className="text-[10px] sm:text-[11px] text-wa-muted line-clamp-2 mt-0.5 leading-snug">
+            {preview.description}
+          </p>
+        )}
+      </div>
+    </a>
+  );
+}
+
+const parseFormattedText = (text, groupMembers = [], onMentionClick) => {
+  if (!text) return "";
+
+  const sortedMembers = [...groupMembers].sort((a, b) => b.name.length - a.name.length);
+  const urlPattern = /https?:\/\/[^\s\n]+|www\.[^\s\n]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,5}(?:\/[^\s\n]*)?/gi;
+  const escapeRegex = (string) => string.replace(/[/\-\\^$*+?.()|[\]{}]/g, "\\$&");
+
+  const matches = [];
+
+  let match;
+  while ((match = urlPattern.exec(text)) !== null) {
+    matches.push({
+      type: "url",
+      text: match[0],
+      index: match.index,
+      length: match[0].length
+    });
+  }
+
+  sortedMembers.forEach(member => {
+    const nameEscaped = escapeRegex(member.name);
+    const mentionPattern = new RegExp(`@${nameEscaped}\\b`, "gi");
+    let mMatch;
+    while ((mMatch = mentionPattern.exec(text)) !== null) {
+      const isOverlapping = matches.some(existing => 
+        (mMatch.index >= existing.index && mMatch.index < existing.index + existing.length) ||
+        (mMatch.index + mMatch[0].length > existing.index && mMatch.index + mMatch[0].length <= existing.index + existing.length)
+      );
+      
+      if (!isOverlapping) {
+        matches.push({
+          type: "mention",
+          text: mMatch[0],
+          member,
+          index: mMatch.index,
+          length: mMatch[0].length
+        });
+      }
+    }
+  });
+
+  matches.sort((a, b) => a.index - b.index);
+
+  const tokens = [];
+  let cursor = 0;
+
+  matches.forEach((m) => {
+    if (m.index > cursor) {
+      tokens.push({ type: "text", text: text.slice(cursor, m.index) });
+    }
+    tokens.push(m);
+    cursor = m.index + m.length;
+  });
+
+  if (cursor < text.length) {
+    tokens.push({ type: "text", text: text.slice(cursor) });
+  }
+
+  const formatMarkdown = (txt) => {
+    const parts = txt.split(/(\*[^\*\s][^\*]*[^\*\s]\*|\*[^\*\s]\*|_[^\_\s][^\_]*[^\_\s]_|_[^\_\s]_|~[^~\s][^~]*[^~\s]~|~[^~\s]~)/g);
+    
+    return parts.map((part, i) => {
+      if (i % 2 === 0) return part;
+      
+      const char = part[0];
+      const innerText = part.slice(1, -1);
+      
+      if (char === "*") {
+        return <strong key={i} className="font-bold">{innerText}</strong>;
+      }
+      if (char === "_") {
+        return <em key={i} className="italic">{innerText}</em>;
+      }
+      if (char === "~") {
+        return <span key={i} className="line-through opacity-80">{innerText}</span>;
+      }
+      return part;
+    });
+  };
+
+  return tokens.map((token, idx) => {
+    if (token.type === "text") {
+      return <React.Fragment key={idx}>{formatMarkdown(token.text)}</React.Fragment>;
+    }
+    if (token.type === "url") {
+      let href = token.text;
+      if (!/^https?:\/\//i.test(href)) {
+        href = "https://" + href;
+      }
+      return (
+        <a
+          key={idx}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500 dark:text-blue-400 hover:underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {token.text}
+        </a>
+      );
+    }
+    if (token.type === "mention") {
+      return (
+        <span
+          key={idx}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onMentionClick) onMentionClick(token.member);
+          }}
+          className="text-wa-primary font-semibold hover:underline cursor-pointer bg-wa-primary/10 px-1 py-0.5 rounded animate-pulse-subtle"
+        >
+          {token.text}
+        </span>
+      );
+    }
+    return null;
+  });
+};
+
+const CHARACTER_LIMIT = 500;
+const LINE_LIMIT = 8;
+
+function ExpandableText({ text, groupMembers, onMentionClick, isCaption = false, noPreview = false }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!text) return null;
+
+  const lines = text.split("\n");
+  const isTooLong = text.length > CHARACTER_LIMIT || lines.length > LINE_LIMIT;
+
+  const handleToggle = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExpanded(!isExpanded);
+  };
+
+  const formattedText = parseFormattedText(text, groupMembers, onMentionClick);
+
+  if (!isTooLong) {
+    return (
+      <div className="flex flex-col">
+        <p className={cn("text-wa-text leading-snug whitespace-pre-wrap break-words", isCaption ? "text-xs sm:text-sm mt-1.5" : "text-sm sm:text-base")}>
+          {formattedText}
+        </p>
+        {!isCaption && !noPreview && <LinkPreviewFinder text={text} />}
+      </div>
+    );
+  }
+
+  let displayText;
+  if (!isExpanded) {
+    if (text.length > CHARACTER_LIMIT) {
+      displayText = text.slice(0, CHARACTER_LIMIT) + "...";
+    } else {
+      displayText = lines.slice(0, LINE_LIMIT).join("\n") + "\n...";
+    }
+  } else {
+    displayText = text;
+  }
+
+  const renderedText = parseFormattedText(displayText, groupMembers, onMentionClick);
+
+  return (
+    <div className="flex flex-col">
+      <p className={cn("text-wa-text leading-snug whitespace-pre-wrap break-words", isCaption ? "text-xs sm:text-sm mt-1.5" : "text-sm sm:text-base")}>
+        {renderedText}
+      </p>
+      <button
+        onClick={handleToggle}
+        className="text-xs font-semibold text-wa-primary hover:underline self-start mt-1 focus:outline-none"
+      >
+        {isExpanded ? "Read less" : "Read more"}
+      </button>
+      {!isCaption && !noPreview && !isExpanded && <LinkPreviewFinder text={displayText} />}
+      {!isCaption && !noPreview && isExpanded && <LinkPreviewFinder text={text} />}
+    </div>
+  );
+}
+
+function LinkPreviewFinder({ text }) {
+  const firstUrlMatch = text.match(/(https?:\/\/[^\s\n]+|www\.[^\s\n]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,5}(?:\/[^\s\n]*)?)/i);
+  const firstUrl = firstUrlMatch ? firstUrlMatch[0] : null;
+
+  if (!firstUrl) return null;
+  return <LinkPreviewCard url={firstUrl} />;
+}
+
+export const MessageBubble = React.memo(function MessageBubble({ message, isGroup, groupMembers = [] }) {
   const {
     id,
     text,
@@ -52,6 +318,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     reactions = {},
     rawText = "",
     createdAt,
+    noPreview = false,
   } = message;
 
   const displayTime = createdAt ? formatMessageTime(createdAt) : timestamp;
@@ -73,6 +340,32 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
   const [showFullReactionPicker, setShowFullReactionPicker] = useState(false);
   const [pickerDirection, setPickerDirection] = useState("up");
+
+  const handleMentionClick = (member) => {
+    const customEvent = new CustomEvent("wa_open_direct_chat", {
+      detail: { user: member },
+    });
+    window.dispatchEvent(customEvent);
+  };
+
+  const handleClearReplyContext = async (e) => {
+    e.stopPropagation();
+    try {
+      const updatedMessage = {
+        ...message,
+        replyTo: null
+      };
+      dispatch(
+        updateMessage({
+          chatId: message.conversationId,
+          message: updatedMessage
+        })
+      );
+      await messageService.removeMessageReplyContext(id);
+    } catch (err) {
+      console.warn("Failed to clear quote context:", err);
+    }
+  };
 
   const normalizedSenderId = message.sender_id || message.senderId;
   const isMsgOutgoing =
@@ -318,7 +611,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     switch (type) {
       case "image":
         return (
-          <div className="relative rounded-md overflow-hidden mb-1 max-w-sm sm:max-w-md select-none">
+          <div className="relative rounded-md overflow-hidden mb-1 max-w-[150px] min-[375px]:max-w-[180px] sm:max-w-[240px] md:max-w-xs select-none">
             <div
               onClick={() => setImageModalOpen(true)}
               className="relative group cursor-pointer block overflow-hidden rounded bg-black/10"
@@ -326,13 +619,20 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
               <img
                 src={mediaUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"}
                 alt="Attachment"
-                className="w-full h-auto object-cover max-h-64 sm:max-h-80 transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-auto object-cover max-h-32 min-[375px]:max-h-36 sm:max-h-48 md:max-h-56 transition-transform duration-300 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <Maximize2 className="h-6 w-6 text-white drop-shadow-md" />
               </div>
             </div>
-            {text && <p className="mt-1.5 text-xs sm:text-sm text-wa-text select-text whitespace-pre-wrap">{text}</p>}
+            {text && (
+              <ExpandableText
+                text={text}
+                groupMembers={groupMembers}
+                onMentionClick={handleMentionClick}
+                isCaption={true}
+              />
+            )}
             <Modal isOpen={imageModalOpen} onClose={() => setImageModalOpen(false)} title={fileName || "Photo Preview"} className="max-w-4xl">
               <div className="flex flex-col items-center justify-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
                 <img src={mediaUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"} alt="Fullscreen" className="max-h-[70vh] max-w-full object-contain rounded" />
@@ -348,9 +648,16 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         );
       case "video":
         return (
-          <div className="relative rounded-md overflow-hidden mb-1 max-w-sm sm:max-w-md">
-            <video src={mediaUrl} controls controlsList="nodownload" className="w-full max-h-64 sm:max-h-80 object-cover rounded bg-black" />
-            {text && <p className="mt-1.5 text-xs sm:text-sm text-wa-text select-text whitespace-pre-wrap">{text}</p>}
+          <div className="relative rounded-md overflow-hidden mb-1 max-w-[150px] min-[375px]:max-w-[180px] sm:max-w-[240px] md:max-w-xs">
+            <video src={mediaUrl} controls controlsList="nodownload" className="w-full max-h-32 min-[375px]:max-h-36 sm:max-h-48 md:max-h-56 object-cover rounded bg-black" />
+            {text && (
+              <ExpandableText
+                text={text}
+                groupMembers={groupMembers}
+                onMentionClick={handleMentionClick}
+                isCaption={true}
+              />
+            )}
           </div>
         );
       case "voice":
@@ -413,7 +720,14 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
           </div>
         );
       default:
-        return <p className="text-sm sm:text-base text-wa-text leading-snug whitespace-pre-wrap break-words">{text}</p>;
+        return (
+          <ExpandableText
+            text={text}
+            groupMembers={groupMembers}
+            onMentionClick={handleMentionClick}
+            noPreview={noPreview}
+          />
+        );
     }
   };
 
@@ -478,12 +792,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
           {message.replyTo && (
             <div 
               onClick={handleScrollToQuotedMessage}
-              className="mb-1.5 p-1.5 rounded bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary cursor-pointer select-none text-[11px] sm:text-xs flex flex-col gap-0.5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+              className="mb-1.5 p-1.5 rounded bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary cursor-pointer select-none text-[11px] sm:text-xs flex flex-col gap-0.5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors relative group/quote"
             >
               <span className="font-semibold text-wa-primary">
                 {message.replyTo.senderName}
               </span>
-              <span className="text-wa-muted truncate max-w-[240px] sm:max-w-md">
+              <span className="text-wa-muted truncate max-w-[200px] sm:max-w-md pr-5">
                 {message.replyTo.text || (
                   message.replyTo.type === "image" ? "📷 Photo" :
                   message.replyTo.type === "video" ? "🎥 Video" :
@@ -491,6 +805,17 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                   message.replyTo.type === "file" ? "📎 Document" : "Attachment"
                 )}
               </span>
+              {isMsgOutgoing && (
+                <button
+                  onClick={handleClearReplyContext}
+                  className="absolute top-1 right-1 h-4.5 w-4.5 rounded-full bg-wa-modal border border-wa-border text-wa-muted hover:text-red-500 hover:bg-wa-hover opacity-0 group-hover/quote:opacity-100 transition-opacity flex items-center justify-center shadow-sm cursor-pointer z-20"
+                  title="Remove quote preview"
+                >
+                  <svg viewBox="0 0 24 24" width="10" height="10" className="fill-current">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                </button>
+              )}
             </div>
           )}
 
@@ -607,6 +932,8 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   return prevProps.message.id === nextProps.message.id && 
          prevProps.message.status === nextProps.message.status &&
          prevProps.message.text === nextProps.message.text &&
+         prevProps.message.noPreview === nextProps.message.noPreview &&
          JSON.stringify(prevProps.message.reactions) === JSON.stringify(nextProps.message.reactions) &&
-         prevProps.isGroup === nextProps.isGroup;
+         prevProps.isGroup === nextProps.isGroup &&
+         prevProps.groupMembers?.length === nextProps.groupMembers?.length;
 });

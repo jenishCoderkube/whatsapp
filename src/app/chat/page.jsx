@@ -13,6 +13,7 @@ import { setMessages, prependMessages, appendMessages, addMessage, updateMessage
 import { updateLastMessage, incrementUnread, setChats } from "../../redux/slices/chatSlice";
 import { setActiveSearchPanelOpen, setMobileScreen } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
+import { chatService } from "../../services/chatService";
 import { realtimeService } from "../../services/realtimeService";
 import { profileService } from "../../services/profileService";
 import { cn } from "../../utils/cn";
@@ -38,6 +39,7 @@ export default function ChatPage() {
   const [localUnreadCount, setLocalUnreadCount] = useState(0);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [forwardingMsg, setForwardingMsg] = useState(null);
+  const [groupMembers, setGroupMembers] = useState([]);
   
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -54,6 +56,11 @@ export default function ChatPage() {
   useEffect(() => {
     chatsRef.current = chats;
   }, [chats]);
+
+  const groupMembersRef = useRef([]);
+  useEffect(() => {
+    groupMembersRef.current = groupMembers;
+  }, [groupMembers]);
 
   const mobileScreenRef = useRef(mobileScreen);
   useEffect(() => {
@@ -152,6 +159,40 @@ export default function ChatPage() {
     isAtBottomRef.current = false; 
     setShowScrollBottom(false);
   }, [activeChatId]);
+
+  useEffect(() => {
+    if (activeChatId && activeChat?.isGroup) {
+      chatService.getGroupMembers(activeChatId).then((members) => {
+        setGroupMembers(members || []);
+      }).catch(err => {
+        console.warn("Failed to fetch group members for page:", err);
+      });
+    } else {
+      setGroupMembers([]);
+    }
+  }, [activeChatId, activeChat?.isGroup]);
+
+  useEffect(() => {
+    const handleOpenDirectChat = async (e) => {
+      const targetUser = e.detail?.user;
+      if (!targetUser || !user?.id) return;
+
+      try {
+        const chatObj = await chatService.createOrOpenOneToOneChat(user.id, targetUser);
+        const exists = chatsRef.current.some((c) => c.id === chatObj.id);
+        if (!exists) {
+          dispatch(setChats([chatObj, ...chatsRef.current]));
+        }
+        dispatch(setActiveChat(chatObj.id));
+        dispatch(setMobileScreen("chat"));
+      } catch (err) {
+        console.error("Failed to open direct chat from mention click:", err);
+      }
+    };
+
+    window.addEventListener("wa_open_direct_chat", handleOpenDirectChat);
+    return () => window.removeEventListener("wa_open_direct_chat", handleOpenDirectChat);
+  }, [user?.id, dispatch]);
 
   // Redirect to login if user logs out
   useEffect(() => {
@@ -267,7 +308,25 @@ export default function ChatPage() {
           };
 
           if (!isMine && incomingMsg.senderId) {
-            profileService.getProfileById(incomingMsg.senderId).then(processAndAdd);
+            let localProfile = null;
+            const activeChat = chatsRef.current.find((c) => c.id === targetChatId);
+            
+            if (activeChat) {
+              if (activeChat.isGroup) {
+                localProfile = groupMembersRef.current.find(m => m.id === incomingMsg.senderId);
+              } else {
+                localProfile = {
+                  name: activeChat.name,
+                  avatar: activeChat.avatar
+                };
+              }
+            }
+            
+            if (localProfile) {
+              processAndAdd(localProfile);
+            } else {
+              profileService.getProfileById(incomingMsg.senderId).then(processAndAdd);
+            }
           } else {
             processAndAdd();
           }
@@ -596,7 +655,7 @@ export default function ChatPage() {
                         </span>
                       </div>
                     ) : (
-                      <MessageBubble key={item.id} message={item} isGroup={activeChat.isGroup} />
+                      <MessageBubble key={item.id} message={item} isGroup={activeChat.isGroup} groupMembers={groupMembers} />
                     )
                   ))}
 

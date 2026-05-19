@@ -1,11 +1,12 @@
 import { supabase } from "../lib/supabaseClient";
+import { storageService } from "./storageService";
 
 export const authService = {
   /**
    * Register a new user natively via Supabase Authentication and dynamically
    * instantiate their synchronized row inside the `profiles` table.
    */
-  async register({ email, password, name, avatar }) {
+  async register({ email, password, name, avatar, avatarFile }) {
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -33,13 +34,26 @@ export const authService = {
         password,
       });
 
+      // Securely upload avatar file only after authenticating successfully
+      let finalAvatarUrl = avatar;
+      if (avatarFile) {
+        try {
+          const uploadedUrl = await storageService.uploadFile(avatarFile, "avatars");
+          if (uploadedUrl) {
+            finalAvatarUrl = uploadedUrl;
+          }
+        } catch (uploadError) {
+          console.warn("Avatar upload failed during registration:", uploadError);
+        }
+      }
+
       // Natively construct dynamic true profile schema
       const profilePayload = {
         id: user.id,
         name: name || email.split("@")[0],
         email: user.email,
         avatar:
-          avatar ||
+          finalAvatarUrl ||
           "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
         status: "Available",
         online: true,

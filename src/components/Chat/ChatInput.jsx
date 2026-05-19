@@ -33,8 +33,9 @@ import { updateLastMessage } from "../../redux/slices/chatSlice";
 import { messageService } from "../../services/messageService";
 import { storageService } from "../../services/storageService";
 import { realtimeService } from "../../services/realtimeService";
-import { setReplyingMessage } from "../../redux/slices/uiSlice";
 import { cn } from "../../utils/cn";
+import { chatService } from "../../services/chatService";
+import { Avatar } from "../ui/Avatar";
 
 const popularEmojis = [
   "😀",
@@ -174,12 +175,40 @@ const popularEmojis = [
   "🌟",
 ];
 
+const checkMention = (text, selectionEnd) => {
+  const textBeforeCursor = text.slice(0, selectionEnd);
+  const lastAtIdx = textBeforeCursor.lastIndexOf("@");
+  
+  if (lastAtIdx === -1) {
+    return { isMentioning: false };
+  }
+  
+  const textAfterAt = textBeforeCursor.slice(lastAtIdx + 1);
+  const charBeforeAt = lastAtIdx > 0 ? textBeforeCursor[lastAtIdx - 1] : "";
+  if (charBeforeAt && charBeforeAt !== " " && charBeforeAt !== "\n") {
+    return { isMentioning: false };
+  }
+  
+  if (textAfterAt.includes("\n")) {
+    return { isMentioning: false };
+  }
+  
+  return {
+    isMentioning: true,
+    query: textAfterAt,
+    atIndex: lastAtIdx
+  };
+};
+
 export function ChatInput() {
   const dispatch = useAppDispatch();
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
   const user = useAppSelector((state) => state.auth.user);
   const theme = useAppSelector((state) => state.ui.theme);
   const replyingMessage = useAppSelector((state) => state.ui.replyingMessage);
+  const activeChat = useAppSelector((state) =>
+    state.chat.chats.find((c) => c.id === activeChatId),
+  );
 
   const [messageText, setMessageText] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
@@ -187,6 +216,52 @@ export function ChatInput() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [toastError, setToastError] = useState("");
+
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(0);
+  const [mentionIndex, setMentionIndex] = useState(-1);
+  const [inputLinkPreview, setInputLinkPreview] = useState(null);
+  const [dismissedUrl, setDismissedUrl] = useState("");
+
+  useEffect(() => {
+    const urlMatch = messageText.match(/(https?:\/\/[^\s\n]+|www\.[^\s\n]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,5}(?:\/[^\s\n]*)?)/i);
+    const url = urlMatch ? urlMatch[0] : null;
+
+    if (!url) {
+      setInputLinkPreview(null);
+      return;
+    }
+
+    if (url === dismissedUrl) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const cleanUrl = url.trim();
+        const res = await fetch(`/api/link-preview?url=${encodeURIComponent(cleanUrl)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && !data.error) {
+            setInputLinkPreview(data);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load input link preview:", err);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [messageText, dismissedUrl]);
+
+  useEffect(() => {
+    if (!messageText.trim()) {
+      setDismissedUrl("");
+      setInputLinkPreview(null);
+    }
+  }, [messageText]);
 
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -464,6 +539,23 @@ export function ChatInput() {
     }
   }, [replyingMessage]);
 
+  // Load group members for mentions suggestion list
+  useEffect(() => {
+    if (activeChatId && activeChat?.isGroup) {
+      chatService.getGroupMembers(activeChatId)
+        .then((members) => {
+          setGroupMembers(members || []);
+        })
+        .catch((err) => {
+          console.warn("Failed to load group members for mentions:", err);
+        });
+    } else {
+      setGroupMembers([]);
+    }
+    setShowMentionSuggestions(false);
+  }, [activeChatId, activeChat?.isGroup]);
+
+
   const formatBytes = (bytes) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -597,6 +689,8 @@ export function ChatInput() {
     });
 
     setMessageText("");
+    setInputLinkPreview(null);
+    setDismissedUrl("");
     setSelectedFiles([]);
     setShowAttachments(false);
     setShowEmojiPicker(false);
@@ -719,6 +813,10 @@ export function ChatInput() {
     }
 
     if (textToSend) {
+      const urlMatch = textToSend.match(/(https?:\/\/[^\s\n]+|www\.[^\s\n]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,5}(?:\/[^\s\n]*)?)/i);
+      const hasUrl = !!urlMatch;
+      const noPreview = hasUrl && !inputLinkPreview;
+
       const tempId = "msg-temp-text-" + Date.now();
       const optimisticMsg = {
         id: tempId,
@@ -730,6 +828,7 @@ export function ChatInput() {
         senderId: user.id,
         createdAt: new Date().toISOString(),
         replyTo: activeReplyPayload,
+        noPreview: noPreview,
       };
 
       dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
@@ -751,6 +850,7 @@ export function ChatInput() {
           type: "text",
           timestampString: timeString,
           replyTo: activeReplyPayload,
+          noPreview: noPreview,
         });
 
         dispatch(
@@ -795,7 +895,54 @@ export function ChatInput() {
     }
   };
 
+  const insertMention = (member) => {
+    if (!textareaRef.current) return;
+    
+    const text = messageText;
+    const cursorPosition = textareaRef.current.selectionEnd || 0;
+    
+    const textBefore = text.slice(0, mentionIndex);
+    const textAfter = text.slice(cursorPosition);
+    
+    const mentionText = `@${member.name} `;
+    const newText = textBefore + mentionText + textAfter;
+    
+    setMessageText(newText);
+    setShowMentionSuggestions(false);
+    
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const newCursorPos = mentionIndex + mentionText.length;
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 50);
+  };
+
   const handleKeyDown = (e) => {
+    if (showMentionSuggestions && mentionSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveSuggestionIdx((prev) => (prev + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveSuggestionIdx((prev) => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionSuggestions[activeSuggestionIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowMentionSuggestions(false);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendSubmit();
@@ -809,9 +956,6 @@ export function ChatInput() {
     }
   };
 
-  const activeChat = useAppSelector((state) =>
-    state.chat.chats.find((c) => c.id === activeChatId),
-  );
   const isLeft = activeChat?.isLeft;
 
   if (isLeft) {
@@ -906,27 +1050,100 @@ export function ChatInput() {
         </div>
       )}
 
-      {replyingMessage && (
-        <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary p-2 mb-2 rounded text-xs select-none animate-fade-in relative">
-          <div className="flex flex-col min-w-0">
-            <span className="font-semibold text-wa-primary truncate">
-              Replying to {replyingMessage.senderName}
-            </span>
-            <span className="text-wa-muted truncate max-w-[280px] sm:max-w-md">
-              {replyingMessage.text || (
-                replyingMessage.type === "image" ? "📷 Photo" :
-                replyingMessage.type === "video" ? "🎥 Video" :
-                replyingMessage.type === "voice" ? "🎤 Voice Note" :
-                replyingMessage.type === "file" ? "📎 Document" : "Attachment"
+      {inputLinkPreview && (
+        <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary p-2 mb-2 rounded text-xs select-none animate-fade-in relative gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {inputLinkPreview.image && (
+              <img
+                src={inputLinkPreview.image}
+                alt="Preview"
+                className="h-10 w-10 object-cover rounded shrink-0 bg-black/10"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <span className="text-[10px] text-wa-muted font-sans font-medium uppercase tracking-wider block truncate">
+                {inputLinkPreview.siteName || inputLinkPreview.domain || "Link Preview"}
+              </span>
+              <p className="font-semibold text-wa-primary truncate">
+                {inputLinkPreview.title}
+              </p>
+              {inputLinkPreview.description && (
+                <p className="text-wa-muted truncate text-[11px]">
+                  {inputLinkPreview.description}
+                </p>
               )}
-            </span>
+            </div>
           </div>
           <button 
-            onClick={() => dispatch(setReplyingMessage(null))}
-            className="p-1 text-wa-muted hover:text-wa-text rounded-full hover:bg-wa-hover transition-colors"
+            onClick={() => {
+              setDismissedUrl(inputLinkPreview.url);
+              setInputLinkPreview(null);
+            }}
+            className="p-1 text-wa-muted hover:text-wa-text rounded-full hover:bg-wa-hover transition-colors shrink-0"
+            title="Remove link preview"
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {replyingMessage && (
+        <div className="flex items-center justify-between bg-wa-sidebar/80 dark:bg-[#1f2c34]/95 backdrop-blur-md border-l-[4px] border-wa-primary px-3 sm:px-4 py-2 sm:py-2.5 mb-2.5 rounded-lg text-xs select-none animate-scale-up relative gap-3 shadow-sm border border-wa-border/30">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="flex items-center justify-center h-8 w-8 rounded bg-wa-primary/10 text-wa-primary shrink-0">
+              {replyingMessage.type === "image" ? (
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/>
+                </svg>
+              ) : replyingMessage.type === "video" ? (
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                </svg>
+              ) : replyingMessage.type === "voice" ? (
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                </svg>
+              ) : replyingMessage.type === "file" ? (
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                </svg>
+              ) : (
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+                </svg>
+              )}
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-semibold text-wa-primary truncate text-[11px] sm:text-xs">
+                Replying to {replyingMessage.senderName}
+              </span>
+              <span className="text-wa-muted truncate text-[11px] sm:text-xs leading-normal">
+                {replyingMessage.text || (
+                  replyingMessage.type === "image" ? "Photo" :
+                  replyingMessage.type === "video" ? "Video" :
+                  replyingMessage.type === "voice" ? "Voice Note" :
+                  replyingMessage.type === "file" ? "Document" : "Attachment"
+                )}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2.5 shrink-0">
+            {replyingMessage.mediaUrl && (replyingMessage.type === "image" || replyingMessage.type === "video") && (
+              <img 
+                src={replyingMessage.mediaUrl} 
+                alt="thumbnail" 
+                className="h-8 w-8 object-cover rounded bg-black/10 select-none border border-wa-border/30 shrink-0"
+              />
+            )}
+            <button 
+              onClick={() => dispatch(setReplyingMessage(null))}
+              className="h-6 w-6 rounded-full text-wa-muted hover:text-wa-text hover:bg-wa-hover transition-colors flex items-center justify-center cursor-pointer"
+              title="Cancel reply"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1039,11 +1256,65 @@ export function ChatInput() {
             </div>
 
             <div className="flex-1 min-w-0 relative">
+              {showMentionSuggestions && mentionSuggestions.length > 0 && (
+                <div className="absolute bottom-full left-0 w-full bg-wa-modal border border-wa-border rounded-xl shadow-2xl overflow-hidden z-50 mb-2.5 animate-scale-up max-h-48 overflow-y-auto">
+                  {mentionSuggestions.map((member, idx) => (
+                    <button
+                      key={member.id}
+                      onClick={() => insertMention(member)}
+                      onMouseEnter={() => setActiveSuggestionIdx(idx)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2 text-left cursor-pointer transition-colors border-none outline-none",
+                        idx === activeSuggestionIdx ? "bg-wa-active" : "hover:bg-wa-hover"
+                      )}
+                    >
+                      <Avatar src={member.avatar} fallback={member.name[0]} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-wa-text truncate">
+                          {member.name}
+                        </p>
+                        <p className="text-[10px] text-wa-muted truncate">
+                          {member.email || "Group Participant"}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 rows={1}
                 value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
+                onChange={(e) => {
+                  setMessageText(e.target.value);
+                  const { isMentioning, query, atIndex } = checkMention(e.target.value, e.target.selectionEnd || 0);
+                  if (isMentioning && activeChat?.isGroup) {
+                    const filtered = groupMembers.filter(member => 
+                      member.name.toLowerCase().includes(query.toLowerCase()) ||
+                      (member.email && member.email.toLowerCase().includes(query.toLowerCase()))
+                    );
+                    setMentionSuggestions(filtered);
+                    setMentionIndex(atIndex);
+                    setShowMentionSuggestions(filtered.length > 0);
+                    setActiveSuggestionIdx(0);
+                  } else {
+                    setShowMentionSuggestions(false);
+                  }
+                }}
+                onSelect={(e) => {
+                  const { isMentioning, query, atIndex } = checkMention(e.target.value, e.target.selectionEnd || 0);
+                  if (isMentioning && activeChat?.isGroup) {
+                    const filtered = groupMembers.filter(member => 
+                      member.name.toLowerCase().includes(query.toLowerCase()) ||
+                      (member.email && member.email.toLowerCase().includes(query.toLowerCase()))
+                    );
+                    setMentionSuggestions(filtered);
+                    setMentionIndex(atIndex);
+                    setShowMentionSuggestions(filtered.length > 0);
+                  } else {
+                    setShowMentionSuggestions(false);
+                  }
+                }}
                 onKeyDown={handleKeyDown}
                 placeholder={
                   selectedFiles.length > 0 ? "Add a caption..." : "Message"
