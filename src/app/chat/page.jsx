@@ -20,6 +20,7 @@ import { cn } from "../../utils/cn";
 import { getChatDateLabel } from "../../utils/dateUtils";
 import { ForwardModal } from "../../components/Chat/ForwardModal";
 import { MessageSearchPanel } from "../../components/Chat/MessageSearchPanel";
+import { StatusPanel } from "../../components/Status/StatusPanel";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function ChatPage() {
   const messagesDict = useAppSelector((state) => state.message.messages);
   const mobileScreen = useAppSelector((state) => state.ui.mobileScreen);
   const activeSearchPanelOpen = useAppSelector((state) => state.ui.activeSearchPanelOpen);
+  const statusViewOpen = useAppSelector((state) => state.status.statusViewOpen);
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -695,6 +697,9 @@ export default function ChatPage() {
             onClose={() => setForwardingMsg(null)} 
           />
         )}
+
+        {statusViewOpen && <StatusPanel />}
+
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes waHighlightFlash {
             0% {

@@ -13,6 +13,7 @@ import {
   Upload,
   Trash2,
   Loader2,
+  CircleDashed,
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
@@ -25,6 +26,7 @@ import { ChatCard } from "./ChatCard";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
 import { toggleTheme, setArchivedViewOpen } from "../../redux/slices/uiSlice";
+import { setStatusViewOpen } from "../../redux/slices/statusSlice";
 import {
   setChats,
   appendChat,
@@ -546,6 +548,14 @@ export function Sidebar({ className }) {
 
         <div className="flex items-center gap-2 text-wa-muted">
           <ThemeToggle />
+
+          <button
+            onClick={() => dispatch(setStatusViewOpen(true))}
+            className="p-2 rounded-full hover:bg-wa-active transition-colors block"
+            title="Status"
+          >
+            <CircleDashed className="h-5 w-5 text-wa-text" />
+          </button>
 
           <button
             onClick={() => setNewChatModal(true)}

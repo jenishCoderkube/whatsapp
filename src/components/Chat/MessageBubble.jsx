@@ -36,8 +36,22 @@ import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
 import { setReplyingMessage } from "../../redux/slices/uiSlice";
 import { updateMessage } from "../../redux/slices/messageSlice";
+import {
+  setStatusViewOpen,
+  setStatuses,
+  setActiveUser,
+  setActiveStatusIndex,
+} from "../../redux/slices/statusSlice";
+import { statusService } from "../../services/statusService";
 import { cn } from "../../utils/cn";
 import { formatMessageTime } from "../../utils/dateUtils";
+
+const FONT_STYLES = [
+  { name: "sans", family: "system-ui, -apple-system, sans-serif" },
+  { name: "serif", family: "Georgia, Cambria, serif" },
+  { name: "mono", family: "Courier New, Courier, monospace" },
+  { name: "handwriting", family: "'Outfit', 'Caveat', cursive, sans-serif" },
+];
 
 // Simple client-side cache for link previews
 const linkPreviewCache = {};
@@ -337,9 +351,39 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
   const theme = useAppSelector((state) => state.ui.theme);
+  const storeStatuses = useAppSelector((state) => state.status.statuses);
 
   const [showFullReactionPicker, setShowFullReactionPicker] = useState(false);
   const [pickerDirection, setPickerDirection] = useState("up");
+
+  const handleStatusReplyClick = async (e) => {
+    e.stopPropagation();
+    const statusId = message.replyTo?.statusId || message.replyTo?.messageId?.replace("status-", "");
+    if (!statusId) return;
+
+    try {
+      let list = storeStatuses;
+      if (!list || list.length === 0) {
+        list = await statusService.fetchStatuses(currentUserId);
+        dispatch(setStatuses(list));
+      }
+
+      const group = list.find((g) =>
+        g.statuses.some((s) => s.id === statusId)
+      );
+
+      if (group) {
+        const index = group.statuses.findIndex((s) => s.id === statusId);
+        dispatch(setStatusViewOpen(true));
+        dispatch(setActiveUser(group.userId));
+        dispatch(setActiveStatusIndex(index >= 0 ? index : 0));
+      } else {
+        alert("This status update is no longer available.");
+      }
+    } catch (err) {
+      console.warn("Failed to open status viewer from bubble:", err);
+    }
+  };
 
   const handleMentionClick = (member) => {
     const customEvent = new CustomEvent("wa_open_direct_chat", {
@@ -791,21 +835,63 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
           {message.replyTo && (
             <div 
-              onClick={handleScrollToQuotedMessage}
-              className="mb-1.5 p-1.5 rounded bg-black/5 dark:bg-white/5 border-l-4 border-wa-primary cursor-pointer select-none text-[11px] sm:text-xs flex flex-col gap-0.5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors relative group/quote"
+              onClick={
+                message.replyTo.isStatus || message.replyTo.messageId?.startsWith("status-")
+                  ? handleStatusReplyClick
+                  : handleScrollToQuotedMessage
+              }
+              className={cn(
+                "mb-1.5 p-1.5 rounded bg-black/5 dark:bg-white/5 border-l-4 cursor-pointer select-none text-[11px] sm:text-xs flex items-center justify-between gap-2 hover:bg-black/10 dark:hover:bg-white/10 transition-colors relative group/quote",
+                (message.replyTo.isStatus || message.replyTo.messageId?.startsWith("status-"))
+                  ? "border-[#00a884] bg-emerald-500/5"
+                  : "border-wa-primary"
+              )}
             >
-              <span className="font-semibold text-wa-primary">
-                {message.replyTo.senderName}
-              </span>
-              <span className="text-wa-muted truncate max-w-[200px] sm:max-w-md pr-5">
-                {message.replyTo.text || (
-                  message.replyTo.type === "image" ? "📷 Photo" :
-                  message.replyTo.type === "video" ? "🎥 Video" :
-                  message.replyTo.type === "voice" ? "🎤 Voice Note" :
-                  message.replyTo.type === "file" ? "📎 Document" : "Attachment"
-                )}
-              </span>
-              {isMsgOutgoing && (
+              <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
+                <span className="font-semibold text-wa-primary flex items-center gap-1.5">
+                  {(message.replyTo.isStatus || message.replyTo.messageId?.startsWith("status-")) ? (
+                    <>
+                      <span className="text-[10px] uppercase font-extrabold tracking-wider px-1 bg-[#00a884]/20 text-[#00a884] rounded">Status</span>
+                      <span className="truncate">{message.replyTo.senderName}</span>
+                    </>
+                  ) : (
+                    message.replyTo.senderName
+                  )}
+                </span>
+                <span className="text-wa-muted truncate max-w-[160px] sm:max-w-xs pr-5">
+                  {message.replyTo.text || (
+                    message.replyTo.type === "image" ? "📷 Photo" :
+                    message.replyTo.type === "video" ? "🎥 Video" :
+                    message.replyTo.type === "voice" ? "🎤 Voice Note" :
+                    message.replyTo.type === "file" ? "📎 Document" : "Attachment"
+                  )}
+                </span>
+              </div>
+
+              {/* Status Thumbnail preview on the right side of the bubble */}
+              {(message.replyTo.isStatus || message.replyTo.messageId?.startsWith("status-")) && (
+                <div className="shrink-0 flex items-center justify-center pointer-events-none select-none">
+                  {message.replyTo.type === "text" ? (
+                    <div 
+                      className="w-8 h-8 rounded flex items-center justify-center text-[7px] font-bold text-white overflow-hidden text-ellipsis line-clamp-2 leading-none p-0.5" 
+                      style={{ 
+                        backgroundColor: message.replyTo.statusBgColor || "#005c4b",
+                        fontFamily: FONT_STYLES.find(f => f.name === message.replyTo.statusTextStyle)?.family || "sans-serif"
+                      }}
+                    >
+                      {message.replyTo.statusTextContent}
+                    </div>
+                  ) : (
+                    <img 
+                      src={message.replyTo.mediaUrl || message.replyTo.statusMediaUrl} 
+                      alt="Status preview" 
+                      className="w-8 h-8 rounded object-cover border border-white/10"
+                    />
+                  )}
+                </div>
+              )}
+
+              {isMsgOutgoing && !(message.replyTo.isStatus || message.replyTo.messageId?.startsWith("status-")) && (
                 <button
                   onClick={handleClearReplyContext}
                   className="absolute top-1 right-1 h-4.5 w-4.5 rounded-full bg-wa-modal border border-wa-border text-wa-muted hover:text-red-500 hover:bg-wa-hover opacity-0 group-hover/quote:opacity-100 transition-opacity flex items-center justify-center shadow-sm cursor-pointer z-20"
