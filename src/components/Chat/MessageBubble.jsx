@@ -45,6 +45,8 @@ import {
 import { statusService } from "../../services/statusService";
 import { cn } from "../../utils/cn";
 import { formatMessageTime } from "../../utils/dateUtils";
+import LiveLocationBubble from "./LiveLocationBubble";
+import StaticLocationBubble from "./StaticLocationBubble";
 
 const FONT_STYLES = [
   { name: "sans", family: "system-ui, -apple-system, sans-serif" },
@@ -774,6 +776,10 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
             </div>
           </div>
         );
+      case "location":
+        return <StaticLocationBubble message={message} />;
+      case "live_location":
+        return <LiveLocationBubble message={message} />;
       default:
         return (
           <ExpandableText
@@ -874,7 +880,9 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     message.replyTo.type === "image" ? "📷 Photo" :
                     message.replyTo.type === "video" ? "🎥 Video" :
                     message.replyTo.type === "voice" ? "🎤 Voice Note" :
-                    message.replyTo.type === "file" ? "📎 Document" : "Attachment"
+                    message.replyTo.type === "file" ? "📎 Document" :
+                    message.replyTo.type === "live_location" ? "📍 Live Location" :
+                    message.replyTo.type === "location" ? "📍 Location" : "Attachment"
                   )}
                 </span>
               </div>

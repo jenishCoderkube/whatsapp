@@ -22,6 +22,7 @@ import {
   UploadCloud,
   AlertCircle,
   Trash2,
+  MapPin,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import {
@@ -38,6 +39,8 @@ import { realtimeService } from "../../services/realtimeService";
 import { cn } from "../../utils/cn";
 import { chatService } from "../../services/chatService";
 import { Avatar } from "../ui/Avatar";
+import { locationService } from "../../services/locationService";
+import LocationDurationModal from "./LocationDurationModal";
 
 const popularEmojis = [
   "😀",
@@ -219,6 +222,7 @@ export function ChatInput() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [toastError, setToastError] = useState("");
+  const [showLocationDurationModal, setShowLocationDurationModal] = useState(false);
 
   const [groupMembers, setGroupMembers] = useState([]);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
@@ -989,6 +993,110 @@ export function ChatInput() {
     }
   };
 
+  const handleShareLocation = async (durationMs) => {
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
+      });
+      const { latitude, longitude } = position.coords;
+      const expiresAt = new Date(Date.now() + durationMs).toISOString();
+
+      const tempId = "msg-temp-loc-" + Date.now();
+      const timeString = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      const optimisticMsg = {
+        id: tempId,
+        text: "📍 Shared live location",
+        timestamp: timeString,
+        isOutgoing: true,
+        status: "sent",
+        type: "live_location",
+        senderId: user.id,
+        createdAt: new Date().toISOString(),
+        mediaUrl: `${latitude},${longitude}`,
+        fileName: expiresAt,
+        duration: Math.round(durationMs / 1000),
+      };
+
+      dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
+      dispatch(
+        updateLastMessage({
+          chatId: activeChatId,
+          text: "📍 Shared live location",
+          timestamp: timeString,
+          isOutgoing: true,
+          status: "sent",
+        }),
+      );
+
+      const confirmedRow = await locationService.startSharing(activeChatId, user?.id, durationMs, position.coords);
+
+      dispatch(
+        replaceOptimisticMessage({
+          chatId: activeChatId,
+          tempId,
+          confirmedMessage: {
+            ...confirmedRow,
+            isOutgoing: true,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("Location share error:", err);
+      setToastError(err.message || "Failed to share live location. Please allow browser Geolocation permissions.");
+    }
+  };
+
+  const handleSendStaticLocation = async () => {
+    setShowAttachments(false);
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
+      });
+      const { latitude, longitude } = position.coords;
+
+      const tempId = "msg-temp-loc-static-" + Date.now();
+      const timeString = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      const optimisticMsg = {
+        id: tempId,
+        text: "📍 Current Location",
+        timestamp: timeString,
+        isOutgoing: true,
+        status: "sent",
+        type: "location",
+        senderId: user.id,
+        createdAt: new Date().toISOString(),
+        mediaUrl: `${latitude},${longitude}`,
+      };
+
+      dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
+      dispatch(
+        updateLastMessage({
+          chatId: activeChatId,
+          text: "📍 Current Location",
+          timestamp: timeString,
+          isOutgoing: true,
+          status: "sent",
+        }),
+      );
+
+      const confirmedRow = await locationService.sendStaticCurrentLocation(activeChatId, user?.id, position.coords);
+
+      dispatch(
+        replaceOptimisticMessage({
+          chatId: activeChatId,
+          tempId,
+          confirmedMessage: {
+            ...confirmedRow,
+            isOutgoing: true,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("Location snapshot error:", err);
+      setToastError(err.message || "Failed to send current location. Please allow browser Geolocation permissions.");
+    }
+  };
+
   const triggerFileInput = (acceptFilter) => {
     if (fileInputRef.current) {
       fileInputRef.current.accept = acceptFilter;
@@ -1195,7 +1303,9 @@ export function ChatInput() {
                   replyingMessage.type === "image" ? "Photo" :
                   replyingMessage.type === "video" ? "Video" :
                   replyingMessage.type === "voice" ? "Voice Note" :
-                  replyingMessage.type === "file" ? "Document" : "Attachment"
+                  replyingMessage.type === "file" ? "Document" :
+                  replyingMessage.type === "live_location" ? "Live Location" :
+                  replyingMessage.type === "location" ? "Location" : "Attachment"
                 )}
               </span>
             </div>
@@ -1301,27 +1411,50 @@ export function ChatInput() {
                 </button>
 
                 {showAttachments && (
-                  <div className="absolute bottom-12 left-0 flex flex-col gap-2 p-2 sm:p-3 bg-wa-modal rounded-2xl shadow-xl border border-wa-border animate-fade-in w-52 z-50 transition-colors">
+                  <div className="absolute bottom-12 left-0 grid grid-cols-2 gap-x-2.5 gap-y-1.5 p-2.5 bg-wa-modal rounded-2xl shadow-xl border border-wa-border animate-fade-in w-72 sm:w-80 md:w-96 z-50 transition-colors">
                     <button
                       onClick={() => triggerFileInput("image/*,video/mp4")}
-                      className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
                     >
-                      <span className="p-2 bg-[#bf59cf] rounded-full text-white shrink-0">
-                        <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="w-7.5 h-7.5 bg-[#bf59cf] rounded-full text-white flex items-center justify-center shrink-0">
+                        <ImageIcon className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate">Photos & Videos</span>
+                      <span className="truncate font-medium text-wa-text">Photos & Videos</span>
                     </button>
-
+ 
                     <button
                       onClick={() =>
                         triggerFileInput(".pdf,.doc,.docx,.zip,.txt")
                       }
-                      className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
                     >
-                      <span className="p-2 bg-[#53bdeb] rounded-full text-white shrink-0">
-                        <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="w-7.5 h-7.5 bg-[#53bdeb] rounded-full text-white flex items-center justify-center shrink-0">
+                        <FileText className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate">Document</span>
+                      <span className="truncate font-medium text-wa-text">Document</span>
+                    </button>
+ 
+                    <button
+                      onClick={() => {
+                        setShowLocationDurationModal(true);
+                        setShowAttachments(false);
+                      }}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
+                    >
+                      <span className="w-7.5 h-7.5 bg-[#00a884] rounded-full text-white flex items-center justify-center shrink-0">
+                        <MapPin className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="truncate font-medium text-wa-text">Live Location</span>
+                    </button>
+ 
+                    <button
+                      onClick={handleSendStaticLocation}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-wa-hover transition-colors text-xs sm:text-sm text-wa-text w-full text-left"
+                    >
+                      <span className="w-7.5 h-7.5 bg-[#25d366] rounded-full text-white flex items-center justify-center shrink-0">
+                        <MapPin className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="truncate font-medium text-wa-text">Current Location</span>
                     </button>
                   </div>
                 )}
@@ -1418,6 +1551,12 @@ export function ChatInput() {
           </>
         )}
       </div>
+      {showLocationDurationModal && (
+        <LocationDurationModal
+          onClose={() => setShowLocationDurationModal(false)}
+          onShare={handleShareLocation}
+        />
+      )}
     </footer>
   );
 }
