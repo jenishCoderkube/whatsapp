@@ -19,6 +19,16 @@ export const realtimeService = {
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldRow = payload.old;
+            if (oldRow) {
+              onGlobalEvent("DELETE", {
+                id: oldRow.id,
+                conversationId: oldRow.conversation_id,
+              });
+            }
+            return;
+          }
           if (!payload.new) return;
           const row = payload.new;
 

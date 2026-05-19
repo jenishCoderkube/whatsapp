@@ -9,13 +9,14 @@ import { MessageBubble } from "../../components/Chat/MessageBubble";
 import { ChatInput } from "../../components/Chat/ChatInput";
 import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
-import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage } from "../../redux/slices/messageSlice";
+import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage } from "../../redux/slices/messageSlice";
 import { updateLastMessage, incrementUnread, setChats } from "../../redux/slices/chatSlice";
 import { setActiveSearchPanelOpen, setMobileScreen } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { chatService } from "../../services/chatService";
 import { realtimeService } from "../../services/realtimeService";
 import { profileService } from "../../services/profileService";
+import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
 import { getChatDateLabel } from "../../utils/dateUtils";
 import { ForwardModal } from "../../components/Chat/ForwardModal";
@@ -207,14 +208,20 @@ export default function ChatPage() {
   useEffect(() => {
     if (!activeChatId || !user?.id) return;
 
-    messageService.fetchMessages(activeChatId, null, 30, user.id).then((fetched) => {
-      if (fetched && fetched.length > 0) {
-        dispatch(setMessages({ chatId: activeChatId, messages: fetched }));
-        messageService.markConversationMessagesAsDelivered(activeChatId, user.id);
-      } else {
-        setHasMore(false);
-      }
-    });
+    const loadMessages = () => {
+      messageService.fetchMessages(activeChatId, null, 30, user.id).then((fetched) => {
+        if (fetched && fetched.length > 0) {
+          dispatch(setMessages({ chatId: activeChatId, messages: fetched }));
+          messageService.markConversationMessagesAsDelivered(activeChatId, user.id);
+        } else {
+          setHasMore(false);
+        }
+      });
+    };
+
+    supabase.rpc("cleanup_expired_messages")
+      .then(() => loadMessages())
+      .catch(() => loadMessages());
   }, [activeChatId, user?.id, dispatch]);
 
   // Unify absolute table-wide database message publication monitoring pipeline
@@ -272,6 +279,48 @@ export default function ChatPage() {
     realtimeService.subscribeToUserGlobalMessages((eventType, incomingMsg) => {
       const isMine = incomingMsg.senderId === user.id;
       const targetChatId = incomingMsg.conversationId;
+
+      if (eventType === "DELETE") {
+        dispatch(
+          deleteMessage({
+            chatId: targetChatId,
+            messageId: incomingMsg.id,
+          })
+        );
+
+        const messagesForChat = messagesDictRef.current[targetChatId] || [];
+        const remainingMessages = messagesForChat.filter(m => m.id !== incomingMsg.id);
+
+        if (remainingMessages.length > 0) {
+          const newLatest = remainingMessages[remainingMessages.length - 1];
+          let previewText = newLatest.text;
+          if (newLatest.type === "image") previewText = "📷 Photo";
+          if (newLatest.type === "video") previewText = "🎥 Video";
+          if (newLatest.type === "file") previewText = "📎 Document";
+          if (newLatest.type === "voice") previewText = "🎤 Voice Message";
+
+          dispatch(
+            updateLastMessage({
+              chatId: targetChatId,
+              text: previewText,
+              timestamp: newLatest.timestamp || new Date(newLatest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+              isOutgoing: newLatest.senderId === user.id || newLatest.isOutgoing,
+              status: newLatest.status,
+            })
+          );
+        } else {
+          dispatch(
+            updateLastMessage({
+              chatId: targetChatId,
+              text: "",
+              timestamp: "",
+              isOutgoing: false,
+              status: null,
+            })
+          );
+        }
+        return;
+      }
 
       if (eventType === "INSERT") {
         if (targetChatId === activeChatIdRef.current) {

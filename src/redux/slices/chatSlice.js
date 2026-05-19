@@ -198,6 +198,13 @@ const chatSlice = createSlice({
         chat.avatar = avatar;
       }
     },
+    updateChatDisappearingDuration(state, action) {
+      const { chatId, disappearingDuration } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.disappearingDuration = disappearingDuration;
+      }
+    },
     setUserTyping(state, action) {
       const { chatId, userId, isTyping, userName } = action.payload;
       if (!state.typingMap[chatId]) {
@@ -244,6 +251,7 @@ export const {
   removeChat,
   updateChatMembership,
   updateChatAvatar,
+  updateChatDisappearingDuration,
   setUserTyping,
   syncOnlineUsers,
   resetChats,

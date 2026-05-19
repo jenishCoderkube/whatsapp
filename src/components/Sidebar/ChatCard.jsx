@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, CheckCheck, Ban, Pin, ChevronDown } from "lucide-react";
+import { Check, CheckCheck, Ban, Pin, ChevronDown, Clock } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
@@ -144,7 +144,14 @@ export const ChatCard = React.memo(({ chat }) => {
         isActive ? "bg-wa-active" : "hover:bg-wa-hover"
       )}
     >
-      <Avatar src={chat.avatar} fallback={chat.name[0]} isOnline={chat.online} size="lg" />
+      <div className="relative shrink-0">
+        <Avatar src={chat.avatar} fallback={chat.name[0]} isOnline={chat.online} size="lg" />
+        {chat.disappearingDuration > 0 && (
+          <div className="absolute -bottom-1 -right-1 bg-wa-sidebar rounded-full p-0.5 border border-wa-border shadow-xs" title="Disappearing messages active">
+            <Clock className="h-3 w-3 text-[#00a884]" />
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 min-w-0 border-b border-wa-border pb-3 pt-1 group-last:border-none transition-colors">
         <div className="flex items-center justify-between mb-1">

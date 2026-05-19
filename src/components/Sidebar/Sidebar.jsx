@@ -129,33 +129,41 @@ export function Sidebar({ className }) {
   useEffect(() => {
     if (user?.id) {
       setIsChatsLoading(true);
-      chatService.getUserChats(user.id).then((fetchedChats) => {
-        if (fetchedChats && fetchedChats.length > 0) {
-          dispatch(setChats(fetchedChats));
+      
+      const loadChats = () => {
+        chatService.getUserChats(user.id).then((fetchedChats) => {
+          if (fetchedChats && fetchedChats.length > 0) {
+            dispatch(setChats(fetchedChats));
 
-          // Batch acknowledge delivery for all active sidebar conversations
-          fetchedChats.forEach((chat) => {
-            if (
-              chat.lastMessage &&
-              !chat.lastMessage.isOutgoing &&
-              chat.lastMessage.status === "sent"
-            ) {
-              import("../../services/messageService").then(
-                ({ messageService }) => {
-                  messageService.markConversationMessagesAsDelivered(
-                    chat.id,
-                    user.id,
-                  );
-                },
-              );
-            }
-          });
-        }
-        setIsChatsLoading(false);
-      }).catch((err) => {
-        console.error("Failed loading user conversations:", err);
-        setIsChatsLoading(false);
-      });
+            // Batch acknowledge delivery for all active sidebar conversations
+            fetchedChats.forEach((chat) => {
+              if (
+                chat.lastMessage &&
+                !chat.lastMessage.isOutgoing &&
+                chat.lastMessage.status === "sent"
+              ) {
+                import("../../services/messageService").then(
+                  ({ messageService }) => {
+                    messageService.markConversationMessagesAsDelivered(
+                      chat.id,
+                      user.id,
+                    );
+                  },
+                );
+              }
+            });
+          }
+          setIsChatsLoading(false);
+        }).catch((err) => {
+          console.error("Failed loading user conversations:", err);
+          setIsChatsLoading(false);
+        });
+      };
+
+      // Clean up database-level expired disappearing messages before loading conversation list
+      supabase.rpc("cleanup_expired_messages")
+        .then(() => loadChats())
+        .catch(() => loadChats());
 
       // Listen for membership changes (being added, removed, or leaving groups)
       const membershipChannel = supabase

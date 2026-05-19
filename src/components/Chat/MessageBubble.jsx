@@ -340,7 +340,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   if (type === "system") {
     return (
       <div className="flex justify-center my-3 select-none w-full px-4">
-        <span className="bg-wa-encrypted/50 text-wa-muted text-[11px] sm:text-[12px] px-3 py-1 rounded-md text-center max-w-md shadow-xs backdrop-blur-sm uppercase tracking-tight font-medium">
+        <span className="bg-wa-encrypted/50 text-wa-muted text-[11px] sm:text-[12px] px-3 py-1.5 rounded-md text-center max-w-md shadow-xs backdrop-blur-sm tracking-tight font-medium leading-relaxed">
           {text}
         </span>
       </div>

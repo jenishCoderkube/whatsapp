@@ -116,6 +116,13 @@ const messageSlice = createSlice({
         }
       }
     },
+    deleteMessage(state, action) {
+      const { chatId, messageId } = action.payload;
+      const list = state.messages[chatId];
+      if (list) {
+        state.messages[chatId] = list.filter((m) => m.id !== messageId);
+      }
+    },
     resetMessages(state) {
       state.messages = {};
     },
@@ -130,6 +137,7 @@ export const {
   addMessage,
   updateMessageStatus,
   updateMessage,
+  deleteMessage,
   resetMessages,
 } = messageSlice.actions;
 

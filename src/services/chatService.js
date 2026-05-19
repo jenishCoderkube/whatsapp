@@ -132,6 +132,7 @@ export const chatService = {
           groupCreatorId: conv.group_creator_id,
           groupMembersCount: conv.group_members_count || 0,
           updatedAt: conv.updated_at,
+          disappearingDuration: conv.disappearing_duration || 0,
         });
       }
 
@@ -171,7 +172,7 @@ export const chatService = {
 
         const { data: targetMemberships } = await supabase
           .from("conversation_members")
-          .select("conversation_id, conversations!inner(is_group)")
+          .select("conversation_id, conversations!inner(is_group, disappearing_duration)")
           .eq("user_id", targetUser.id)
           .in("conversation_id", myConvIds)
           .eq("conversations.is_group", false);
@@ -191,6 +192,7 @@ export const chatService = {
             lastSeen: targetUser.last_seen,
             isGroup: false,
             groupCreatorId: null,
+            disappearingDuration: targetMemberships[0].conversations?.disappearing_duration || 0,
           };
         }
       }
@@ -224,6 +226,7 @@ export const chatService = {
         peerId: targetUser.id,
         lastSeen: targetUser.last_seen,
         isGroup: false,
+        disappearingDuration: newConv.disappearing_duration || 0,
       };
     } catch (error) {
       throw new Error("Unable to establish pristine conversation thread: " + error.message);
@@ -286,6 +289,7 @@ export const chatService = {
         groupCreatorId: newGroup.group_creator_id,
         groupMembersCount: allMembers.length,
         updatedAt: newGroup.updated_at,
+        disappearingDuration: newGroup.disappearing_duration || 0,
       };
     } catch (error) {
       throw new Error("Group pipeline construction aborted: " + error.message);
@@ -514,4 +518,58 @@ export const chatService = {
       console.warn("Resilient archive sync bypass exception:", e);
     }
   },
+
+  /**
+   * Update the disappearing messages settings for a chat (seconds duration).
+   * Also inserts a system notification message indicating the setting has changed.
+   */
+  async updateDisappearingDuration(conversationId, duration, userId) {
+    try {
+      const { data: updatedConv, error } = await supabase
+        .from("conversations")
+        .update({
+          disappearing_duration: duration,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", conversationId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Insert system message about setting change
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("id", userId)
+        .single();
+      
+      const userName = profile?.name || "Someone";
+      let text = "";
+      if (duration === 0) {
+        text = `${userName} turned off disappearing messages.`;
+      } else if (duration === 86400) {
+        text = `${userName} set messages to disappear after 24 hours.`;
+      } else if (duration === 604800) {
+        text = `${userName} set messages to disappear after 7 days.`;
+      } else if (duration === 7776000) {
+        text = `${userName} set messages to disappear after 90 days.`;
+      }
+
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: userId,
+        text,
+        type: "system",
+        status: "sent",
+        delivered_to: [],
+        read_by: []
+      });
+
+      return updatedConv;
+    } catch (err) {
+      console.error("updateDisappearingDuration failed:", err);
+      throw err;
+    }
+  }
 };
