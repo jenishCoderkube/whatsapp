@@ -185,16 +185,21 @@ function AuthSessionRecoveryGate({ children }) {
     };
 
     // Attach PeerConnection state listener
+    // CRITICAL: Only "failed" should end the call. "disconnected" is a transient
+    // ICE probing state that typically recovers automatically within seconds.
+    // Ending the call on "disconnected" was the root cause of mute/video toggle
+    // disconnecting calls — toggling tracks causes brief ICE state changes.
     webrtcService.onConnectionStateChange = (state) => {
       console.log("Global WebRTC State:", state);
       if (state === "connected") {
         dispatch(setCallStatus("connected"));
-      } else if (state === "disconnected" || state === "failed") {
+      } else if (state === "failed") {
         console.warn(
-          "Call connection disconnected/failed. Ending call gracefully.",
+          "Call connection failed permanently. Ending call.",
         );
         handleEndCall();
       }
+      // "disconnected" is intentionally NOT handled here — it recovers automatically
     };
 
     signalingService.initialize(user.id, async (type, data) => {
@@ -209,7 +214,7 @@ function AuthSessionRecoveryGate({ children }) {
           break;
 
         case "answer":
-          if (activeCallRef.current?.status === "outgoing") {
+          if (activeCallRef.current?.status === "outgoing" && webrtcService.pc) {
             await webrtcService.setRemoteAnswer(data.sdp);
             dispatch(setCallStatus("connected"));
           }

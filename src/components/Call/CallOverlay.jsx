@@ -80,14 +80,16 @@ export const CallOverlay = () => {
     }
   }, []);
 
-  // Attach local stream reactively (re-runs when stream changes)
+  // Attach local stream reactively with explicit play() for reliable rendering
   React.useEffect(() => {
-    if (localVideoRef.current) {
+    const el = localVideoRef.current;
+    if (el) {
       if (localStream) {
-        localVideoRef.current.srcObject = localStream;
-        console.log("[CallUI] Local stream attached successfully.");
+        el.srcObject = localStream;
+        el.play().catch((e) => console.warn("[CallUI] Local video play failed:", e));
+        console.log("[CallUI] Local stream attached:", localStream.getTracks().map(t => `${t.kind}:${t.enabled}`));
       } else {
-        localVideoRef.current.srcObject = null;
+        el.srcObject = null;
       }
     }
 
@@ -98,14 +100,19 @@ export const CallOverlay = () => {
     });
   }, [localStream]);
 
-  // Attach remote stream reactively (re-runs when remote stream track changes)
+  // Attach remote stream reactively with explicit play() for reliable rendering
   React.useEffect(() => {
-    if (remoteVideoRef.current) {
+    const el = remoteVideoRef.current;
+    if (el) {
       if (remoteStream) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        console.log("[CallUI] Remote stream attached successfully.");
+        el.srcObject = remoteStream;
+        // Force explicit play with muted=false for remote audio
+        el.muted = false;
+        el.volume = 1.0;
+        el.play().catch((e) => console.warn("[CallUI] Remote video play failed:", e));
+        console.log("[CallUI] Remote stream attached:", remoteStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
       } else {
-        remoteVideoRef.current.srcObject = null;
+        el.srcObject = null;
       }
     }
   }, [remoteStream]);
@@ -308,7 +315,18 @@ export const CallOverlay = () => {
                   {isVideoCall && (
                     <button
                       disabled={!hasCamera}
-                      onClick={() => dispatch(switchCamera())}
+                      onClick={async () => {
+                        dispatch(switchCamera());
+                        await webrtcService.switchCamera();
+                        // Update local stream state after camera switch
+                        if (webrtcService.localStream) {
+                          const el = localVideoRef.current;
+                          if (el) {
+                            el.srcObject = webrtcService.localStream;
+                            el.play().catch(() => {});
+                          }
+                        }
+                      }}
                       className={cn(
                         "h-14 w-14 rounded-full text-white flex items-center justify-center hover:bg-white/10 transition-all",
                         !hasCamera && "opacity-30 cursor-not-allowed",

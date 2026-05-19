@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import {
   initiateOutgoingCall,
@@ -22,24 +22,27 @@ export const useVoiceCall = () => {
   // Keep a hidden <audio> ref alive for voice-only calls so remote
   // audio plays even when there is no visible <video> element.
   const remoteAudioRef = useRef(null);
+  const activeCallRef = useRef(activeCall);
 
-  // Sync hook stream state with webrtcService values
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
+
+  // Sync localStream from webrtcService when it changes
+  // Use a stable interval that checks reference equality
   useEffect(() => {
     const timer = setInterval(() => {
       if (webrtcService.localStream !== localStream) {
         setLocalStreamState(webrtcService.localStream);
       }
-      if (webrtcService.remoteStream !== remoteStream) {
-        setRemoteStreamState(webrtcService.remoteStream);
-      }
-    }, 300);
+    }, 500);
     return () => clearInterval(timer);
-  }, [localStream, remoteStream]);
+  }, [localStream]);
 
   /**
    * Log call to conversation message history.
    */
-  const logCallMessage = async (callData, statusOverride = null) => {
+  const logCallMessage = useCallback(async (callData, statusOverride = null) => {
     if (!callData?.conversationId || !user?.id) return;
     const duration = callData.startTime
       ? Math.floor((Date.now() - callData.startTime) / 1000)
@@ -67,26 +70,29 @@ export const useVoiceCall = () => {
     } catch (err) {
       console.error("Failed to log call message:", err);
     }
-  };
+  }, [user?.id]);
 
   /**
    * Play remote audio for voice-only calls via a hidden Audio element.
+   * This ensures audio plays even without a visible <video> tag.
    */
-  const playRemoteAudio = (stream) => {
+  const playRemoteAudio = useCallback((stream) => {
     if (!remoteAudioRef.current) {
       remoteAudioRef.current = new Audio();
+      remoteAudioRef.current.autoplay = true;
     }
     remoteAudioRef.current.srcObject = stream;
     remoteAudioRef.current.play().catch((e) => {
       console.warn("[Call] Remote audio autoplay blocked:", e);
     });
-  };
+  }, []);
 
   /**
-   * Helper: Set up PeerConnection with ICE + remote track handlers.
-   * Works with or without a local stream (receive-only is valid).
+   * Set up PeerConnection with ICE + remote track handlers.
+   * The onTrack callback uses a stable remoteStream reference from webrtcService
+   * to prevent unnecessary React re-renders that cause video flicker.
    */
-  const setupPeerConnection = (peerId, callType) => {
+  const setupPeerConnection = useCallback((peerId, callType) => {
     webrtcService.createPeerConnection(
       // ICE candidate handler
       (candidate) => {
@@ -94,20 +100,23 @@ export const useVoiceCall = () => {
           signalingService.sendCandidate(peerId, { candidate });
         }
       },
-      // Remote track handler
-      (remoteStream) => {
-        setRemoteStreamState(remoteStream);
-        if (callType === "voice") {
-          playRemoteAudio(remoteStream);
+      // Remote track handler — receives the persistent remoteStream
+      (remoteStreamRef) => {
+        console.log("[Call] Remote stream updated, tracks:", remoteStreamRef.getTracks().length);
+        setRemoteStreamState(remoteStreamRef);
+
+        // Always ensure audio playback for voice calls
+        if (callType === "voice" || remoteStreamRef.getAudioTracks().length > 0) {
+          playRemoteAudio(remoteStreamRef);
         }
       },
     );
-  };
+  }, [playRemoteAudio]);
 
   // ─── Start Outgoing Call ──────────────────────────────────────────
 
-  const startCall = async (peer, conversationId, type = "voice") => {
-    if (activeCall) return;
+  const startCall = useCallback(async (peer, conversationId, type = "voice") => {
+    if (activeCallRef.current) return;
 
     const isVideo = type === "video";
 
@@ -137,11 +146,11 @@ export const useVoiceCall = () => {
       setLocalStreamState(null);
       dispatch(endCall());
     }
-  };
+  }, [user, dispatch, setupPeerConnection]);
 
   // ─── Answer Incoming Call ─────────────────────────────────────────
 
-  const handleAnswerCall = async () => {
+  const handleAnswerCall = useCallback(async () => {
     if (!incomingCall) return;
 
     const isVideo = incomingCall.type === "video";
@@ -169,24 +178,25 @@ export const useVoiceCall = () => {
       setLocalStreamState(null);
       dispatch(endCall());
     }
-  };
+  }, [incomingCall, dispatch, setupPeerConnection]);
 
   // ─── End Call ─────────────────────────────────────────────────────
 
-  const handleEndCall = () => {
-    const peerId = activeCall?.peer?.id || incomingCall?.caller?.id;
+  const handleEndCall = useCallback(() => {
+    const peerId = activeCallRef.current?.peer?.id || incomingCall?.caller?.id;
     if (peerId) {
       signalingService.sendEnd(peerId, { reason: "ended" });
     }
 
-    if (activeCall) {
-      logCallMessage(activeCall);
+    if (activeCallRef.current) {
+      logCallMessage(activeCallRef.current);
     } else if (incomingCall) {
       logCallMessage(incomingCall, "declined");
     }
 
     // Stop the hidden audio element
     if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
       remoteAudioRef.current = null;
     }
@@ -195,7 +205,7 @@ export const useVoiceCall = () => {
     setLocalStreamState(null);
     setRemoteStreamState(null);
     dispatch(endCall());
-  };
+  }, [incomingCall, dispatch, logCallMessage]);
 
   return {
     startCall,
