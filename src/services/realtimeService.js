@@ -32,6 +32,8 @@ export const realtimeService = {
             reactions,
             replyTo: row.reply_to || replyTo,
             isForwarded: row.is_forwarded || isForwarded,
+            editedAt: row.edited_at,
+            editHistory: row.edit_history,
             timestamp: row.timestamp_string || new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
             status: row.status || "sent",
             type: row.type || "text",

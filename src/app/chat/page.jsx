@@ -388,10 +388,16 @@ export default function ChatPage() {
                          new Date(incomingMsg.createdAt) >= new Date(messagesForChat[messagesForChat.length - 1].createdAt);
 
         if (isLatest) {
+          let previewText = incomingMsg.text;
+          if (incomingMsg.type === "image") previewText = "📷 Photo";
+          if (incomingMsg.type === "video") previewText = "🎥 Video";
+          if (incomingMsg.type === "file") previewText = "📎 Document";
+          if (incomingMsg.type === "voice") previewText = "🎤 Voice Message";
+
           dispatch(
             updateLastMessage({
               chatId: targetChatId,
-              text: incomingMsg.text,
+              text: previewText,
               timestamp: incomingMsg.timestamp,
               isOutgoing: isMine,
               status: incomingMsg.status,

@@ -28,8 +28,10 @@ import {
   addMessage,
   replaceOptimisticMessage,
   updateMessageStatus,
+  updateMessage,
 } from "../../redux/slices/messageSlice";
 import { updateLastMessage } from "../../redux/slices/chatSlice";
+import { setEditingMessage } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { storageService } from "../../services/storageService";
 import { realtimeService } from "../../services/realtimeService";
@@ -206,6 +208,7 @@ export function ChatInput() {
   const user = useAppSelector((state) => state.auth.user);
   const theme = useAppSelector((state) => state.ui.theme);
   const replyingMessage = useAppSelector((state) => state.ui.replyingMessage);
+  const editingMessage = useAppSelector((state) => state.ui.editingMessage);
   const activeChat = useAppSelector((state) =>
     state.chat.chats.find((c) => c.id === activeChatId),
   );
@@ -468,6 +471,10 @@ export function ChatInput() {
       if (e.key === "Escape") {
         setShowAttachments(false);
         setShowEmojiPicker(false);
+        if (editingMessage) {
+          dispatch(setEditingMessage(null));
+          setMessageText("");
+        }
       }
     };
 
@@ -477,7 +484,16 @@ export function ChatInput() {
       document.removeEventListener("mousedown", handleOutsideClick);
       document.removeEventListener("keydown", handleEscKey);
     };
-  }, [showAttachments, showEmojiPicker]);
+  }, [showAttachments, showEmojiPicker, editingMessage, dispatch]);
+
+  // Load message text when entering edit mode
+  useEffect(() => {
+    if (editingMessage) {
+      setMessageText(editingMessage.text || "");
+      setSelectedFiles([]);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+  }, [editingMessage]);
 
   // Auto-grow textarea gracefully
   useEffect(() => {
@@ -681,6 +697,30 @@ export function ChatInput() {
 
     if (!textToSend && filesToSend.length === 0) return;
     if (!activeChatId || !user?.id) return;
+
+    if (editingMessage) {
+      if (!textToSend) return;
+      
+      const currentEditing = editingMessage;
+      setMessageText("");
+      dispatch(setEditingMessage(null));
+      
+      try {
+        const updatedMsg = await messageService.editMessage(currentEditing.id, textToSend, user.id);
+        if (updatedMsg) {
+          dispatch(
+            updateMessage({
+              chatId: activeChatId,
+              message: updatedMsg,
+            })
+          );
+        }
+      } catch (err) {
+        console.error("Failed to edit message:", err);
+        setToastError(err.message || "Failed to edit message.");
+      }
+      return;
+    }
 
     const timeString = new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -1084,6 +1124,39 @@ export function ChatInput() {
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {editingMessage && (
+        <div className="flex items-center justify-between bg-wa-sidebar/80 dark:bg-[#1f2c34]/95 backdrop-blur-md border-l-[4px] border-[#00a884] px-3 sm:px-4 py-2 sm:py-2.5 mb-2.5 rounded-lg text-xs select-none animate-scale-up relative gap-3 shadow-sm border border-wa-border/30">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="flex items-center justify-center h-8 w-8 rounded bg-[#00a884]/10 text-[#00a884] shrink-0">
+              <svg viewBox="0 0 24 24" width="15" height="15" className="fill-none stroke-current stroke-2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+              </svg>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-semibold text-[#00a884] truncate text-[11px] sm:text-xs">
+                Edit message
+              </span>
+              <span className="text-wa-muted truncate text-[11px] sm:text-xs leading-normal">
+                {editingMessage.text}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button 
+              onClick={() => {
+                dispatch(setEditingMessage(null));
+                setMessageText("");
+              }}
+              className="h-6 w-6 rounded-full text-wa-muted hover:text-wa-text hover:bg-wa-hover transition-colors flex items-center justify-center cursor-pointer"
+              title="Cancel edit"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
 

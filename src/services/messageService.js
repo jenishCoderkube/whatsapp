@@ -53,6 +53,8 @@ export const messageService = {
           replyTo: msg.reply_to || replyTo,
           isForwarded: msg.is_forwarded || isForwarded,
           noPreview: msg.no_preview || noPreview,
+          editedAt: msg.edited_at,
+          editHistory: msg.edit_history,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -225,6 +227,8 @@ export const messageService = {
         replyTo: newMsg.reply_to || parsedReplyTo || replyTo,
         isForwarded: newMsg.is_forwarded || parsedIsForward || isForwarded,
         noPreview: newMsg.no_preview || parsedNoPreview || noPreview,
+        editedAt: newMsg.edited_at,
+        editHistory: newMsg.edit_history,
         timestamp: newMsg.timestamp_string,
         status: newMsg.status,
         type: newMsg.type,
@@ -612,6 +616,8 @@ export const messageService = {
           replyTo: msg.reply_to || replyTo,
           isForwarded: msg.is_forwarded || isForwarded,
           noPreview: msg.no_preview || noPreview,
+          editedAt: msg.edited_at,
+          editHistory: msg.edit_history,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -681,6 +687,8 @@ export const messageService = {
           replyTo: msg.reply_to || replyTo,
           isForwarded: msg.is_forwarded || isForwarded,
           noPreview: msg.no_preview || noPreview,
+          editedAt: msg.edited_at,
+          editHistory: msg.edit_history,
           timestamp:
             msg.timestamp_string ||
             new Date(msg.created_at).toLocaleTimeString([], {
@@ -749,6 +757,141 @@ export const messageService = {
       if (error) throw error;
     } catch (e) {
       console.warn("Failed to remove reply context:", e);
+    }
+  },
+
+  /**
+   * Edit a sent message within a configurable time limit.
+   * Preserves delivery/read states and updates the last message text in the conversation.
+   */
+  async editMessage(messageId, newText, currentUserId) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      if (!messageId || !isUuid || !currentUserId) {
+        throw new Error("Invalid parameters for editing message.");
+      }
+
+      // 1. Fetch current message state
+      const { data: currentMsg, error: fetchError } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("id", messageId)
+        .single();
+
+      if (fetchError || !currentMsg) {
+        throw new Error("Message not found.");
+      }
+
+      // 2. Validate permissions (must be the sender)
+      if (currentMsg.sender_id !== currentUserId) {
+        throw new Error("Action restricted: You can only edit your own messages.");
+      }
+
+      // 3. Validate message type (cannot edit deleted messages)
+      if (currentMsg.type === "deleted" || currentMsg.text === "This message was deleted") {
+        throw new Error("Action restricted: Cannot edit deleted messages.");
+      }
+
+      // 4. Validate time limit (e.g. 15 minutes)
+      const EDIT_TIME_LIMIT_MS = 15 * 60 * 1000;
+      const messageAge = Date.now() - new Date(currentMsg.created_at).getTime();
+      if (messageAge > EDIT_TIME_LIMIT_MS) {
+        throw new Error("Action restricted: Messages can only be edited within 15 minutes.");
+      }
+
+      // 5. Check if text is actually changed
+      const { text: cleanCurrentText } = parseMessageText(currentMsg.text || "");
+      if (cleanCurrentText.trim() === newText.trim()) {
+        return currentMsg; // No change needed, return unchanged
+      }
+
+      // 6. Build the new encoded message text (preserving reactions, replies, noPreview, etc.)
+      const parsed = parseMessageText(currentMsg.text || "");
+      const newEncodedText = encodeMessageText(
+        newText,
+        currentMsg.reply_to || parsed.replyTo,
+        currentMsg.is_forwarded || parsed.isForwarded,
+        parsed.reactions,
+        parsed.noPreview
+      );
+
+      // 7. Update edit history
+      const currentHistory = Array.isArray(currentMsg.edit_history) ? currentMsg.edit_history : [];
+      const newHistoryItem = {
+        text: cleanCurrentText,
+        editedAt: new Date().toISOString()
+      };
+      const updatedHistory = [...currentHistory, newHistoryItem];
+
+      // 8. Update in database
+      const { data: updatedMsg, error: updateError } = await supabase
+        .from("messages")
+        .update({
+          text: newEncodedText,
+          edited_at: new Date().toISOString(),
+          edit_history: updatedHistory
+        })
+        .eq("id", messageId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // 9. Update last message text in conversation if this is indeed the latest message
+      // Fetch latest message in the conversation
+      const { data: latestMsg } = await supabase
+        .from("messages")
+        .select("id, created_at, text, type")
+        .eq("conversation_id", currentMsg.conversation_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestMsg && latestMsg.id === messageId) {
+        let previewText = newText;
+        if (currentMsg.type === "image") previewText = "📷 Photo";
+        if (currentMsg.type === "file") previewText = "📎 Document";
+        if (currentMsg.type === "voice") previewText = "🎤 Voice Message";
+        if (currentMsg.type === "video") previewText = "🎥 Video";
+
+        await supabase
+          .from("conversations")
+          .update({
+            last_message_text: previewText,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", currentMsg.conversation_id);
+      }
+
+      const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward, noPreview: parsedNoPreview } = parseMessageText(updatedMsg.text || "");
+
+      return {
+        id: updatedMsg.id,
+        conversationId: updatedMsg.conversation_id,
+        conversation_id: updatedMsg.conversation_id,
+        text: cleanText,
+        rawText: updatedMsg.text || "",
+        reactions: reactions || {},
+        replyTo: updatedMsg.reply_to || parsedReplyTo,
+        isForwarded: updatedMsg.is_forwarded || parsedIsForward,
+        noPreview: updatedMsg.no_preview || parsedNoPreview,
+        editedAt: updatedMsg.edited_at,
+        editHistory: updatedMsg.edit_history,
+        timestamp: updatedMsg.timestamp_string || new Date(updatedMsg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: updatedMsg.status,
+        type: updatedMsg.type,
+        mediaUrl: updatedMsg.media_url,
+        fileName: updatedMsg.file_name,
+        fileSize: updatedMsg.file_size,
+        duration: updatedMsg.duration,
+        senderId: updatedMsg.sender_id,
+        sender_id: updatedMsg.sender_id,
+        isOutgoing: true,
+        createdAt: updatedMsg.created_at,
+      };
+    } catch (error) {
+      console.warn("editMessage exception:", error);
+      throw error;
     }
   }
 };

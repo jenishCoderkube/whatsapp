@@ -34,7 +34,7 @@ import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
 import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
-import { setReplyingMessage } from "../../redux/slices/uiSlice";
+import { setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
 import { updateMessage } from "../../redux/slices/messageSlice";
 import {
   setStatusViewOpen,
@@ -430,6 +430,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const audioRef = useRef(null);
   const playbackIntervalRef = useRef(null);
+  const [showHistoryTooltip, setShowHistoryTooltip] = useState(false);
 
   const toggleVoicePlay = (e) => {
     e.stopPropagation();
@@ -514,6 +515,10 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
   const isDeleted = type === "deleted" || text === "This message was deleted";
 
+  const EDIT_TIME_LIMIT_MS = 15 * 60 * 1000;
+  const messageAge = createdAt ? (Date.now() - new Date(createdAt).getTime()) : 0;
+  const canEdit = isMsgOutgoing && !isDeleted && messageAge < EDIT_TIME_LIMIT_MS && (type === "text" || type === "image" || type === "video" || type === "file");
+
   const handleOpenMenu = (e) => {
     e.stopPropagation();
     setShowReactionBar(false);
@@ -584,6 +589,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       detail: { message },
     });
     window.dispatchEvent(customEvent);
+  };
+
+  const handleEditAction = (e) => {
+    e.stopPropagation();
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    dispatch(setEditingMessage(message));
   };
 
   const handleOpenReactions = (e) => {
@@ -908,7 +919,33 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
           {renderMediaContent()}
 
           <div className="flex items-center justify-end gap-1 mt-0.5 float-right clear-both ml-3 -mb-0.5 select-none">
-            <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans">{displayTime}</span>
+            <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans inline-flex items-center">
+              {message.editedAt && (
+                <span 
+                  className="relative mr-1.5 text-[9px] italic opacity-85 cursor-help select-none font-semibold hover:underline text-wa-muted/95"
+                  onMouseEnter={() => setShowHistoryTooltip(true)}
+                  onMouseLeave={() => setShowHistoryTooltip(false)}
+                >
+                  edited
+                  {showHistoryTooltip && message.editHistory && message.editHistory.length > 0 && (
+                    <span className="absolute bottom-full right-0 mb-2.5 bg-wa-modal border border-wa-border p-2.5 rounded-lg shadow-2xl text-[10px] min-w-[180px] z-[99] text-left normal-case not-italic text-wa-text select-text pointer-events-auto leading-relaxed animate-scale-up">
+                      <span className="font-semibold block border-b border-wa-border pb-1.5 mb-1.5 text-wa-primary text-[11px]">Edit History</span>
+                      <span className="block max-h-36 overflow-y-auto space-y-1.5">
+                        {message.editHistory.map((hist, idx) => (
+                          <span key={idx} className="block border-b border-wa-border/30 pb-1.5 last:border-0 last:pb-0">
+                            <span className="text-wa-muted font-mono block text-[9px]">
+                              {new Date(hist.editedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </span>
+                            <span className="block mt-0.5 break-words text-wa-text">"{hist.text}"</span>
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  )}
+                </span>
+              )}
+              <span>{displayTime}</span>
+            </span>
             {renderStatusTicks()}
           </div>
 
@@ -1003,6 +1040,15 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                   <button onClick={handleReplyAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Reply className="h-3.5 w-3.5 text-wa-muted" /><span>Reply</span></button>
                   <button onClick={handleOpenReactions} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Smile className="h-3.5 w-3.5 text-wa-muted" /><span>React</span></button>
                   <button onClick={handleForwardAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><ArrowRight className="h-3.5 w-3.5 text-wa-muted" /><span>Forward</span></button>
+                  {canEdit && (
+                    <button onClick={handleEditAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2">
+                      <svg viewBox="0 0 24 24" width="14" height="14" className="stroke-wa-muted stroke-2 fill-none inline shrink-0">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+                      </svg>
+                      <span>Edit</span>
+                    </button>
+                  )}
                   <div className="border-t border-wa-border my-1" />
                   <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>Delete for me</span></button>
                   {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>Delete for everyone</span></button>}
@@ -1019,6 +1065,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
          prevProps.message.status === nextProps.message.status &&
          prevProps.message.text === nextProps.message.text &&
          prevProps.message.noPreview === nextProps.message.noPreview &&
+         prevProps.message.editedAt === nextProps.message.editedAt &&
          JSON.stringify(prevProps.message.reactions) === JSON.stringify(nextProps.message.reactions) &&
          prevProps.isGroup === nextProps.isGroup &&
          prevProps.groupMembers?.length === nextProps.groupMembers?.length;
