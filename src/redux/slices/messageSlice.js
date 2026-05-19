@@ -50,7 +50,8 @@ const messageSlice = createSlice({
         } else {
           const idx = list.findIndex((m) => m.id === tempId);
           if (idx !== -1) {
-            list[idx] = confirmedMessage;
+            const prevMsg = list[idx];
+            list[idx] = { ...confirmedMessage, uiId: prevMsg.uiId || tempId };
           } else {
             list.push(confirmedMessage);
           }

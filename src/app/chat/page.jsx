@@ -91,7 +91,7 @@ export default function ChatPage() {
         items.push({
           type: "date_separator",
           date: msg.createdAt || Date.now(),
-          id: `date-${msgDate}-${msg.id}`,
+          id: `date-${msgDate}-${msg.uiId || msg.id}`,
         });
         lastDate = msgDate;
       }
@@ -655,7 +655,7 @@ export default function ChatPage() {
                         </span>
                       </div>
                     ) : (
-                      <MessageBubble key={item.id} message={item} isGroup={activeChat.isGroup} groupMembers={groupMembers} />
+                      <MessageBubble key={item.uiId || item.id} message={item} isGroup={activeChat.isGroup} groupMembers={groupMembers} />
                     )
                   ))}
 

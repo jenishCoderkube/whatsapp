@@ -82,17 +82,24 @@ export const realtimeService = {
       },
     });
 
-    globalChannel
-      .on("presence", { event: "sync" }, () => {
-        const state = globalChannel.presenceState();
-        const onlineMap = {};
-        Object.keys(state).forEach((uid) => {
+    const updatePresence = () => {
+      const state = globalChannel.presenceState();
+      const onlineMap = {};
+      Object.keys(state).forEach((uid) => {
+        // Validate active realtime connection length to eliminate stale references
+        if (state[uid] && state[uid].length > 0) {
           onlineMap[uid] = true;
-        });
-        if (onPresenceSync) {
-          onPresenceSync(onlineMap);
         }
-      })
+      });
+      if (onPresenceSync) {
+        onPresenceSync(onlineMap);
+      }
+    };
+
+    globalChannel
+      .on("presence", { event: "sync" }, updatePresence)
+      .on("presence", { event: "join" }, updatePresence)
+      .on("presence", { event: "leave" }, updatePresence)
       .on("broadcast", { event: "typing" }, (payload) => {
         if (onTypingReceived && payload.payload) {
           onTypingReceived(payload.payload);
@@ -104,8 +111,30 @@ export const realtimeService = {
             online_at: new Date().toISOString(),
             user_id: currentUserId,
           });
+          // Synchronize database timestamp on fresh connection
+          supabase.from("profiles").update({ online: true, last_seen: new Date().toISOString() }).eq("id", currentUserId).then();
         }
       });
+
+    // Cleanup disconnected users properly when tab or browser closes and handle background states
+    if (typeof window !== "undefined" && !window.__wa_presence_cleanup_bound) {
+      window.__wa_presence_cleanup_bound = true;
+      window.addEventListener("beforeunload", () => {
+        if (globalChannel) {
+          globalChannel.untrack().catch(() => {});
+        }
+      });
+
+      // Handle App close / tab switch / network disconnect properly
+      window.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", currentUserId).then();
+        } else {
+          // Reconnect logic / return to active
+          supabase.from("profiles").update({ online: true, last_seen: new Date().toISOString() }).eq("id", currentUserId).then();
+        }
+      });
+    }
   },
 
   /**

@@ -29,7 +29,12 @@ const chatSlice = createSlice({
   reducers: {
     setChats(state, action) {
       if (action.payload) {
-        state.chats = sortChatsHelper(action.payload);
+        state.chats = sortChatsHelper(action.payload).map(chat => {
+          if (!chat.isGroup && chat.peerId) {
+            chat.online = !!state.onlineMap[chat.peerId];
+          }
+          return chat;
+        });
         if (
           state.activeChatId &&
           !state.chats.some((c) => c.id === state.activeChatId)
@@ -40,6 +45,9 @@ const chatSlice = createSlice({
     },
     appendChat(state, action) {
       const newChat = action.payload;
+      if (!newChat.isGroup && newChat.peerId) {
+        newChat.online = !!state.onlineMap[newChat.peerId];
+      }
       const filtered = state.chats.filter((c) => c.id !== newChat.id);
       state.chats = sortChatsHelper([newChat, ...filtered]);
       state.activeChatId = newChat.id;
@@ -202,11 +210,16 @@ const chatSlice = createSlice({
       }
     },
     syncOnlineUsers(state, action) {
-      const onlineMap = action.payload;
+      const onlineMap = action.payload || {};
+      state.onlineMap = onlineMap;
       state.chats.forEach((chat) => {
-        if (!chat.isGroup) {
-          const peerId = chat.peerId;
-          chat.online = !!onlineMap[peerId];
+        if (!chat.isGroup && chat.peerId) {
+          const isOnlineNow = !!onlineMap[chat.peerId];
+          // Realtime transition from online -> offline correctly records the exact leave moment locally
+          if (chat.online && !isOnlineNow) {
+            chat.lastSeen = new Date().toISOString();
+          }
+          chat.online = isOnlineNow;
         }
       });
     },
