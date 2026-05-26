@@ -132,7 +132,7 @@ export const CallOverlay = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex flex-col bg-[#0b141a] text-white overflow-hidden select-none"
+        className="fixed inset-0 z-[100] flex flex-col bg-[#0a1014] text-white overflow-hidden select-none"
       >
         {/* Immersive Background/Video Layer (Absolute Base) */}
         <div className="absolute inset-0 z-0 bg-black">
@@ -151,7 +151,7 @@ export const CallOverlay = () => {
 
               {/* Remote Avatar Fallback Layer when video is paused/disabled by peer */}
               {remoteVideoDisabled && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0b141a] z-10 transition-opacity duration-300">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a1014] z-10 transition-opacity duration-300">
                   <Avatar
                     src={currentPeer?.avatar}
                     size="xl"
@@ -200,7 +200,7 @@ export const CallOverlay = () => {
                 className="absolute inset-0 bg-cover bg-center scale-110 blur-3xl opacity-40 saturate-150"
                 style={{ backgroundImage: `url(${currentPeer?.avatar})` }}
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-[#0b141a]/40 to-[#0b141a]" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-[#0a1014]/40 to-[#0a1014]" />
             </>
           )}
         </div>

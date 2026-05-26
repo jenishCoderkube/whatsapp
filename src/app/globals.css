@@ -6,7 +6,7 @@
     /* Semantic Colors - Light Mode ( WhatsApp Web standard palette ) */
     --wa-primary: #00a884;
     --wa-primary-hover: #008f72;
-    
+
     --wa-app-bg: #d1d7db;
     --wa-bg: #efeae2;
     --wa-sidebar: #ffffff;
@@ -14,27 +14,27 @@
     --wa-input: #ffffff;
     --wa-modal: #ffffff;
     --wa-encrypted: #ffeecd;
-    
+
     --wa-bubble-in: #ffffff;
     --wa-bubble-out: #d9fdd3;
-    
+
     --wa-text: #111b21;
     --wa-muted: #667781;
-    
+
     --wa-border: #e9edef;
     --wa-hover: #f5f6f6;
     --wa-active: #f0f2f5;
-    
+
     --wa-unread: #00a884;
     --wa-online: #25d366;
-    
+
     /* Legacy mapping support for pre-existing utility code */
     --wa-bg-light: #efeae2;
-    --wa-bg-dark: #0b141a;
+    --wa-bg-dark: #0a1014;
     --wa-header-light: #f0f2f5;
-    --wa-header-dark: #202c33;
+    --wa-header-dark: #0a1014;
     --wa-sidebar-light: #ffffff;
-    --wa-sidebar-dark: #111b21;
+    --wa-sidebar-dark: #0a1014;
     --wa-bubble-in-light: #ffffff;
     --wa-bubble-in-dark: #202c33;
     --wa-bubble-out-light: #d9fdd3;
@@ -51,25 +51,25 @@
     /* Semantic Colors - Dark Mode ( WhatsApp Web production dark scheme ) */
     --wa-primary: #00a884;
     --wa-primary-hover: #008f72;
-    
-    --wa-app-bg: #0b141a;
-    --wa-bg: #0b141a;
-    --wa-sidebar: #111b21;
-    --wa-header: #202c33;
-    --wa-input: #2a3942;
-    --wa-modal: #202c33;
+
+    --wa-app-bg: #0a1014;
+    --wa-bg: #0a1014;
+    --wa-sidebar: #0a1014;
+    --wa-header: #0a1014;
+    --wa-input: #111b21;
+    --wa-modal: #0a1014;
     --wa-encrypted: #182229;
-    
+
     --wa-bubble-in: #202c33;
     --wa-bubble-out: #005c4b;
-    
+
     --wa-text: #e9edef;
     --wa-muted: #8696a0;
-    
+
     --wa-border: #222d34;
     --wa-hover: #202c33;
     --wa-active: #2a3942;
-    
+
     --wa-unread: #00a884;
     --wa-online: #25d366;
   }
@@ -79,7 +79,7 @@
 @theme {
   --color-wa-primary: var(--wa-primary);
   --color-wa-primary-hover: var(--wa-primary-hover);
-  
+
   --color-wa-app-bg: var(--wa-app-bg);
   --color-wa-bg: var(--wa-bg);
   --color-wa-sidebar: var(--wa-sidebar);
@@ -87,17 +87,17 @@
   --color-wa-input: var(--wa-input);
   --color-wa-modal: var(--wa-modal);
   --color-wa-encrypted: var(--wa-encrypted);
-  
+
   --color-wa-bubble-in: var(--wa-bubble-in);
   --color-wa-bubble-out: var(--wa-bubble-out);
-  
+
   --color-wa-text: var(--wa-text);
   --color-wa-muted: var(--wa-muted);
-  
+
   --color-wa-border: var(--wa-border);
   --color-wa-hover: var(--wa-hover);
   --color-wa-active: var(--wa-active);
-  
+
   --color-wa-unread: var(--wa-unread);
   --color-wa-online: var(--wa-online);
 }

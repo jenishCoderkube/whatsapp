@@ -161,7 +161,7 @@ export function StatusViewer({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-40 flex flex-col bg-[#0b141a] select-none"
+      className="absolute inset-0 z-40 flex flex-col bg-[#0a1014] select-none"
     >
       {/* Top progress bars */}
       <div className="absolute top-4 left-4 right-4 z-50 flex items-center gap-1.5 pointer-events-none">

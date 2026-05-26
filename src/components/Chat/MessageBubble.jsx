@@ -29,6 +29,7 @@ import {
   Phone,
   Video,
   ArrowRight,
+  ChevronDown,
 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
@@ -536,7 +537,10 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       style.marginTop = "6px";
     }
 
-    if (rect.right > window.innerWidth - 180 || isMsgOutgoing) {
+    // Dynamically align dropdown based on available space on the right of the chevron button.
+    // If the space to the right of the chevron is less than 180px, align right (extend left).
+    // Otherwise, align left (extend right).
+    if (window.innerWidth - rect.left < 180) {
       style.right = 0;
     } else {
       style.left = 0;
@@ -816,7 +820,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.15, ease: "easeOut" }}
       className={cn(
-        "flex w-full mb-1.5 sm:mb-2.5 px-2 sm:px-4 select-text relative transition-all duration-300 rounded-lg",
+        "flex w-full mb-1.5 sm:mb-2.5 px-2 sm:px-4 select-text relative transition-all duration-300 rounded-lg group/row",
         isMsgOutgoing ? "justify-end" : "justify-start",
       )}
     >
@@ -826,9 +830,53 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         </div>
       )}
 
-      <div className="flex items-center gap-1 sm:gap-1.5 relative max-w-full flex-row">
+      <div className="flex items-center gap-1 sm:gap-1.5 relative max-w-[85%] sm:max-w-[70%] md:max-w-[65%] flex-row">
+        {/* Quick Reaction Button on Hover (Outgoing) */}
+        {isMsgOutgoing && !isDeleted && (
+          <div className={cn(
+            "transition-opacity duration-150 relative shrink-0 select-none self-center",
+            showReactionBar ? "opacity-100" : "opacity-0 group-hover/row:opacity-100"
+          )}>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReactionBar(prev => !prev);
+              }}
+              className="p-1 text-wa-muted hover:text-wa-text hover:bg-wa-hover rounded-full transition-colors cursor-pointer"
+              title="React to message"
+            >
+              <Smile className="h-4.5 w-4.5" />
+            </button>
+            <AnimatePresence>
+              {showReactionBar && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                  transition={{ duration: 0.1 }}
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                    <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
+                  ))}
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowFullReactionPicker(true);
+                    }} 
+                    className="text-wa-primary hover:scale-130 transition-transform cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover"
+                  >
+                    +
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         <div className={cn(
-          "relative rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200 shrink min-w-0 max-w-full",
+          "relative rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200 shrink min-w-0 max-w-full group",
           isMsgOutgoing ? "bg-wa-bubble-out text-wa-text rounded-tr-none" : "bg-wa-bubble-in text-wa-text rounded-tl-none",
           reactionEmojis.length > 0 && "mb-3",
         )}>
@@ -957,35 +1005,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
             {renderStatusTicks()}
           </div>
 
-          {showReactionBar && !isDeleted && (
-            <div className={cn(
-              "absolute -top-12 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50 animate-scale-up",
-              isMsgOutgoing ? "right-0" : "left-0",
-            )} onClick={(e) => e.stopPropagation()}>
-              {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
-              ))}
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const spaceAbove = rect.top;
-                  const spaceBelow = window.innerHeight - rect.bottom;
-                  // If space above is less than 390px (picker height + padding) and there's more space below, open down!
-                  if (spaceAbove < 390 && spaceBelow > spaceAbove) {
-                    setPickerDirection("down");
-                  } else {
-                    setPickerDirection("up");
-                  }
-                  setShowFullReactionPicker(true);
-                }} 
-                className="text-wa-primary hover:scale-130 transition-transform cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover"
-                title="React with any emoji"
-              >
-                +
-              </button>
-            </div>
-          )}
+          {/* Reaction bar inside bubble has been removed to avoid duplicate rows */}
 
           {showFullReactionPicker && !isDeleted && (
             <div className={cn(
@@ -1032,34 +1052,95 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
               })}
             </div>
           )}
+
+          {/* Chevron Dropdown Trigger & Dropdown Menu */}
+          {!isDeleted && (
+            <div className={cn(
+              "absolute top-1 right-1.5 z-20 select-none transition-opacity duration-150",
+              dropdownConfig.isOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}>
+              <button 
+                onClick={handleOpenMenu}
+                className={cn(
+                  "p-0.5 rounded-full text-wa-muted hover:text-wa-text transition-colors cursor-pointer",
+                  isMsgOutgoing ? "bg-wa-bubble-out/90 hover:bg-wa-bubble-out" : "bg-wa-bubble-in/90 hover:bg-wa-bubble-in",
+                )}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {/* Dropdown Menu (Rendered relative to Chevron container) */}
+              <AnimatePresence>
+                {dropdownConfig.isOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: dropdownConfig.style.bottom ? 4 : -4 }} 
+                    animate={{ opacity: 1, scale: 1, y: 0 }} 
+                    exit={{ opacity: 0, scale: 0.95 }} 
+                    transition={{ duration: 0.12 }} 
+                    style={dropdownConfig.style} 
+                    className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs overflow-hidden" 
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button onClick={handleReplyAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Reply className="h-3.5 w-3.5 text-wa-muted" /><span>Reply</span></button>
+                    <button onClick={handleOpenReactions} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Smile className="h-3.5 w-3.5 text-wa-muted" /><span>React</span></button>
+                    <button onClick={handleForwardAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><ArrowRight className="h-3.5 w-3.5 text-wa-muted" /><span>Forward</span></button>
+                    {canEdit && (
+                      <button onClick={handleEditAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2">
+                        <svg viewBox="0 0 24 24" width="14" height="14" className="stroke-wa-muted stroke-2 fill-none inline shrink-0">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+                        </svg>
+                        <span>Edit</span>
+                      </button>
+                    )}
+                    <div className="border-t border-wa-border my-1" />
+                    <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>Delete for me</span></button>
+                    {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>Delete for everyone</span></button>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
-        {!isDeleted && (
+        {/* Quick Reaction Button on Hover (Incoming) */}
+        {!isMsgOutgoing && !isDeleted && (
           <div className={cn(
-            "relative shrink-0 select-none",
-            (type === "image" || type === "video" || type === "file") ? "self-start mt-1.5" : "self-center"
+            "transition-opacity duration-150 relative shrink-0 select-none self-center",
+            showReactionBar ? "opacity-100" : "opacity-0 group-hover/row:opacity-100"
           )}>
-            <button onClick={handleOpenMenu} className="p-1 text-wa-muted hover:text-wa-text hover:bg-wa-active rounded-full transition-colors">
-              <MoreVertical className="h-4 w-4" />
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReactionBar(prev => !prev);
+              }}
+              className="p-1 text-wa-muted hover:text-wa-text hover:bg-wa-hover rounded-full transition-colors cursor-pointer"
+              title="React to message"
+            >
+              <Smile className="h-4.5 w-4.5" />
             </button>
             <AnimatePresence>
-              {dropdownConfig.isOpen && (
-                <motion.div initial={{ opacity: 0, scale: 0.95, y: dropdownConfig.style.bottom ? 4 : -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.12 }} style={dropdownConfig.style} className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={handleReplyAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Reply className="h-3.5 w-3.5 text-wa-muted" /><span>Reply</span></button>
-                  <button onClick={handleOpenReactions} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Smile className="h-3.5 w-3.5 text-wa-muted" /><span>React</span></button>
-                  <button onClick={handleForwardAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><ArrowRight className="h-3.5 w-3.5 text-wa-muted" /><span>Forward</span></button>
-                  {canEdit && (
-                    <button onClick={handleEditAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2">
-                      <svg viewBox="0 0 24 24" width="14" height="14" className="stroke-wa-muted stroke-2 fill-none inline shrink-0">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
-                      </svg>
-                      <span>Edit</span>
-                    </button>
-                  )}
-                  <div className="border-t border-wa-border my-1" />
-                  <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>Delete for me</span></button>
-                  {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>Delete for everyone</span></button>}
+              {showReactionBar && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                  transition={{ duration: 0.1 }}
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                    <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
+                  ))}
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowFullReactionPicker(true);
+                    }} 
+                    className="text-wa-primary hover:scale-130 transition-transform cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover"
+                  >
+                    +
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
