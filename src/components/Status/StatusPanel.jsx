@@ -24,11 +24,13 @@ import { StatusViewer } from "./StatusViewer";
 import { StatusEmptyState } from "./StatusEmptyState";
 import { StatusPrivacyModal } from "./StatusPrivacyModal";
 import { cn } from "../../utils/cn";
+import { useTranslation } from "../../hooks/useTranslation";
 
 import { AnimatePresence } from "framer-motion";
 
 export function StatusPanel() {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const user = useAppSelector((state) => state.auth.user);
   
   // Status Slice States
@@ -177,7 +179,7 @@ export function StatusPanel() {
   // Media File selection
   const handleMediaSelect = (file) => {
     if (file.size > 20 * 1024 * 1024) {
-      alert("Media size cannot exceed 20MB.");
+      alert(t("status.media_size_error"));
       return;
     }
 
@@ -222,7 +224,7 @@ export function StatusPanel() {
       }, 500);
     } catch (e) {
       console.error("Upload text status failed:", e);
-      alert("Upload failed: " + e.message);
+      alert(t("status.upload_failed", { error: e.message }));
       dispatch(setUploading(false));
       dispatch(setUploadProgress(null));
     }
@@ -254,7 +256,7 @@ export function StatusPanel() {
       }, 500);
     } catch (e) {
       console.error("Upload media status failed:", e);
-      alert("Upload failed: " + e.message);
+      alert(t("status.upload_failed", { error: e.message }));
       dispatch(setUploading(false));
       dispatch(setUploadProgress(null));
     }
@@ -271,7 +273,7 @@ export function StatusPanel() {
 
   // Delete status update
   const handleDeleteStatus = async (statusId) => {
-    if (!window.confirm("Are you sure you want to delete this status update?")) return;
+    if (!window.confirm(t("status.confirm_delete"))) return;
     setIsPaused(true);
 
     try {
@@ -358,7 +360,7 @@ export function StatusPanel() {
           reaction: null,
         })
       );
-      alert("Reply sent to " + activeGroup.name + "!");
+      alert(t("status.reply_sent", { name: activeGroup.name }));
     } catch (e) {
       console.error("Failed to send reply:", e);
     } finally {

@@ -2,15 +2,6 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-
-const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
-  ssr: false,
-  loading: () => (
-    <div className="w-[320px] h-[380px] bg-wa-modal flex items-center justify-center text-xs text-wa-muted">
-      Loading Emojis...
-    </div>
-  ),
-});
 import {
   Smile,
   Paperclip,
@@ -25,6 +16,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import {
   addMessage,
   replaceOptimisticMessage,
@@ -41,6 +33,20 @@ import { chatService } from "../../services/chatService";
 import { Avatar } from "../ui/Avatar";
 import { locationService } from "../../services/locationService";
 import LocationDurationModal from "./LocationDurationModal";
+
+const EmojiPickerLoading = () => {
+  const { t } = useTranslation();
+  return (
+    <div className="w-[320px] h-[380px] bg-wa-modal flex items-center justify-center text-xs text-wa-muted">
+      {t("chat.loading_emojis")}
+    </div>
+  );
+};
+
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+  loading: EmojiPickerLoading,
+});
 
 const popularEmojis = [
   "😀",
@@ -207,6 +213,7 @@ const checkMention = (text, selectionEnd) => {
 
 export function ChatInput() {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
   const user = useAppSelector((state) => state.auth.user);
   const theme = useAppSelector((state) => state.ui.theme);
@@ -308,7 +315,7 @@ export function ChatInput() {
     } catch (err) {
       console.error("Microphone permission denied or device error:", err);
       setToastError(
-        "Microphone access denied. Please allow permissions to record voice notes.",
+        t("chat.mic_access_denied"),
       );
     }
   };
@@ -349,7 +356,7 @@ export function ChatInput() {
         audioChunksRef.current = [];
 
         if (audioBlob.size < 100 || finalDurationSeconds < 1) {
-          setToastError("Voice recording too short.");
+          setToastError(t("chat.voice_recording_short"));
           return;
         }
 
@@ -386,7 +393,7 @@ export function ChatInput() {
         dispatch(
           updateLastMessage({
             chatId: activeChatId,
-            text: "🎤 Voice Message",
+            text: "🎤 " + t("chat.voice_message"),
             timestamp: timeString,
             isOutgoing: true,
             status: "sent",
@@ -640,11 +647,11 @@ export function ChatInput() {
 
     if (hasOversized) {
       setToastError(
-        "One or more files exceed the maximum allowed size of 20MB.",
+        t("chat.file_too_large"),
       );
     } else if (hasInvalidExt) {
       setToastError(
-        "Unsupported format. Allowed: Images, MP4, PDF, DOCX, ZIP, TXT.",
+        t("chat.invalid_file_format"),
       );
     }
 
@@ -786,10 +793,10 @@ export function ChatInput() {
           chatId: activeChatId,
           text:
             fileObj.type === "image"
-              ? "📷 Photo"
+              ? "📷 " + t("chat.photo")
               : fileObj.type === "video"
-                ? "🎥 Video"
-                : "📎 Document",
+                ? "🎥 " + t("chat.video")
+                : "📎 " + t("chat.document"),
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
@@ -1005,7 +1012,7 @@ export function ChatInput() {
       const timeString = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
       const optimisticMsg = {
         id: tempId,
-        text: "📍 Shared live location",
+        text: "📍 " + t("chat.shared_live_location"),
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1021,7 +1028,7 @@ export function ChatInput() {
       dispatch(
         updateLastMessage({
           chatId: activeChatId,
-          text: "📍 Shared live location",
+          text: "📍 " + t("chat.shared_live_location"),
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
@@ -1042,7 +1049,7 @@ export function ChatInput() {
       );
     } catch (err) {
       console.error("Location share error:", err);
-      setToastError(err.message || "Failed to share live location. Please allow browser Geolocation permissions.");
+      setToastError(err.message || t("chat.location_permission_denied"));
     }
   };
 
@@ -1058,7 +1065,7 @@ export function ChatInput() {
       const timeString = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
       const optimisticMsg = {
         id: tempId,
-        text: "📍 Current Location",
+        text: "📍 " + t("chat.current_location"),
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1072,7 +1079,7 @@ export function ChatInput() {
       dispatch(
         updateLastMessage({
           chatId: activeChatId,
-          text: "📍 Current Location",
+          text: "📍 " + t("chat.current_location"),
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
@@ -1093,7 +1100,7 @@ export function ChatInput() {
       );
     } catch (err) {
       console.error("Location snapshot error:", err);
-      setToastError(err.message || "Failed to send current location. Please allow browser Geolocation permissions.");
+      setToastError(err.message || t("chat.location_permission_denied"));
     }
   };
 
@@ -1111,7 +1118,7 @@ export function ChatInput() {
       <footer className="relative flex items-center justify-center px-4 py-6 bg-wa-header border-t border-wa-border select-none z-20 w-full shrink-0">
         {/* <div className="bg-wa-active/50 px-4 py-2 rounded-lg border border-wa-border"> */}
         <p className="text-sm text-wa-muted font-medium italic">
-          You are no longer a participant in this group
+          {t("chat.not_participant")}
         </p>
         {/* </div> */}
       </footer>
@@ -1129,10 +1136,10 @@ export function ChatInput() {
         <div className="absolute inset-0 bg-wa-modal/90 backdrop-blur-xs border-2 border-dashed border-wa-primary rounded-lg m-1.5 z-50 flex flex-col items-center justify-center transition-all pointer-events-none">
           <UploadCloud className="h-10 w-10 text-wa-primary animate-bounce mb-2" />
           <span className="text-sm font-medium text-wa-text">
-            Drop media or files here to upload
+            {t("chat.drop_files")}
           </span>
           <span className="text-xs text-wa-muted mt-1">
-            Maximum size limit: 20MB per item
+            {t("chat.max_file_size")}
           </span>
         </div>
       )}
@@ -1189,7 +1196,7 @@ export function ChatInput() {
               <button
                 onClick={() => removeSelectedFile(fileObj.id)}
                 className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-wa-active border border-wa-border text-wa-text hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center shadow-xs"
-                title="Remove File"
+                title={t("chat.remove_file")}
               >
                 <X className="h-2.5 w-2.5" />
               </button>
@@ -1210,7 +1217,7 @@ export function ChatInput() {
             )}
             <div className="flex-1 min-w-0">
               <span className="text-[10px] text-wa-muted font-sans font-medium uppercase tracking-wider block truncate">
-                {inputLinkPreview.siteName || inputLinkPreview.domain || "Link Preview"}
+                {inputLinkPreview.siteName || inputLinkPreview.domain || t("chat.link_preview")}
               </span>
               <p className="font-semibold text-wa-primary truncate">
                 {inputLinkPreview.title}
@@ -1228,7 +1235,7 @@ export function ChatInput() {
               setInputLinkPreview(null);
             }}
             className="p-1 text-wa-muted hover:text-wa-text rounded-full hover:bg-wa-hover transition-colors shrink-0"
-            title="Remove link preview"
+            title={t("chat.remove_link_preview")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1246,7 +1253,7 @@ export function ChatInput() {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="font-semibold text-[#00a884] truncate text-[11px] sm:text-xs">
-                Edit message
+                {t("chat.edit_message")}
               </span>
               <span className="text-wa-muted truncate text-[11px] sm:text-xs leading-normal">
                 {editingMessage.text}
@@ -1260,7 +1267,7 @@ export function ChatInput() {
                 setMessageText("");
               }}
               className="h-6 w-6 rounded-full text-wa-muted hover:text-wa-text hover:bg-wa-hover transition-colors flex items-center justify-center cursor-pointer"
-              title="Cancel edit"
+              title={t("chat.cancel_edit")}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -1296,16 +1303,16 @@ export function ChatInput() {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="font-semibold text-wa-primary truncate text-[11px] sm:text-xs">
-                Replying to {replyingMessage.senderName}
+                {t("chat.replying_to", { name: replyingMessage.senderName })}
               </span>
               <span className="text-wa-muted truncate text-[11px] sm:text-xs leading-normal">
                 {replyingMessage.text || (
-                  replyingMessage.type === "image" ? "Photo" :
-                  replyingMessage.type === "video" ? "Video" :
-                  replyingMessage.type === "voice" ? "Voice Note" :
-                  replyingMessage.type === "file" ? "Document" :
-                  replyingMessage.type === "live_location" ? "Live Location" :
-                  replyingMessage.type === "location" ? "Location" : "Attachment"
+                  replyingMessage.type === "image" ? t("chat.photo") :
+                  replyingMessage.type === "video" ? t("chat.video") :
+                  replyingMessage.type === "voice" ? t("chat.voice_message") :
+                  replyingMessage.type === "file" ? t("chat.document") :
+                  replyingMessage.type === "live_location" ? t("chat.live_location") :
+                  replyingMessage.type === "location" ? t("chat.location") : t("chat.attachment")
                 )}
               </span>
             </div>
@@ -1322,7 +1329,7 @@ export function ChatInput() {
             <button 
               onClick={() => dispatch(setReplyingMessage(null))}
               className="h-6 w-6 rounded-full text-wa-muted hover:text-wa-text hover:bg-wa-hover transition-colors flex items-center justify-center cursor-pointer"
-              title="Cancel reply"
+              title={t("chat.cancel_reply")}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -1336,7 +1343,7 @@ export function ChatInput() {
             <div className="flex items-center gap-2.5">
               <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse shrink-0" />
               <span className="text-xs sm:text-sm font-medium text-red-500 font-mono tracking-wider">
-                Recording: {Math.floor(recordingDuration / 60)}:
+                {t("chat.recording")}: {Math.floor(recordingDuration / 60)}:
                 {recordingDuration % 60 < 10 ? "0" : ""}
                 {recordingDuration % 60}
               </span>
@@ -1345,14 +1352,14 @@ export function ChatInput() {
               <button
                 onClick={cancelVoiceRecording}
                 className="p-2 rounded-full text-wa-muted hover:bg-wa-hover hover:text-red-500 transition-colors flex items-center justify-center cursor-pointer"
-                title="Discard recording"
+                title={t("chat.discard_recording")}
               >
                 <Trash2 className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
               </button>
               <button
                 onClick={sendVoiceRecording}
                 className="p-2 sm:p-2.5 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover transition-colors shadow-sm flex items-center justify-center cursor-pointer animate-scale-up"
-                title="Send Voice Message"
+                title={t("chat.send_voice_message")}
               >
                 <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-white" />
               </button>
@@ -1372,7 +1379,7 @@ export function ChatInput() {
                     "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
                     showEmojiPicker && "bg-wa-active text-wa-primary",
                   )}
-                  title="Emojis"
+                  title={t("chat.emojis")}
                 >
                   <Smile className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
@@ -1405,7 +1412,7 @@ export function ChatInput() {
                     "p-1.5 sm:p-2 rounded-full hover:bg-wa-active transition-colors block",
                     showAttachments && "bg-wa-active text-wa-primary",
                   )}
-                  title="Attach files"
+                  title={t("chat.attach_files")}
                 >
                   <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
@@ -1419,7 +1426,7 @@ export function ChatInput() {
                       <span className="w-7.5 h-7.5 bg-[#bf59cf] rounded-full text-white flex items-center justify-center shrink-0">
                         <ImageIcon className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate font-medium text-wa-text">Photos & Videos</span>
+                      <span className="truncate font-medium text-wa-text">{t("chat.photos_and_videos")}</span>
                     </button>
  
                     <button
@@ -1431,7 +1438,7 @@ export function ChatInput() {
                       <span className="w-7.5 h-7.5 bg-[#53bdeb] rounded-full text-white flex items-center justify-center shrink-0">
                         <FileText className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate font-medium text-wa-text">Document</span>
+                      <span className="truncate font-medium text-wa-text">{t("chat.document")}</span>
                     </button>
  
                     <button
@@ -1444,7 +1451,7 @@ export function ChatInput() {
                       <span className="w-7.5 h-7.5 bg-[#00a884] rounded-full text-white flex items-center justify-center shrink-0">
                         <MapPin className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate font-medium text-wa-text">Live Location</span>
+                      <span className="truncate font-medium text-wa-text">{t("chat.live_location")}</span>
                     </button>
  
                     <button
@@ -1454,7 +1461,7 @@ export function ChatInput() {
                       <span className="w-7.5 h-7.5 bg-[#25d366] rounded-full text-white flex items-center justify-center shrink-0">
                         <MapPin className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate font-medium text-wa-text">Current Location</span>
+                      <span className="truncate font-medium text-wa-text">{t("chat.current_location")}</span>
                     </button>
                   </div>
                 )}
@@ -1480,7 +1487,7 @@ export function ChatInput() {
                           {member.name}
                         </p>
                         <p className="text-[10px] text-wa-muted truncate">
-                          {member.email || "Group Participant"}
+                          {member.email || t("chat.group_participant")}
                         </p>
                       </div>
                     </button>
@@ -1523,7 +1530,7 @@ export function ChatInput() {
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  selectedFiles.length > 0 ? "Add a caption..." : "Message"
+                  selectedFiles.length > 0 ? t("chat.add_caption") : t("chat.message_placeholder")
                 }
                 className="w-full resize-none rounded-lg bg-wa-input px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-wa-text placeholder:text-wa-muted focus:outline-none max-h-24 block leading-normal transition-colors"
               />
@@ -1534,7 +1541,7 @@ export function ChatInput() {
                 <button
                   onClick={handleSendSubmit}
                   className="p-2 sm:p-2.5 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover transition-colors shadow-sm flex items-center justify-center cursor-pointer"
-                  title="Send Message"
+                  title={t("chat.send_message")}
                 >
                   <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-white" />
                 </button>
@@ -1542,7 +1549,7 @@ export function ChatInput() {
                 <button
                   onClick={startVoiceRecording}
                   className="p-1.5 sm:p-2 rounded-full text-wa-muted hover:bg-wa-active transition-colors flex items-center justify-center cursor-pointer"
-                  title="Voice Message"
+                  title={t("chat.voice_message")}
                 >
                   <Mic className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>

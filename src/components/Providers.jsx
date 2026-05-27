@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import ReduxProvider from "../redux/ReduxProvider";
 import { ThemeProvider } from "./ui/ThemeProvider";
+import { I18nProvider, useTranslation } from "../contexts/I18nContext";
 import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import { loginSuccess, logout } from "../redux/slices/authSlice";
 import { setUserTyping, syncOnlineUsers } from "../redux/slices/chatSlice";
@@ -26,6 +27,7 @@ import { messageService } from "../services/messageService";
 // Internal gate initializing presence tracking and preventing unauthenticated flicker
 function AuthSessionRecoveryGate({ children }) {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const user = useAppSelector((state) => state.auth.user);
   const activeCall = useAppSelector((state) => state.call.activeCall);
   const incomingCall = useAppSelector((state) => state.call.incomingCall);
@@ -142,7 +144,7 @@ function AuthSessionRecoveryGate({ children }) {
       const finalStatus =
         statusOverride || (duration > 0 ? "completed" : "missed");
       const isVideo = callData.type === "video";
-      const callLabel = isVideo ? "Video call" : "Voice call";
+      const callTypeLabel = isVideo ? t("call.video") : t("call.voice");
 
       try {
         await messageService.sendMessage({
@@ -150,8 +152,8 @@ function AuthSessionRecoveryGate({ children }) {
           senderId: user.id,
           text:
             finalStatus === "completed"
-              ? `${callLabel} (${duration}s)`
-              : `Missed ${callLabel.toLowerCase()}`,
+              ? t("call.call_duration", { type: callTypeLabel, duration })
+              : t("call.missed_call", { type: callTypeLabel.toLowerCase() }),
           type: "voice_call",
           metadata: {
             callStatus: finalStatus,
@@ -261,14 +263,14 @@ function AuthSessionRecoveryGate({ children }) {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-wa-primary text-white shadow-lg animate-pulse mb-4">
           <MessageSquare className="h-10 w-10" />
         </div>
-        <h1 className="text-xl font-medium text-wa-text">WhatsApp Web</h1>
+        <h1 className="text-xl font-medium text-wa-text">{t("chat.empty_state_title")}</h1>
         <div className="mt-4 flex items-center gap-2">
           <div className="h-1.5 w-24 overflow-hidden rounded-full bg-wa-border">
             <div className="h-full w-1/2 bg-wa-primary animate-pulse" />
           </div>
         </div>
         <span className="absolute bottom-8 text-[11px] text-wa-muted flex items-center gap-1">
-          🔒 End-to-end encrypted production engine
+          {t("common.encrypted_footer")}
         </span>
       </div>
     );
@@ -286,7 +288,9 @@ export default function Providers({ children }) {
   return (
     <ReduxProvider>
       <ThemeProvider>
-        <AuthSessionRecoveryGate>{children}</AuthSessionRecoveryGate>
+        <I18nProvider>
+          <AuthSessionRecoveryGate>{children}</AuthSessionRecoveryGate>
+        </I18nProvider>
       </ThemeProvider>
     </ReduxProvider>
   );

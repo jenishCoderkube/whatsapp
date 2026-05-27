@@ -8,6 +8,7 @@ import { Eye, EyeOff, MessageSquare, AlertCircle } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import {
   loginStart,
   loginSuccess,
@@ -18,6 +19,7 @@ import { authService } from "../../services/authService";
 export default function LoginPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const loading = useAppSelector((state) => state.auth.loading);
   const error = useAppSelector((state) => state.auth.error);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
@@ -41,11 +43,11 @@ export default function LoginPage() {
     setValidationError("");
 
     if (!email.trim() || !email.includes("@")) {
-      setValidationError("Please enter a valid email address.");
+      setValidationError(t("auth.invalid_email"));
       return;
     }
     if (password.length < 6) {
-      setValidationError("Password must be at least 6 characters long.");
+      setValidationError(t("auth.password_min_length"));
       return;
     }
 
@@ -83,10 +85,10 @@ export default function LoginPage() {
               <MessageSquare className="h-7 w-7" />
             </div>
             <h2 className="text-xl font-medium text-wa-text">
-              Log in to WhatsApp Web
+              {t("auth.login_title")}
             </h2>
             <p className="text-xs text-wa-muted mt-1">
-              Enter your credentials to access your linked conversations
+              {t("auth.login_subtitle")}
             </p>
           </div>
 
@@ -106,7 +108,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div>
               <label className="block text-xs font-medium text-wa-muted mb-1.5">
-                Email Address
+                {t("auth.email_label")}
               </label>
               <Input
                 type="email"
@@ -120,7 +122,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-wa-muted">
-                  Password
+                  {t("auth.password_label")}
                 </label>
                 <Link
                   href="/login"
@@ -129,7 +131,7 @@ export default function LoginPage() {
                   }
                   className="text-xs text-wa-primary hover:underline"
                 >
-                  Forgot password?
+                  {t("auth.forgot_password")}
                 </Link>
               </div>
 
@@ -164,7 +166,7 @@ export default function LoginPage() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded accent-wa-primary"
                 />
-                <span className="text-xs text-wa-muted">Remember me</span>
+                <span className="text-xs text-wa-muted">{t("auth.remember_me")}</span>
               </label>
             </div>
 
@@ -174,18 +176,18 @@ export default function LoginPage() {
               className="w-full mt-2"
               isLoading={loading}
             >
-              Log In
+              {t("auth.login_title").split(" ")[0] || "Log In"}
             </Button>
           </form>
 
           {/* Route transitions redirection */}
           <div className="mt-6 pt-4 border-t border-wa-border text-center text-xs text-wa-muted">
-            Don't have an account?{" "}
+            {t("auth.dont_have_account")}{" "}
             <Link
               href="/register"
               className="text-wa-primary font-medium hover:underline"
             >
-              Register here
+              {t("auth.register_here")}
             </Link>
           </div>
         </div>

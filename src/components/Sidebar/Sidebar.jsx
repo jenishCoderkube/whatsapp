@@ -24,6 +24,7 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 import { SearchBar } from "./SearchBar";
 import { ChatCard } from "./ChatCard";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
 import { toggleTheme, setArchivedViewOpen } from "../../redux/slices/uiSlice";
 import { setStatusViewOpen } from "../../redux/slices/statusSlice";
@@ -52,6 +53,7 @@ import { formatSidebarDate } from "../../utils/dateUtils";
 
 export function Sidebar({ className }) {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const user = useAppSelector((state) => state.auth.user);
   const chats = useAppSelector((state) => state.chat.chats);
   const searchQuery = useAppSelector((state) => state.chat.searchQuery);
@@ -95,7 +97,7 @@ export function Sidebar({ className }) {
 
   const handleLogoutDevice = async (dev) => {
     if (dev.active) {
-      if (window.confirm("Are you sure you want to log out of your current session on this computer?")) {
+      if (window.confirm(t("sidebar.logout_device_confirm"))) {
         try {
           await authService.logout();
         } catch (e) {
@@ -107,7 +109,7 @@ export function Sidebar({ className }) {
         window.location.href = "/login";
       }
     } else {
-      if (window.confirm(`Are you sure you want to log out ${dev.name}?`)) {
+      if (window.confirm(t("sidebar.logout_other_device_confirm", { device: dev.name }))) {
         setActiveDevices(activeDevices.filter((d) => d.id !== dev.id));
       }
     }
@@ -322,19 +324,19 @@ export function Sidebar({ className }) {
 
   const dropdownItems = [
     {
-      label: "Profile Info",
+      label: t("sidebar.profile_info"),
       onClick: () => setProfileModal(true),
     },
     {
-      label: "Linked Devices",
+      label: t("sidebar.linked_devices"),
       onClick: () => setLinkedDevicesModalOpen(true),
     },
     {
-      label: theme === "light" ? "Dark Theme" : "Light Theme",
+      label: theme === "light" ? t("sidebar.dark_theme") : t("sidebar.light_theme"),
       onClick: () => dispatch(toggleTheme()),
     },
     {
-      label: "Logout",
+      label: t("sidebar.logout"),
       danger: true,
       onClick: handleLogout,
     },
@@ -515,7 +517,7 @@ export function Sidebar({ className }) {
               <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"></path>
             </svg>
           </button>
-          <span className="font-semibold text-base sm:text-lg">Archived</span>
+          <span className="font-semibold text-base sm:text-lg">{t("sidebar.archived")}</span>
         </header>
 
         {/* Scrollable list of archived chats */}
@@ -562,7 +564,7 @@ export function Sidebar({ className }) {
           <button
             onClick={() => dispatch(setStatusViewOpen(true))}
             className="p-2 rounded-full hover:bg-wa-active transition-colors block"
-            title="Status"
+            title={t("status.my_status").split(" ")[1] || "Status"}
           >
             <CircleDashed className="h-5 w-5 text-wa-text" />
           </button>
@@ -570,7 +572,7 @@ export function Sidebar({ className }) {
           <button
             onClick={() => setNewChatModal(true)}
             className="p-2 rounded-full hover:bg-wa-active transition-colors block"
-            title="New Chat"
+            title={t("sidebar.new_chat")}
           >
             <MessageSquarePlus className="h-5 w-5 text-wa-text" />
           </button>
@@ -607,7 +609,7 @@ export function Sidebar({ className }) {
               </svg>
             </span>
             <span className="font-medium text-sm sm:text-base text-wa-text">
-              Archived
+              {t("sidebar.archived")}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -629,14 +631,14 @@ export function Sidebar({ className }) {
               </svg>
             </div>
             <span className="text-xs sm:text-sm text-wa-muted font-medium tracking-wide animate-pulse">
-              Loading chats...
+              {t("sidebar.loading_chats")}
             </span>
           </div>
         ) : activeChats.length > 0 ? (
           activeChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
         ) : (
           <div className="p-6 text-center text-xs sm:text-sm text-wa-muted">
-            No chats or contacts found matching "{searchQuery}"
+            {t("sidebar.no_chats", { query: searchQuery })}
           </div>
         )}
       </div>
@@ -645,7 +647,7 @@ export function Sidebar({ className }) {
       <Modal
         isOpen={profileModal}
         onClose={() => setProfileModal(false)}
-        title="Profile settings"
+        title={t("sidebar.profile_info")}
       >
         <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-2">
           {profileMessage && (
@@ -676,7 +678,7 @@ export function Sidebar({ className }) {
               className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white text-center p-2"
             >
               <Upload className="h-5 w-5 mb-1" />
-              <span className="text-[10px] leading-tight">Change photo</span>
+              <span className="text-[10px] leading-tight">{t("sidebar.change_photo")}</span>
             </div>
             {isUpdatingProfile && (
               <div className="absolute inset-0 flex items-center justify-center rounded-full bg-wa-modal/80 backdrop-blur-xs">
@@ -691,7 +693,7 @@ export function Sidebar({ className }) {
               disabled={isUpdatingProfile}
               className="text-wa-primary font-medium hover:underline block cursor-pointer"
             >
-              Upload image
+              {t("sidebar.upload_image")}
             </button>
             <span className="text-wa-muted">•</span>
             <button
@@ -699,7 +701,7 @@ export function Sidebar({ className }) {
               disabled={isUpdatingProfile}
               className="text-red-500 font-medium hover:underline block cursor-pointer"
             >
-              Remove
+              {t("common.remove")}
             </button>
           </div>
 
@@ -708,7 +710,7 @@ export function Sidebar({ className }) {
             {/* Username Section */}
             <div className="flex flex-col gap-1">
               <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">
-                Your Name
+                {t("sidebar.your_name")}
               </div>
               {editingName ? (
                 <div className="flex items-center gap-1">
@@ -717,14 +719,14 @@ export function Sidebar({ className }) {
                     value={tempName}
                     onChange={(e) => setTempName(e.target.value)}
                     className="h-8 text-xs flex-1"
-                    placeholder="Username"
+                    placeholder={t("sidebar.your_name")}
                     autoFocus
                   />
                   <button
                     onClick={handleSaveName}
                     disabled={isUpdatingProfile || !tempName.trim()}
                     className="p-1.5 rounded bg-wa-primary text-white hover:opacity-90 block cursor-pointer"
-                    title="Save"
+                    title={t("common.save")}
                   >
                     <Check className="h-3.5 w-3.5" />
                   </button>
@@ -735,7 +737,7 @@ export function Sidebar({ className }) {
                     }}
                     disabled={isUpdatingProfile}
                     className="p-1.5 rounded bg-wa-active text-wa-muted hover:text-wa-text block cursor-pointer"
-                    title="Cancel"
+                    title={t("common.cancel")}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -748,22 +750,21 @@ export function Sidebar({ className }) {
                   <button
                     onClick={() => setEditingName(true)}
                     className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
-                    title="Edit name"
+                    title={t("sidebar.edit_name") || "Edit name"}
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               )}
               <span className="text-[10px] text-wa-muted px-1 block">
-                This is not your username or pin. This name will be visible to
-                your linked contacts.
+                {t("sidebar.name_disclaimer")}
               </span>
             </div>
 
             {/* About description Section */}
             <div className="flex flex-col gap-1">
               <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">
-                About
+                {t("sidebar.about")}
               </div>
               {editingStatus ? (
                 <div className="flex items-center gap-1">
@@ -772,14 +773,14 @@ export function Sidebar({ className }) {
                     value={tempStatus}
                     onChange={(e) => setTempStatus(e.target.value)}
                     className="h-8 text-xs flex-1"
-                    placeholder="Status description"
+                    placeholder={t("status.type_status")}
                     autoFocus
                   />
                   <button
                     onClick={handleSaveStatus}
                     disabled={isUpdatingProfile || !tempStatus.trim()}
                     className="p-1.5 rounded bg-wa-primary text-white hover:opacity-90 block cursor-pointer"
-                    title="Save"
+                    title={t("common.save")}
                   >
                     <Check className="h-3.5 w-3.5" />
                   </button>
@@ -790,7 +791,7 @@ export function Sidebar({ className }) {
                     }}
                     disabled={isUpdatingProfile}
                     className="p-1.5 rounded bg-wa-active text-wa-muted hover:text-wa-text block cursor-pointer"
-                    title="Cancel"
+                    title={t("common.cancel")}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -798,12 +799,12 @@ export function Sidebar({ className }) {
               ) : (
                 <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
                   <span className="text-xs sm:text-sm text-wa-text truncate">
-                    {user?.status || "Available"}
+                    {user?.status || t("sidebar.available") || "Available"}
                   </span>
                   <button
                     onClick={() => setEditingStatus(true)}
                     className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
-                    title="Edit about"
+                    title={t("sidebar.edit_about") || "Edit about"}
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                   </button>
@@ -818,7 +819,7 @@ export function Sidebar({ className }) {
       <Modal
         isOpen={newChatModal}
         onClose={() => setNewChatModal(false)}
-        title="Start New Conversation"
+        title={t("sidebar.new_chat")}
       >
         <div className="flex flex-col h-[420px]">
           {/* Internal view switching strip */}
@@ -832,7 +833,7 @@ export function Sidebar({ className }) {
                   : "border-transparent text-wa-muted hover:text-wa-text",
               )}
             >
-              Direct Chat
+              {t("sidebar.direct_chat")}
             </button>
             <button
               onClick={() => setActiveTab("group")}
@@ -843,7 +844,7 @@ export function Sidebar({ className }) {
                   : "border-transparent text-wa-muted hover:text-wa-text",
               )}
             >
-              Create Group
+              {t("sidebar.create_group")}
             </button>
           </div>
 
@@ -853,7 +854,7 @@ export function Sidebar({ className }) {
               <div className="relative mb-3 p-0.5">
                 <Input
                   type="text"
-                  placeholder="Search registered profiles..."
+                  placeholder={t("sidebar.search_profiles")}
                   value={userSearchQuery}
                   onChange={(e) => setUserSearchQuery(e.target.value)}
                   className="pl-9 bg-wa-header border border-wa-border rounded-lg text-xs sm:text-sm py-2 focus:ring-1 focus:ring-wa-primary"
@@ -864,7 +865,7 @@ export function Sidebar({ className }) {
               <div className="flex-1 overflow-y-auto pr-1">
                 {isSearching ? (
                   <div className="py-8 text-center text-xs text-wa-muted animate-pulse">
-                    Searching profiles...
+                    {t("sidebar.searching_profiles")}
                   </div>
                 ) : searchResults.length > 0 ? (
                   searchResults.map((profile) => (
@@ -892,8 +893,8 @@ export function Sidebar({ className }) {
                 ) : (
                   <div className="py-8 text-center text-xs text-wa-muted">
                     {userSearchQuery.trim()
-                      ? "No platform users found matching criteria."
-                      : "Type an email or name to discover members."}
+                      ? t("sidebar.no_profiles_found")
+                      : t("sidebar.type_to_discover")}
                   </div>
                 )}
               </div>
@@ -905,7 +906,7 @@ export function Sidebar({ className }) {
                 <div
                   onClick={handleRandomGroupAvatar}
                   className="cursor-pointer block"
-                  title="Generate Preset Icon"
+                  title={t("sidebar.generate_preset_icon")}
                 >
                   <Avatar
                     src={groupAvatar}
@@ -918,18 +919,18 @@ export function Sidebar({ className }) {
                   <Input
                     className="bg-wa-header border border-wa-border rounded-lg text-xs sm:text-sm py-2 font-medium focus:ring-1 focus:ring-wa-primary"
                     type="text"
-                    placeholder="Group Subject / Title..."
+                    placeholder={t("sidebar.group_subject_placeholder")}
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
                   />
                   <span className="text-[10px] text-wa-muted block mt-1">
-                    Click placeholder icon to pick random custom image
+                    {t("sidebar.click_placeholder_desc")}
                   </span>
                 </div>
               </div>
 
               <div className="text-xs font-medium text-wa-muted mb-1.5">
-                Select Group Participants
+                {t("sidebar.select_participants")}
               </div>
 
               <div className="flex-1 overflow-y-auto border border-wa-border rounded-md p-1.5 mb-3 bg-wa-sidebar">
@@ -970,8 +971,7 @@ export function Sidebar({ className }) {
                   })
                 ) : (
                   <div className="py-8 text-center text-xs text-wa-muted">
-                    No searchable peers ready. Type characters in the Search
-                    input to fetch accounts.
+                    {t("sidebar.no_peers_desc")}
                   </div>
                 )}
               </div>
@@ -982,7 +982,7 @@ export function Sidebar({ className }) {
                 className="w-full"
                 variant="default"
               >
-                Create Group ({selectedMembers.length} Selected)
+                {t("sidebar.create_group_with_count", { count: selectedMembers.length })}
               </Button>
             </div>
           )}
@@ -992,7 +992,7 @@ export function Sidebar({ className }) {
       <Modal
         isOpen={linkedDevicesModalOpen}
         onClose={() => setLinkedDevicesModalOpen(false)}
-        title="Linked Devices"
+        title={t("sidebar.linked_devices")}
       >
         <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-4 select-none">
           {/* Main Visual Graphic (laptop + phone sync mockup) */}
@@ -1008,17 +1008,17 @@ export function Sidebar({ className }) {
               </svg>
             </div>
             <h4 className="text-sm sm:text-base font-semibold text-wa-text">
-              Active Login Sessions
+              {t("sidebar.active_login_sessions")}
             </h4>
             <p className="text-xs text-wa-muted mt-1 max-w-sm leading-relaxed">
-              Your account is currently active on the following instances. You can remotely close any of these active sessions below.
+              {t("sidebar.active_login_sessions_desc")}
             </p>
           </div>
 
           {/* Linked Sessions List */}
           <div className="w-full text-left">
             <span className="text-xs text-wa-muted font-bold uppercase tracking-wider block mb-3 px-1">
-              Active Sessions
+              {t("sidebar.active_sessions")}
             </span>
 
             <div className="flex flex-col gap-2.5">
@@ -1058,7 +1058,7 @@ export function Sidebar({ className }) {
                         <>
                           <span className="h-2 w-2 rounded-full bg-green-500 shrink-0 inline-block animate-ping" />
                           <span className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">
-                            Active
+                            {t("sidebar.active")}
                           </span>
                         </>
                       )}
@@ -1071,7 +1071,7 @@ export function Sidebar({ className }) {
                     onClick={() => handleLogoutDevice(dev)}
                     className="text-[10px] sm:text-xs font-bold text-red-500 hover:underline shrink-0 block"
                   >
-                    Log out
+                    {t("sidebar.logout")}
                   </button>
                 </div>
               ))}
@@ -1081,7 +1081,7 @@ export function Sidebar({ className }) {
                   onClick={handleLogoutAllDevices}
                   className="w-full mt-4 py-2.5 rounded-xl border border-red-500/30 hover:bg-red-500/10 text-red-500 font-bold text-xs sm:text-sm transition-all text-center block outline-none"
                 >
-                  Log out from all devices
+                  {t("sidebar.logout_all_devices")}
                 </button>
               )}
             </div>

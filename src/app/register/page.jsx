@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Avatar } from "../../components/ui/Avatar";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import { loginStart, registerSuccess, loginFailure } from "../../redux/slices/authSlice";
 import { authService } from "../../services/authService";
 import { storageService } from "../../services/storageService";
@@ -24,6 +25,7 @@ import { cn } from "../../utils/cn";
 export default function RegisterPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const loading = useAppSelector((state) => state.auth.loading);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const user = useAppSelector((state) => state.auth.user);
@@ -105,23 +107,23 @@ export default function RegisterPage() {
     setValidationError("");
 
     if (!name.trim()) {
-      setValidationError("Please enter your full name.");
+      setValidationError(t("auth.enter_full_name"));
       return;
     }
     if (!email.trim() || !email.includes("@")) {
-      setValidationError("Please enter a valid email address.");
+      setValidationError(t("auth.invalid_email"));
       return;
     }
     if (password.length < 6) {
-      setValidationError("Password must be at least 6 characters long.");
+      setValidationError(t("auth.password_min_length"));
       return;
     }
     if (password !== confirmPassword) {
-      setValidationError("Passwords do not match.");
+      setValidationError(t("auth.passwords_do_not_match"));
       return;
     }
     if (!termsAccepted) {
-      setValidationError("You must accept the Terms of Service to register.");
+      setValidationError(t("auth.accept_terms_error"));
       return;
     }
 
@@ -170,10 +172,10 @@ export default function RegisterPage() {
               <MessageSquare className="h-7 w-7" />
             </div>
             <h2 className="text-xl font-medium text-wa-text">
-              Create an Account
+              {t("auth.register_title")}
             </h2>
             <p className="text-xs text-wa-muted mt-1">
-              Join WhatsApp Web to instantly message and link contacts
+              {t("auth.register_subtitle")}
             </p>
           </div>
 
@@ -228,16 +230,16 @@ export default function RegisterPage() {
                 className="text-[11px] text-wa-primary hover:underline mt-1.5 font-medium cursor-pointer"
               >
                 {isUploadingAvatar
-                  ? "Uploading image..."
+                  ? t("auth.uploading_image")
                   : avatarPreview
-                  ? "Change profile photo"
-                  : "Upload profile image"}
+                  ? t("auth.change_photo")
+                  : t("auth.upload_image")}
               </button>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-wa-muted mb-1.5">
-                Full Name
+                {t("auth.full_name_label")}
               </label>
               <Input
                 type="text"
@@ -250,7 +252,7 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-xs font-medium text-wa-muted mb-1.5">
-                Email Address
+                {t("auth.email_label")}
               </label>
               <Input
                 type="email"
@@ -263,7 +265,7 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-xs font-medium text-wa-muted mb-1.5">
-                Password
+                {t("auth.password_label")}
               </label>
               <div className="relative flex items-center">
                 <Input
@@ -309,10 +311,10 @@ export default function RegisterPage() {
                   </div>
                   <span className="text-[10px] text-wa-muted mt-1 block">
                     {strengthScore <= 1
-                      ? "Weak password"
+                      ? t("auth.weak_password")
                       : strengthScore === 2
-                        ? "Medium password"
-                        : "Strong password"}
+                        ? t("auth.medium_password")
+                        : t("auth.strong_password")}
                   </span>
                 </div>
               )}
@@ -320,7 +322,7 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-xs font-medium text-wa-muted mb-1.5">
-                Confirm Password
+                {t("auth.confirm_password_label")}
               </label>
               <Input
                 type={showPassword ? "text" : "password"}
@@ -341,15 +343,15 @@ export default function RegisterPage() {
                   className="mt-0.5 h-4 w-4 rounded accent-wa-primary shrink-0"
                 />
                 <span className="text-wa-muted leading-tight">
-                  I agree to the WhatsApp Web Clone{" "}
+                  {t("auth.agree_terms_prefix")}
                   <Link
                     href="/register"
                     onClick={() => alert("Terms of Service summary.")}
                     className="text-wa-primary hover:underline"
                   >
-                    Terms of Service
-                  </Link>{" "}
-                  and Privacy Policy.
+                    {t("auth.terms_of_service")}
+                  </Link>
+                  {t("auth.agree_terms_suffix")}
                 </span>
               </label>
             </div>
@@ -360,18 +362,18 @@ export default function RegisterPage() {
               className="w-full mt-2"
               isLoading={loading}
             >
-              Register
+              {t("auth.register_title").split(" ")[0] || "Register"}
             </Button>
           </form>
 
           {/* Login navigation router */}
           <div className="mt-6 pt-4 border-t border-wa-border text-center text-xs text-wa-muted">
-            Already have an account?{" "}
+            {t("auth.already_have_account")}{" "}
             <Link
               href="/login"
               className="text-wa-primary font-medium hover:underline"
             >
-               Log in here
+               {t("auth.login_here")}
             </Link>
           </div>
         </div>

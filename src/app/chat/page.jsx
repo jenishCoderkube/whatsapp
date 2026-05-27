@@ -9,6 +9,7 @@ import { MessageBubble } from "../../components/Chat/MessageBubble";
 import { ChatInput } from "../../components/Chat/ChatInput";
 import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage } from "../../redux/slices/messageSlice";
 import { updateLastMessage, incrementUnread, setChats } from "../../redux/slices/chatSlice";
 import { setActiveSearchPanelOpen, setMobileScreen } from "../../redux/slices/uiSlice";
@@ -26,6 +27,7 @@ import { StatusPanel } from "../../components/Status/StatusPanel";
 export default function ChatPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const user = useAppSelector((state) => state.auth.user);
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
@@ -294,10 +296,10 @@ export default function ChatPage() {
         if (remainingMessages.length > 0) {
           const newLatest = remainingMessages[remainingMessages.length - 1];
           let previewText = newLatest.text;
-          if (newLatest.type === "image") previewText = "📷 Photo";
-          if (newLatest.type === "video") previewText = "🎥 Video";
-          if (newLatest.type === "file") previewText = "📎 Document";
-          if (newLatest.type === "voice") previewText = "🎤 Voice Message";
+          if (newLatest.type === "image") previewText = `📷 ${t("chat.photo")}`;
+          if (newLatest.type === "video") previewText = `🎥 ${t("chat.video")}`;
+          if (newLatest.type === "file") previewText = `📎 ${t("chat.document")}`;
+          if (newLatest.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
 
           dispatch(
             updateLastMessage({
@@ -391,10 +393,10 @@ export default function ChatPage() {
         }
 
         let previewText = incomingMsg.text;
-        if (incomingMsg.type === "image") previewText = "📷 Photo";
-        if (incomingMsg.type === "video") previewText = "🎥 Video";
-        if (incomingMsg.type === "file") previewText = "📎 Document";
-        if (incomingMsg.type === "voice") previewText = "🎤 Voice Message";
+        if (incomingMsg.type === "image") previewText = `📷 ${t("chat.photo")}`;
+        if (incomingMsg.type === "video") previewText = `🎥 ${t("chat.video")}`;
+        if (incomingMsg.type === "file") previewText = `📎 ${t("chat.document")}`;
+        if (incomingMsg.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
 
         dispatch(
           updateLastMessage({
@@ -438,10 +440,10 @@ export default function ChatPage() {
 
         if (isLatest) {
           let previewText = incomingMsg.text;
-          if (incomingMsg.type === "image") previewText = "📷 Photo";
-          if (incomingMsg.type === "video") previewText = "🎥 Video";
-          if (incomingMsg.type === "file") previewText = "📎 Document";
-          if (incomingMsg.type === "voice") previewText = "🎤 Voice Message";
+          if (incomingMsg.type === "image") previewText = `📷 ${t("chat.photo")}`;
+          if (incomingMsg.type === "video") previewText = `🎥 ${t("chat.video")}`;
+          if (incomingMsg.type === "file") previewText = `📎 ${t("chat.document")}`;
+          if (incomingMsg.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
 
           dispatch(
             updateLastMessage({
@@ -692,15 +694,14 @@ export default function ChatPage() {
                   {isFetchingHistory && (
                     <div className="flex justify-center sticky top-2 z-20">
                       <div className="bg-wa-sidebar/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] text-wa-muted shadow-sm border border-wa-border animate-pulse">
-                        Loading history...
+                        {t("chat.loading_history")}
                       </div>
                     </div>
                   )}
 
                   <div className="flex justify-center mb-4 select-none">
                     <span className="bg-wa-encrypted text-wa-muted text-[11px] sm:text-xs px-3 py-1.5 rounded-md text-center max-w-md shadow-xs transition-colors">
-                      🔒 Messages and calls are end-to-end encrypted. No one
-                      outside of this chat can read or listen to them.
+                      {t("common.encrypted")}
                     </span>
                   </div>
 

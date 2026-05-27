@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useVoiceCall } from "../../hooks/useVoiceCall";
 import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import {
   toggleMic,
   toggleVideo,
@@ -34,6 +35,7 @@ export const CallOverlay = () => {
   } = useVoiceCall();
 
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const user = useAppSelector((state) => state.auth.user);
 
   // Real-time peer control states from Redux
@@ -157,7 +159,7 @@ export const CallOverlay = () => {
                     size="xl"
                     className="w-28 h-28 sm:w-36 sm:h-36 border-4 border-white/10 shadow-2xl relative mb-4"
                   />
-                  <p className="text-white/60 text-sm">Video paused by peer</p>
+                  <p className="text-white/60 text-sm">{t("call.video_paused")}</p>
                 </div>
               )}
 
@@ -187,7 +189,7 @@ export const CallOverlay = () => {
                     <Avatar src={user?.avatar} size="sm" />
                     {!localStream && (
                       <span className="text-[9px] text-white/40 uppercase tracking-wider">
-                        Receive only
+                        {t("call.receive_only")}
                       </span>
                     )}
                   </div>
@@ -211,7 +213,7 @@ export const CallOverlay = () => {
             <>
               <div className="flex items-center gap-2 mb-6 opacity-60">
                 <span className="text-[10px] uppercase tracking-[0.25em] font-bold">
-                  WhatsApp {isVideoCall ? "Video" : "Voice"} Call
+                  WhatsApp {isVideoCall ? t("call.video") : t("call.voice")} Call
                 </span>
               </div>
 
@@ -229,7 +231,7 @@ export const CallOverlay = () => {
               </motion.div>
 
               <h1 className="text-2xl sm:text-4xl font-light mb-2 drop-shadow-lg">
-                {currentPeer?.name || "WhatsApp User"}
+                {currentPeer?.name || t("call.whatsapp_user")}
               </h1>
             </>
           ) : (
@@ -239,7 +241,7 @@ export const CallOverlay = () => {
                 {remoteMuted && (
                   <MicOff
                     className="h-4 w-4 text-red-500 animate-pulse"
-                    title="Peer Muted"
+                    title={t("call.peer_muted")}
                   />
                 )}
               </h2>
@@ -249,15 +251,15 @@ export const CallOverlay = () => {
           <div className="h-10 flex items-center justify-center drop-shadow-md">
             {incomingCall && !activeCall ? (
               <p className="text-wa-primary font-medium animate-pulse tracking-widest text-sm uppercase">
-                Incoming call...
+                {t("call.incoming_call_dots")}
               </p>
             ) : activeCall?.status === "outgoing" ? (
               <p className="text-wa-primary font-medium animate-pulse tracking-widest text-sm uppercase">
-                Ringing...
+                {t("call.ringing")}
               </p>
             ) : activeCall?.status === "connecting" ? (
               <p className="text-white/60 font-medium italic tracking-wide">
-                Connecting...
+                {t("call.connecting")}
               </p>
             ) : (
               <CallTimer startTime={activeCall?.startTime} isActive={true} />
@@ -288,7 +290,7 @@ export const CallOverlay = () => {
                     <PhoneOff className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
                   </div>
                   <span className="text-[11px] font-bold uppercase tracking-widest text-white/50">
-                    Decline
+                    {t("call.decline")}
                   </span>
                 </button>
 
@@ -304,7 +306,7 @@ export const CallOverlay = () => {
                     )}
                   </div>
                   <span className="text-[11px] font-bold uppercase tracking-widest text-white/50">
-                    Accept
+                    {t("call.accept")}
                   </span>
                 </button>
               </div>
@@ -359,7 +361,7 @@ export const CallOverlay = () => {
                             ? "bg-white text-black"
                             : "text-white hover:bg-white/10",
                       )}
-                      title={!hasCamera ? "No camera detected" : "Toggle Video"}
+                      title={!hasCamera ? t("call.no_camera_detected") : t("call.toggle_video")}
                     >
                       {isVideoEnabled && hasCamera ? (
                         <Video className="h-6 w-6" />
@@ -392,7 +394,7 @@ export const CallOverlay = () => {
                           : "text-white hover:bg-white/10",
                     )}
                     title={
-                      !hasMicrophone ? "No microphone detected" : "Toggle Mic"
+                      !hasMicrophone ? t("call.no_microphone_detected") : t("call.toggle_mic")
                     }
                   >
                     {isMicMuted || !hasMicrophone ? (
@@ -420,7 +422,7 @@ export const CallOverlay = () => {
           <div className="mt-10 flex items-center justify-center gap-2 opacity-30 pointer-events-none">
             <div className="h-px w-8 bg-white/50" />
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold">
-              Encrypted
+              {t("call.encrypted")}
             </span>
             <div className="h-px w-8 bg-white/50" />
           </div>
