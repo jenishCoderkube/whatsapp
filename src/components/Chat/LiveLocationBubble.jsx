@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import { MapPin, Navigation, StopCircle, Eye } from "lucide-react";
 import { useAppSelector } from "../../hooks/useRedux";
 import { locationService } from "../../services/locationService";
+import { useTranslation } from "../../hooks/useTranslation";
 import LocationMapModal from "./LocationMapModal";
 
 export default function LiveLocationBubble({ message }) {
+  const { t } = useTranslation();
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
   const isMsgOutgoing = message.isOutgoing;
@@ -29,16 +31,16 @@ export default function LiveLocationBubble({ message }) {
 
       if (diff <= 0) {
         setIsExpired(true);
-        setTimeLeftStr("Ended");
+        setTimeLeftStr(t("chat.location_ended") || "Ended");
       } else {
         setIsExpired(false);
         const minutes = Math.ceil(diff / 60000);
         if (minutes > 60) {
           const hours = Math.floor(minutes / 60);
           const mins = minutes % 60;
-          setTimeLeftStr(`Active (${hours}h ${mins}m left)`);
+          setTimeLeftStr(t("chat.active_hours_left", { hours, mins }) || `Active (${hours}h ${mins}m left)`);
         } else {
-          setTimeLeftStr(`Active (${minutes}m left)`);
+          setTimeLeftStr(t("chat.active_minutes_left", { count: minutes }) || `Active (${minutes}m left)`);
         }
       }
     };
@@ -47,7 +49,7 @@ export default function LiveLocationBubble({ message }) {
     const interval = setInterval(checkExpiration, 15000); // Update every 15s
 
     return () => clearInterval(interval);
-  }, [expiresAtString]);
+  }, [expiresAtString, t]);
 
   // Stop sharing action
   const handleStopSharing = async (e) => {
@@ -56,7 +58,7 @@ export default function LiveLocationBubble({ message }) {
     try {
       await locationService.stopSharing(message.conversationId, currentUserId);
       setIsExpired(true);
-      setTimeLeftStr("Ended");
+      setTimeLeftStr(t("chat.location_ended") || "Ended");
     } catch (err) {
       console.error(err);
     } finally {
@@ -64,7 +66,7 @@ export default function LiveLocationBubble({ message }) {
     }
   };
 
-  const senderName = message.profiles?.name || (isMsgOutgoing ? "You" : "Contact");
+  const senderName = message.profiles?.name || (isMsgOutgoing ? (t("chat.you") || "You") : (t("chat.contact") || "Contact"));
 
   return (
     <div className="flex flex-col w-[170px] sm:w-[210px] overflow-hidden rounded-xl bg-wa-sidebar border border-wa-border/50 shadow-xs select-none">
@@ -97,14 +99,14 @@ export default function LiveLocationBubble({ message }) {
         {/* Hover overlay CTA */}
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[9px] sm:text-[10px] font-semibold gap-1 backdrop-blur-xs">
           <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-          View Live Map
+          {t("chat.view_live_map") || "View Live Map"}
         </div>
       </div>
 
       {/* 2. Text Details */}
       <div className="p-2 sm:p-2.5 flex flex-col gap-0.5 text-left bg-wa-sidebar">
         <span className="font-semibold text-[10px] sm:text-[11px] text-wa-text truncate w-full">
-          {isMsgOutgoing ? "Your Live Location" : `${senderName}'s Live Location`}
+          {isMsgOutgoing ? (t("chat.your_live_location") || "Your Live Location") : (t("chat.users_live_location", { name: senderName }) || `${senderName}'s Live Location`)}
         </span>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span 
@@ -125,7 +127,7 @@ export default function LiveLocationBubble({ message }) {
               className="flex-1 flex items-center justify-center gap-0.5 py-1 rounded-lg bg-wa-hover hover:bg-wa-active text-wa-text text-[9px] sm:text-[10px] font-bold transition-all border border-wa-border"
             >
               <Eye className="h-3 w-3 text-wa-primary" />
-              View
+              {t("chat.view_location") || t("common.view") || "View"}
             </button>
             {isMsgOutgoing && (
               <button
@@ -134,7 +136,7 @@ export default function LiveLocationBubble({ message }) {
                 className="flex-1 flex items-center justify-center gap-0.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 text-[9px] sm:text-[10px] font-bold transition-all border border-red-100 disabled:opacity-50"
               >
                 <StopCircle className="h-3 w-3" />
-                Stop
+                {t("chat.stop") || "Stop"}
               </button>
             )}
           </div>

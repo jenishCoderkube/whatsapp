@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { X, Send, Palette } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTranslation } from "../../hooks/useTranslation";
 
 const TEXT_BG_COLORS = [
   "#005c4b", // WhatsApp Green
@@ -25,6 +26,7 @@ const FONT_STYLES = [
 ];
 
 export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgress }) {
+  const { t } = useTranslation();
   const [textContent, setTextContent] = useState("");
   const [textBgColor, setTextBgColor] = useState(TEXT_BG_COLORS[0]);
   const [textStyleIndex, setTextStyleIndex] = useState(0);
@@ -61,7 +63,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
         <button
           onClick={onCancel}
           className="p-2 rounded-full hover:bg-black/10 text-white cursor-pointer"
-          title="Cancel"
+          title={t("common.cancel") || "Cancel"}
         >
           <X className="h-6 w-6" />
         </button>
@@ -70,7 +72,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
           <button
             onClick={handleCycleTextStyle}
             className="p-2.5 rounded-full hover:bg-black/10 text-white cursor-pointer flex items-center justify-center font-bold text-sm h-10 w-10 border border-white/20"
-            title="Font style"
+            title={t("status.font_style") || "Font style"}
             style={{ fontFamily: FONT_STYLES[textStyleIndex].family }}
           >
             T
@@ -78,7 +80,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
           <button
             onClick={handleCycleBgColor}
             className="p-2.5 rounded-full hover:bg-black/10 text-white cursor-pointer flex items-center justify-center h-10 w-10 border border-white/20"
-            title="Background color"
+            title={t("status.bg_color") || "Background color"}
           >
             <Palette className="h-5 w-5" />
           </button>
@@ -89,7 +91,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
       <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-4">
         <textarea
           className="w-full max-w-2xl bg-transparent border-none text-white text-center font-medium focus:ring-0 focus:outline-none resize-none overflow-hidden placeholder-white/40"
-          placeholder="Type a status update"
+          placeholder={t("status.type_status_update") || "Type a status update"}
           value={textContent}
           onChange={(e) => {
             setTextContent(e.target.value);
@@ -111,14 +113,14 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
       <div className="p-6 flex justify-end bg-black/10 shrink-0">
         {uploading ? (
           <div className="flex items-center gap-3 bg-[#00a884] text-white px-5 py-2.5 rounded-full shadow-md font-medium text-sm animate-pulse">
-            <span>Uploading... ({uploadProgress}%)</span>
+            <span>{t("status.uploading_percentage", { progress: uploadProgress }) || `Uploading... (${uploadProgress}%)`}</span>
           </div>
         ) : (
           <button
             onClick={handleSend}
             disabled={!textContent.trim()}
             className="h-14 w-14 rounded-full bg-[#00a884] text-white shadow-lg flex items-center justify-center cursor-pointer hover:bg-[#008f72] disabled:bg-[#00a884]/40 disabled:text-white/40 disabled:cursor-not-allowed transition-all"
-            title="Send status update"
+            title={t("status.send_status_update") || "Send status update"}
           >
             <Send className="h-6 w-6 translate-x-0.5" />
           </button>

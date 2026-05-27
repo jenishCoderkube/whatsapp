@@ -3,8 +3,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { X, Loader2, StopCircle } from "lucide-react";
 import { locationService } from "../../services/locationService";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export default function LocationMapModal({ conversationId, currentUserId, onClose }) {
+  const { t } = useTranslation();
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
@@ -181,11 +183,13 @@ export default function LocationMapModal({ conversationId, currentUserId, onClos
         {/* Header bar */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-wa-border bg-wa-header">
           <div className="flex flex-col">
-            <h3 className="font-semibold text-wa-text text-base">Live Locations</h3>
+            <h3 className="font-semibold text-wa-text text-base">{t("chat.live_locations") || "Live Locations"}</h3>
             <p className="text-xs text-wa-muted">
               {locations.length === 0
-                ? "No active sharing sessions"
-                : `${locations.length} contact${locations.length > 1 ? "s" : ""} sharing live`}
+                ? t("chat.no_active_sharing") || "No active sharing sessions"
+                : locations.length > 1
+                  ? t("chat.contacts_sharing_live", { count: locations.length }) || `${locations.length} contacts sharing live`
+                  : t("chat.contact_sharing_live", { count: locations.length }) || `${locations.length} contact sharing live`}
             </p>
           </div>
           <button
@@ -201,7 +205,7 @@ export default function LocationMapModal({ conversationId, currentUserId, onClos
           {isLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-wa-bg z-20">
               <Loader2 className="h-8 w-8 text-[#00a884] animate-spin" />
-              <span className="text-sm text-wa-muted">Loading map data...</span>
+              <span className="text-sm text-wa-muted">{t("chat.loading_map_data") || "Loading map data..."}</span>
             </div>
           )}
           <div ref={mapContainerRef} className="w-full h-full z-10" />
@@ -220,7 +224,7 @@ export default function LocationMapModal({ conversationId, currentUserId, onClos
               ) : (
                 <StopCircle className="h-4 w-4" />
               )}
-              Stop Sharing Live Location
+              {t("chat.stop_sharing_live_location") || "Stop Sharing Live Location"}
             </button>
           </footer>
         )}

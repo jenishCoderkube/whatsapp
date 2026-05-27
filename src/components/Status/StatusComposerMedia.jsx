@@ -4,8 +4,10 @@ import React, { useState } from "react";
 import { X, Send } from "lucide-react";
 import { Input } from "../ui/Input";
 import { motion } from "framer-motion";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export function StatusComposerMedia({ mediaFile, previewUrl, onCancel, onSubmit, uploading, uploadProgress }) {
+  const { t } = useTranslation();
   const [caption, setCaption] = useState("");
 
   const handleSend = () => {
@@ -24,11 +26,11 @@ export function StatusComposerMedia({ mediaFile, previewUrl, onCancel, onSubmit,
         <button
           onClick={onCancel}
           className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer"
-          title="Cancel"
+          title={t("common.cancel") || "Cancel"}
         >
           <X className="h-6 w-6" />
         </button>
-        <span className="text-sm font-semibold">Preview Status update</span>
+        <span className="text-sm font-semibold">{t("status.preview_status") || "Preview Status update"}</span>
         <div className="w-10 h-10" />
       </div>
 
@@ -54,7 +56,7 @@ export function StatusComposerMedia({ mediaFile, previewUrl, onCancel, onSubmit,
         <div className="flex items-center gap-3 bg-[#2a3942] rounded-lg px-4 py-1">
           <Input
             type="text"
-            placeholder="Add a caption..."
+            placeholder={t("chat.add_caption") || "Add a caption..."}
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             className="bg-transparent border-none text-white text-sm focus:ring-0 focus:outline-none flex-1 py-3"
@@ -64,13 +66,13 @@ export function StatusComposerMedia({ mediaFile, previewUrl, onCancel, onSubmit,
         <div className="flex justify-end pt-1">
           {uploading ? (
             <div className="flex items-center gap-3 bg-[#00a884] text-white px-5 py-2.5 rounded-full shadow-md font-medium text-sm animate-pulse">
-              <span>Uploading status media... ({uploadProgress}%)</span>
+              <span>{t("status.uploading_media", { progress: uploadProgress }) || `Uploading status media... (${uploadProgress}%)`}</span>
             </div>
           ) : (
             <button
               onClick={handleSend}
               className="h-14 w-14 rounded-full bg-[#00a884] text-white shadow-lg flex items-center justify-center cursor-pointer hover:bg-[#008f72] transition-colors"
-              title="Upload status update"
+              title={t("status.upload_status_update") || "Upload status update"}
             >
               <Send className="h-6 w-6 translate-x-0.5" />
             </button>

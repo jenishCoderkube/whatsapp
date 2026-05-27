@@ -728,7 +728,7 @@ export function ChatInput() {
         }
       } catch (err) {
         console.error("Failed to edit message:", err);
-        setToastError(err.message || "Failed to edit message.");
+        setToastError(err.message || t("chat.edit_failed") || "Failed to edit message.");
       }
       return;
     }

@@ -8,8 +8,10 @@ import { Avatar } from "../ui/Avatar";
 import { useAppSelector } from "../../hooks/useRedux";
 import { profileService } from "../../services/profileService";
 import { Check, Search, X } from "lucide-react";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPrivacyList = [], onSave }) {
+  const { t } = useTranslation();
   const user = useAppSelector((state) => state.auth.user);
   const [privacy, setPrivacy] = useState(currentPrivacy || "contacts");
   const [selectedUsers, setSelectedUsers] = useState(currentPrivacyList || []);
@@ -65,17 +67,17 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Status privacy settings">
+    <Modal isOpen={isOpen} onClose={onClose} title={t("status.status_privacy_settings") || "Status privacy settings"}>
       <div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto px-1 select-none">
         <div className="text-xs text-wa-muted mb-2">
-          Who can see your status updates:
+          {t("status.privacy_desc") || "Who can see your status updates:"}
         </div>
 
         {/* Option: My Contacts */}
         <label className="flex items-center justify-between p-3 rounded-lg hover:bg-wa-hover cursor-pointer border border-wa-border/50">
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-wa-text">My contacts</span>
-            <span className="text-xs text-wa-muted">All your contacts on WhatsApp</span>
+            <span className="text-sm font-medium text-wa-text">{t("status.my_status") || "My contacts"}</span>
+            <span className="text-xs text-wa-muted">{t("status.updates_visible_desc") || "All your contacts on WhatsApp"}</span>
           </div>
           <input
             type="radio"
@@ -89,8 +91,8 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
         {/* Option: Everyone */}
         <label className="flex items-center justify-between p-3 rounded-lg hover:bg-wa-hover cursor-pointer border border-wa-border/50">
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-wa-text">Everyone</span>
-            <span className="text-xs text-wa-muted">Any authenticated user</span>
+            <span className="text-sm font-medium text-wa-text">{t("status.everyone") || "Everyone"}</span>
+            <span className="text-xs text-wa-muted">{t("status.everyone_desc") || "Any authenticated user"}</span>
           </div>
           <input
             type="radio"
@@ -104,8 +106,8 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
         {/* Option: Selected Contacts (whitelist) */}
         <label className="flex items-center justify-between p-3 rounded-lg hover:bg-wa-hover cursor-pointer border border-wa-border/50">
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-wa-text">Only share with...</span>
-            <span className="text-xs text-wa-muted">Select specific contacts to share with</span>
+            <span className="text-sm font-medium text-wa-text">{t("status.only_share_with") || "Only share with..."}</span>
+            <span className="text-xs text-wa-muted">{t("status.only_share_with_desc") || "Select specific contacts to share with"}</span>
           </div>
           <input
             type="radio"
@@ -119,8 +121,8 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
         {/* Option: Hide from Specific Contacts (blacklist) */}
         <label className="flex items-center justify-between p-3 rounded-lg hover:bg-wa-hover cursor-pointer border border-wa-border/50">
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-wa-text">Hide status from...</span>
-            <span className="text-xs text-wa-muted">Select contacts to exclude from seeing updates</span>
+            <span className="text-sm font-medium text-wa-text">{t("status.hide_from") || "Hide status from..."}</span>
+            <span className="text-xs text-wa-muted">{t("status.hide_from_desc") || "Select contacts to exclude from seeing updates"}</span>
           </div>
           <input
             type="radio"
@@ -135,7 +137,9 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
         {(privacy === "selected" || privacy === "hide") && (
           <div className="flex flex-col gap-2 mt-2 pt-3 border-t border-wa-border">
             <span className="text-xs font-semibold text-wa-primary uppercase tracking-wider mb-1">
-              {privacy === "selected" ? "Select Contacts to Share With" : "Select Contacts to Exclude"}
+              {privacy === "selected"
+                ? (t("status.select_contacts_share") || "Select Contacts to Share With")
+                : (t("status.select_contacts_exclude") || "Select Contacts to Exclude")}
             </span>
 
             {/* Search input */}
@@ -143,7 +147,7 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
               <Search className="absolute left-3 h-4 w-4 text-wa-muted" />
               <Input
                 type="text"
-                placeholder="Search contacts..."
+                placeholder={t("status.search_contacts") || "Search contacts..."}
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 className="pl-9 h-9 text-xs"
@@ -153,7 +157,7 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
             {/* Profiles list */}
             <div className="flex flex-col gap-1 max-h-[30vh] overflow-y-auto">
               {loading ? (
-                <div className="text-center py-4 text-xs text-wa-muted">Loading contacts...</div>
+                <div className="text-center py-4 text-xs text-wa-muted">{t("status.loading_contacts") || "Loading contacts..."}</div>
               ) : profiles.length > 0 ? (
                 profiles.map((prof) => {
                   const isSelected = selectedUsers.includes(prof.id);
@@ -185,7 +189,7 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
                   );
                 })
               ) : (
-                <div className="text-center py-4 text-xs text-wa-muted">No contacts found</div>
+                <div className="text-center py-4 text-xs text-wa-muted">{t("status.no_contacts_found") || "No contacts found"}</div>
               )}
             </div>
           </div>
@@ -194,10 +198,10 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
         {/* Buttons */}
         <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-wa-border shrink-0">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
+            {t("common.cancel") || "Cancel"}
           </Button>
           <Button size="sm" onClick={handleSave}>
-            Save privacy settings
+            {t("status.save_privacy") || "Save privacy settings"}
           </Button>
         </div>
       </div>

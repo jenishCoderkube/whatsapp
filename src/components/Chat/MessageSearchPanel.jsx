@@ -6,10 +6,12 @@ import { useAppDispatch } from "../../hooks/useRedux";
 import { setActiveSearchPanelOpen } from "../../redux/slices/uiSlice";
 import { formatMessageTime } from "../../utils/dateUtils";
 import { messageService } from "../../services/messageService";
+import { useTranslation } from "../../hooks/useTranslation";
 import { cn } from "../../utils/cn";
 
 export function MessageSearchPanel({ chat, onJumpToMessage }) {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -74,7 +76,7 @@ export function MessageSearchPanel({ chat, onJumpToMessage }) {
           >
             <X className="h-5 w-5" />
           </button>
-          <span className="text-sm sm:text-base font-semibold text-wa-text">Search messages</span>
+          <span className="text-sm sm:text-base font-semibold text-wa-text">{t("chat.search_messages") || "Search messages"}</span>
         </div>
       </div>
 
@@ -84,7 +86,7 @@ export function MessageSearchPanel({ chat, onJumpToMessage }) {
           <Search className="h-4.5 w-4.5 text-wa-muted shrink-0" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder={t("chat.search_placeholder") || t("common.search") || "Search..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-transparent border-none text-xs sm:text-sm text-wa-text focus:outline-none w-full placeholder:text-wa-muted"
@@ -111,21 +113,23 @@ export function MessageSearchPanel({ chat, onJumpToMessage }) {
                 <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             </div>
-            <span className="text-xs text-wa-muted animate-pulse">Searching conversation...</span>
+            <span className="text-xs text-wa-muted animate-pulse">{t("chat.searching_conversation") || "Searching conversation..."}</span>
           </div>
         ) : !searchQuery.trim() ? (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-wa-muted select-none">
             <Search className="h-10 w-10 text-wa-border mb-3" />
-            <span className="text-xs sm:text-sm font-medium">Search for messages in this chat.</span>
+            <span className="text-xs sm:text-sm font-medium">{t("chat.search_messages_desc") || "Search for messages in this chat."}</span>
           </div>
         ) : searchResults.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-wa-muted select-none">
-            <span className="text-xs sm:text-sm font-medium">No messages found</span>
+            <span className="text-xs sm:text-sm font-medium">{t("chat.no_messages_found") || "No messages found"}</span>
           </div>
         ) : (
           <div className="flex flex-col gap-1 px-2">
             <span className="text-[10px] sm:text-[11px] text-wa-muted px-2 py-1 uppercase font-bold tracking-wider">
-              {searchResults.length} message{searchResults.length > 1 ? "s" : ""} found
+              {searchResults.length > 1 
+                ? t("chat.messages_found_count", { count: searchResults.length }) || `${searchResults.length} messages found`
+                : t("chat.message_found_count", { count: searchResults.length }) || `${searchResults.length} message found`}
             </span>
             {searchResults.map((msg) => {
               const displayTime = msg.createdAt ? formatMessageTime(msg.createdAt) : "";
@@ -137,7 +141,7 @@ export function MessageSearchPanel({ chat, onJumpToMessage }) {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-wa-primary">
-                      {msg.senderName || "Member"}
+                      {msg.senderName || t("chat.member") || "Member"}
                     </span>
                     <span className="text-[10px] text-wa-muted">{displayTime}</span>
                   </div>

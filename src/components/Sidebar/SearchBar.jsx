@@ -5,8 +5,10 @@ import { Search, ArrowLeft, Filter } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { setSearchQuery } from "../../redux/slices/chatSlice";
 import { cn } from "../../utils/cn";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export function SearchBar() {
+  const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const searchQuery = useAppSelector((state) => state.chat.searchQuery);
   const [isFocused, setIsFocused] = useState(false);
@@ -38,7 +40,7 @@ export function SearchBar() {
 
         <input
           type="text"
-          placeholder="Search or start new chat"
+          placeholder={t("sidebar.search_or_start") || "Search or start new chat"}
           value={searchQuery}
           onFocus={() => setIsFocused(true)}
           onBlur={() => {
@@ -49,7 +51,7 @@ export function SearchBar() {
         />
       </div>
 
-      <button className="p-1 rounded-full text-wa-muted hover:bg-wa-active transition-colors" title="Unread chats filter">
+      <button className="p-1 rounded-full text-wa-muted hover:bg-wa-active transition-colors" title={t("sidebar.unread_filter") || "Unread chats filter"}>
         <Filter className="h-4 w-4" />
       </button>
     </div>

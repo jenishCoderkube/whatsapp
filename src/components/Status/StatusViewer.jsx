@@ -8,14 +8,18 @@ import { StatusViewersDrawer } from "./StatusViewersDrawer";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   ssr: false,
-  loading: () => (
-    <div className="w-[280px] h-[350px] bg-wa-modal flex items-center justify-center text-xs text-wa-muted">
-      Loading Emojis...
-    </div>
-  ),
+  loading: () => {
+    const { t } = useTranslation();
+    return (
+      <div className="w-[280px] h-[350px] bg-wa-modal flex items-center justify-center text-xs text-wa-muted">
+        {t("chat.loading_emojis") || "Loading Emojis..."}
+      </div>
+    );
+  },
 });
 
 const FONT_STYLES = [
@@ -46,6 +50,7 @@ export function StatusViewer({
   onSendReaction,
   videoRef,
 }) {
+  const { t } = useTranslation();
   const [viewersListOpen, setViewersListOpen] = useState(false);
   const [showFullReactionPicker, setShowFullReactionPicker] = useState(false);
 
@@ -194,7 +199,7 @@ export function StatusViewer({
           />
           <div className="flex flex-col text-left">
             <span className="text-sm font-semibold text-white">
-              {activeUserId === currentUser?.id ? "My status" : activeGroup?.name}
+              {activeUserId === currentUser?.id ? (t("status.my_status") || "My status") : activeGroup?.name}
             </span>
             <span className="text-xs text-white/70">
               {new Date(activeStatus?.createdAt).toLocaleTimeString([], {
@@ -215,7 +220,7 @@ export function StatusViewer({
                 onDelete(activeStatus?.id);
               }}
               className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer transition-all active:scale-95"
-              title="Delete status update"
+              title={t("status.delete_status_update") || "Delete status update"}
             >
               <Trash2 className="h-5 w-5" />
             </button>
@@ -229,7 +234,7 @@ export function StatusViewer({
                 onSetIsMuted(!isMuted);
               }}
               className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer transition-all active:scale-95"
-              title={isMuted ? "Unmute" : "Mute"}
+              title={isMuted ? (t("status.unmute") || "Unmute") : (t("status.mute") || "Mute")}
             >
               {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
@@ -239,7 +244,7 @@ export function StatusViewer({
           <button
             onClick={handlePauseToggle}
             className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer transition-all active:scale-95"
-            title={isPaused ? "Play" : "Pause"}
+            title={isPaused ? (t("status.play") || "Play") : (t("status.pause") || "Pause")}
           >
             {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
           </button>
@@ -251,7 +256,7 @@ export function StatusViewer({
               onClose();
             }}
             className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer transition-all active:scale-95"
-            title="Close"
+            title={t("common.close") || "Close"}
           >
             <X className="h-6 w-6" />
           </button>
@@ -360,7 +365,7 @@ export function StatusViewer({
               >
                 <Eye className="h-4 w-4" />
                 <span>
-                  {activeStatus?.views?.length || 0} {activeStatus?.views?.length === 1 ? "view" : "views"}
+                  {activeStatus?.views?.length || 0} {activeStatus?.views?.length === 1 ? (t("status.view") || "view") : (t("status.views") || "views")}
                 </span>
               </button>
             </div>
@@ -377,7 +382,7 @@ export function StatusViewer({
                       onSendReaction(emoji);
                     }}
                     className="text-2xl hover:scale-130 active:scale-90 transition-all duration-100 cursor-pointer p-1"
-                    title={`React ${emoji}`}
+                    title={t("status.react_emoji", { emoji }) || `React ${emoji}`}
                   >
                     {emoji}
                   </button>
@@ -390,7 +395,7 @@ export function StatusViewer({
                     setShowFullReactionPicker(true);
                   }}
                   className="text-wa-primary hover:scale-130 active:scale-90 transition-all duration-100 cursor-pointer p-1 font-bold text-xl ml-1 leading-none"
-                  title="React with any emoji"
+                  title={t("status.react_any_emoji") || "React with any emoji"}
                 >
                   +
                 </button>
@@ -400,7 +405,7 @@ export function StatusViewer({
               <div className="flex items-center gap-3 bg-[#2a3942] rounded-lg px-4 py-1 border border-white/5">
                 <Input
                   type="text"
-                  placeholder="Type a reply..."
+                  placeholder={t("status.type_reply") || "Type a reply..."}
                   value={replyText}
                   onChange={(e) => onSetReplyText(e.target.value)}
                   onFocus={() => {
@@ -428,7 +433,7 @@ export function StatusViewer({
                   }}
                   disabled={!replyText.trim()}
                   className="p-1 rounded-full text-wa-primary disabled:text-wa-muted/40 cursor-pointer hover:bg-white/5 transition-all"
-                  title="Send Reply"
+                  title={t("status.send_reply") || "Send Reply"}
                 >
                   <Send className="h-5 w-5" />
                 </button>

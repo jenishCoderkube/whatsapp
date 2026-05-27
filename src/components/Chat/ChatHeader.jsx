@@ -39,8 +39,10 @@ import { storageService } from "../../services/storageService";
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
 import { useVoiceCall } from "../../hooks/useVoiceCall";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export function ChatHeader() {
+  const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const chats = useAppSelector((state) => state.chat.chats);
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
@@ -95,7 +97,7 @@ export function ChatHeader() {
       );
     } catch (err) {
       console.error("Failed to update disappearing duration:", err);
-      alert("Failed to update disappearing messages setting.");
+      alert(t("chat.disappearing_messages_failed") || "Failed to update disappearing messages setting.");
     } finally {
       setIsUpdatingDuration(false);
     }
@@ -112,7 +114,7 @@ export function ChatHeader() {
         activeChat.id,
       );
     } else {
-      alert("Voice calling for groups is coming soon!");
+      alert(t("call.group_voice_coming_soon") || "Voice calling for groups is coming soon!");
     }
   };
 
@@ -128,7 +130,7 @@ export function ChatHeader() {
         "video",
       );
     } else {
-      alert("Video calling for groups is coming soon!");
+      alert(t("call.group_video_coming_soon") || "Video calling for groups is coming soon!");
     }
   };
 
@@ -162,7 +164,7 @@ export function ChatHeader() {
       dispatch(updateChatAvatar({ chatId: activeChatId, avatar: uploadedUrl }));
     } catch (err) {
       console.error("Failed to update group avatar:", err);
-      alert("Failed to update group avatar.");
+      alert(t("chat.group_avatar_failed") || "Failed to update group avatar.");
     } finally {
       setIsUpdatingAvatar(false);
       if (e.target) e.target.value = "";
@@ -228,14 +230,14 @@ export function ChatHeader() {
       await fetchMembers();
       setShowAddMember(false);
     } catch (e) {
-      alert("Failed to add member");
+      alert(t("chat.add_member_failed") || "Failed to add member");
     } finally {
       setIsActionPending(false);
     }
   };
 
   const handleRemoveMember = async (targetId) => {
-    if (!window.confirm("Are you sure you want to remove this member?")) return;
+    if (!window.confirm(t("chat.remove_member_confirm") || "Are you sure you want to remove this member?")) return;
     setIsActionPending(true);
     try {
       await chatService.removeGroupMember(
@@ -245,14 +247,14 @@ export function ChatHeader() {
       );
       await fetchMembers();
     } catch (e) {
-      alert("Failed to remove member");
+      alert(t("chat.remove_member_failed") || "Failed to remove member");
     } finally {
       setIsActionPending(false);
     }
   };
 
   const handleLeaveGroup = async () => {
-    if (!window.confirm("Are you sure you want to leave this group?")) return;
+    if (!window.confirm(t("chat.leave_group_confirm") || "Are you sure you want to leave this group?")) return;
     setIsActionPending(true);
     try {
       await chatService.leaveGroup(activeChatId, currentUserId);
@@ -260,7 +262,7 @@ export function ChatHeader() {
       dispatch(setActiveChat(null));
       setInfoModal(false);
     } catch (e) {
-      alert("Failed to leave group");
+      alert(t("chat.leave_group_failed") || "Failed to leave group");
     } finally {
       setIsActionPending(false);
     }
@@ -276,8 +278,8 @@ export function ChatHeader() {
 
   const typingText =
     typingNames.length > 1
-      ? `${typingNames.join(", ")} are typing...`
-      : `${typingNames[0]} is typing...`;
+      ? (t("chat.multiple_typing", { names: typingNames.join(", ") }) || `${typingNames.join(", ")} are typing...`)
+      : (t("chat.one_typing", { name: typingNames[0] }) || `${typingNames[0]} is typing...`);
 
   const formatLastSeen = (timestamp) => {
     if (!timestamp) return activeChat.phoneNumber;
@@ -297,16 +299,16 @@ export function ChatHeader() {
     });
 
     if (isToday) {
-      return `last seen today at ${timeStr}`;
+      return t("chat.last_seen_today", { time: timeStr }) || `last seen today at ${timeStr}`;
     } else if (isYesterday) {
-      return `last seen yesterday at ${timeStr}`;
+      return t("chat.last_seen_yesterday", { time: timeStr }) || `last seen yesterday at ${timeStr}`;
     } else {
       const dateStr = date.toLocaleDateString([], {
         day: "numeric",
         month: "short",
         year: "numeric",
       });
-      return `last seen ${dateStr} at ${timeStr}`;
+      return t("chat.last_seen_datetime", { date: dateStr, time: timeStr }) || `last seen ${dateStr} at ${timeStr}`;
     }
   };
 
@@ -316,18 +318,18 @@ export function ChatHeader() {
         groupMembers.length > 0
           ? groupMembers.length
           : activeChat.groupMembersCount || 0;
-      return `${count} participants`;
+      return t("chat.participants_count", { count }) || `${count} participants`;
     }
-    if (activeChat.online) return "Online";
+    if (activeChat.online) return t("chat.online") || "Online";
     if (activeChat.lastSeen) return formatLastSeen(activeChat.lastSeen);
     return activeChat.phoneNumber;
   };
 
   const headerOptions = [
-    { label: "Contact Info", onClick: () => setInfoModal(true) },
-    { label: "Select Messages", onClick: () => {} },
-    { label: "Close Chat", onClick: () => dispatch(setMobileScreen("list")) },
-    { label: "Clear messages", danger: true, onClick: () => {} },
+    { label: t("chat.contact_info") || "Contact Info", onClick: () => setInfoModal(true) },
+    { label: t("chat.select_messages") || "Select Messages", onClick: () => {} },
+    { label: t("chat.close_chat") || "Close Chat", onClick: () => dispatch(setMobileScreen("list")) },
+    { label: t("chat.clear_messages") || "Clear messages", danger: true, onClick: () => {} },
   ];
 
   return (
@@ -358,7 +360,7 @@ export function ChatHeader() {
           {activeChat.disappearingDuration > 0 && (
             <div
               className="absolute -bottom-1 -right-1 bg-wa-header rounded-full p-0.5 border border-wa-border shadow-xs z-10"
-              title="Disappearing messages active"
+              title={t("chat.disappearing_messages_active") || "Disappearing messages active"}
             >
               <Clock className="h-3 w-3 text-[#00a884]" />
             </div>
@@ -370,7 +372,7 @@ export function ChatHeader() {
                 groupAvatarFileInputRef.current?.click();
               }}
               className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity text-white cursor-pointer"
-              title="Change Group Icon"
+              title={t("chat.change_group_icon") || "Change Group Icon"}
             >
               <Upload className="h-3 w-3" />
             </div>
@@ -407,12 +409,12 @@ export function ChatHeader() {
             }
             items={[
               {
-                label: "Voice Call",
+                label: t("call.voice_call") || "Voice Call",
                 icon: <Phone className="h-3.5 w-3.5" />,
                 onClick: handleVoiceCallTrigger,
               },
               {
-                label: "Video Call",
+                label: t("call.video_call") || "Video Call",
                 icon: <Video className="h-3.5 w-3.5" />,
                 onClick: handleVideoCallTrigger,
               },
@@ -424,7 +426,7 @@ export function ChatHeader() {
         <button
           onClick={handleVoiceCallTrigger}
           className="p-2 rounded-full hover:bg-wa-active transition-colors hidden sm:inline-flex"
-          title="Voice Call"
+          title={t("call.voice_call") || "Voice Call"}
         >
           <Phone className="h-4 w-4" />
         </button>
@@ -432,7 +434,7 @@ export function ChatHeader() {
         <button
           onClick={handleVideoCallTrigger}
           className="p-2 rounded-full hover:bg-wa-active transition-colors hidden sm:inline-flex"
-          title="Video Call"
+          title={t("call.video_call") || "Video Call"}
         >
           <Video className="h-4 w-4" />
         </button>
@@ -440,7 +442,7 @@ export function ChatHeader() {
         <button
           onClick={() => dispatch(setActiveSearchPanelOpen(true))}
           className="p-2 rounded-full hover:bg-wa-active transition-colors"
-          title="Search Messages"
+          title={t("chat.search_messages") || "Search Messages"}
         >
           <Search className="h-4 w-4" />
         </button>
@@ -462,7 +464,7 @@ export function ChatHeader() {
           setInfoModal(false);
           setShowAddMember(false);
         }}
-        title={activeChat.isGroup ? "Group info" : "Contact info"}
+        title={activeChat.isGroup ? (t("chat.group_info") || "Group info") : (t("chat.contact_info") || "Contact info")}
         className="md:max-w-3xl"
       >
         <div className="flex flex-col md:flex-row md:items-stretch gap-6 max-h-[75vh] overflow-y-auto md:overflow-hidden pr-1">
@@ -490,7 +492,7 @@ export function ChatHeader() {
                 >
                   <Upload className="h-6 w-6 mb-1" />
                   <span className="text-[10px] font-bold leading-tight">
-                    CHANGE GROUP ICON
+                    {t("chat.change_group_icon_upper") || "CHANGE GROUP ICON"}
                   </span>
                 </div>
               )}
@@ -510,22 +512,21 @@ export function ChatHeader() {
 
             <div className="w-full mt-6 pt-4 border-t border-wa-border flex flex-col gap-2 text-left">
               <span className="text-xs text-wa-muted font-bold uppercase tracking-wider">
-                {activeChat.isGroup ? "Description" : "Details"}
+                {activeChat.isGroup ? (t("chat.description") || "Description") : (t("chat.details") || "Details")}
               </span>
               <span className="text-sm font-medium text-wa-text break-words">
                 {activeChat.isGroup
-                  ? activeChat.description || "No group description provided."
+                  ? activeChat.description || (t("chat.no_description") || "No group description provided.")
                   : activeChat.phoneNumber}
               </span>
             </div>
 
             <div className="w-full mt-4 pt-4 border-t border-wa-border flex flex-col gap-2 text-left">
               <span className="text-xs text-wa-muted font-bold uppercase tracking-wider">
-                Encryption
+                {t("chat.encryption") || "Encryption"}
               </span>
               <p className="text-[11px] leading-relaxed text-wa-muted">
-                Messages and calls are end-to-end encrypted. No one outside of
-                this chat can read or listen to them.
+                {t("chat.encryption_desc") || "Messages and calls are end-to-end encrypted. No one outside of this chat can read or listen to them."}
               </p>
             </div>
           </div>
@@ -536,7 +537,7 @@ export function ChatHeader() {
               <div className="flex flex-col h-auto md:h-full relative min-h-[300px] md:min-h-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-wa-muted uppercase font-bold tracking-tighter">
-                    {groupMembers.length} Participants
+                    {t("chat.participants_count", { count: groupMembers.length }) || `${groupMembers.length} Participants`}
                   </span>
                   {!activeChat.isLeft && isAdmin && (
                     <button
@@ -544,7 +545,7 @@ export function ChatHeader() {
                       className="flex items-center gap-1.5 text-wa-primary text-xs font-semibold hover:bg-wa-active px-2.5 py-1.5 rounded-md transition-all border border-wa-primary/20"
                     >
                       <UserPlus className="h-4 w-4" />
-                      Add Member
+                      {t("chat.add_member") || "Add Member"}
                     </button>
                   )}
                 </div>
@@ -553,7 +554,7 @@ export function ChatHeader() {
                   {isFetchingMembers ? (
                     <div className="py-8 text-center text-xs text-wa-muted flex flex-col items-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin text-wa-primary" />
-                      Loading participants...
+                      {t("chat.loading_participants") || "Loading participants..."}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
@@ -572,17 +573,17 @@ export function ChatHeader() {
                               {member.name}
                               {member.id === currentUserId && (
                                 <span className="bg-wa-active text-wa-muted text-[9px] px-1.5 py-0.5 rounded-full uppercase font-bold tracking-tighter">
-                                  You
+                                  {t("chat.you") || "You"}
                                 </span>
                               )}
                               {member.id === activeChat.groupCreatorId && (
                                 <span className="bg-wa-primary/10 text-wa-primary text-[9px] px-1.5 py-0.5 rounded-full uppercase font-bold tracking-tighter border border-wa-primary/20">
-                                  Admin
+                                  {t("chat.admin") || "Admin"}
                                 </span>
                               )}
                             </div>
                             <div className="text-[11px] text-wa-muted truncate">
-                              {member.status || "Available"}
+                              {member.status || (t("chat.available") || "Available")}
                             </div>
                           </div>
 
@@ -592,7 +593,7 @@ export function ChatHeader() {
                               <button
                                 onClick={() => handleRemoveMember(member.id)}
                                 className="opacity-0 group-hover:opacity-100 p-2 rounded-full text-red-500 hover:bg-red-50 transition-all cursor-pointer shadow-sm bg-white dark:bg-wa-sidebar"
-                                title="Remove from group"
+                                title={t("chat.remove_from_group") || "Remove from group"}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -605,7 +606,7 @@ export function ChatHeader() {
                   {sharedMedia.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-wa-border">
                       <span className="text-xs text-wa-muted uppercase font-bold tracking-widest mb-2 block">
-                        Shared Media
+                        {t("chat.shared_media") || "Shared Media"}
                       </span>
                       <div className="grid grid-cols-4 gap-1.5">
                         {sharedMedia.map((msg) => (
@@ -640,7 +641,7 @@ export function ChatHeader() {
                       className="flex items-center justify-center gap-2 text-red-500 text-sm font-bold hover:bg-red-50 w-full py-3 rounded-xl transition-all border border-red-100/50 hover:border-red-200"
                     >
                       <LogOut className="h-4 w-4" />
-                      Exit Group
+                      {t("chat.exit_group") || "Exit Group"}
                     </button>
                   </div>
                 )}
@@ -657,17 +658,17 @@ export function ChatHeader() {
                       </button>
                       <div className="flex flex-col">
                         <span className="text-base font-bold text-wa-text">
-                          Add Participant
+                          {t("chat.add_participant") || "Add Participant"}
                         </span>
                         <span className="text-[10px] text-wa-muted uppercase tracking-widest">
-                          Select from contacts
+                          {t("chat.select_from_contacts") || "Select from contacts"}
                         </span>
                       </div>
                     </div>
 
                     <div className="relative mb-4 px-1">
                       <Input
-                        placeholder="Search users..."
+                        placeholder={t("chat.search_users") || "Search users..."}
                         value={userSearchQuery}
                         onChange={(e) => setUserSearchQuery(e.target.value)}
                         className="h-10 text-sm pl-10 rounded-xl"
@@ -680,7 +681,7 @@ export function ChatHeader() {
                       {isSearching ? (
                         <div className="text-center py-8 text-xs text-wa-muted flex flex-col items-center gap-2">
                           <Loader2 className="h-6 w-6 animate-spin text-wa-primary" />
-                          Scanning directory...
+                          {t("chat.scanning_directory") || "Scanning directory..."}
                         </div>
                       ) : searchResults.length > 0 ? (
                         <div className="flex flex-col gap-1">
@@ -711,7 +712,7 @@ export function ChatHeader() {
                         </div>
                       ) : (
                         <div className="text-center py-12 text-sm text-wa-muted italic">
-                          No users found matching your search.
+                          {t("chat.no_users_found") || "No users found matching your search."}
                         </div>
                       )}
                     </div>
@@ -723,16 +724,16 @@ export function ChatHeader() {
               <div className="flex flex-col gap-4 py-2 h-auto md:h-full overflow-y-visible md:overflow-y-auto custom-scrollbar pr-1">
                 <div className="bg-wa-header/30 p-4 rounded-xl border border-wa-border/50 shrink-0">
                   <span className="text-xs text-wa-muted uppercase font-bold tracking-widest mb-2 block">
-                    Personal Status
+                    {t("chat.personal_status") || "Personal Status"}
                   </span>
                   <p className="text-sm text-wa-text leading-relaxed">
-                    {activeChat.status || "Available"}
+                    {activeChat.status || (t("chat.available") || "Available")}
                   </p>
                 </div>
 
                 <div className="bg-wa-header/30 p-4 rounded-xl border border-wa-border/50 shrink-0">
                   <span className="text-xs text-wa-muted uppercase font-bold tracking-widest mb-2 block">
-                    Shared Media
+                    {t("chat.shared_media") || "Shared Media"}
                   </span>
                   {sharedMedia.length > 0 ? (
                     <div className="grid grid-cols-4 gap-2">
@@ -759,7 +760,7 @@ export function ChatHeader() {
                     </div>
                   ) : (
                     <div className="text-center py-4 text-xs text-wa-muted italic">
-                      No media shared yet
+                      {t("chat.no_media_shared") || "No media shared yet"}
                     </div>
                   )}
                 </div>
@@ -769,16 +770,15 @@ export function ChatHeader() {
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-wa-muted" />
                 <span className="text-xs text-wa-muted font-bold uppercase tracking-wider">
-                  Disappearing messages
+                  {t("chat.disappearing_messages") || "Disappearing messages"}
                 </span>
               </div>
               <p className="text-[11px] leading-relaxed text-wa-muted font-normal leading-normal">
-                For more privacy and storage, new messages will disappear from
-                this chat for everyone after the selected duration.
+                {t("chat.disappearing_messages_desc") || "For more privacy and storage, new messages will disappear from this chat for everyone after the selected duration."}
               </p>
               <div className="flex items-center gap-1 mt-1 bg-wa-hover/40 border border-wa-border/30 rounded-lg p-1 relative">
                 {[
-                  { label: "Off", value: 0 },
+                  { label: t("chat.off") || "Off", value: 0 },
                   { label: "24h", value: 86400 },
                   { label: "7d", value: 604800 },
                   { label: "90d", value: 7776000 },
@@ -818,7 +818,7 @@ export function ChatHeader() {
       <Modal
         isOpen={!!lightboxMedia}
         onClose={() => setLightboxMedia(null)}
-        title={lightboxMedia?.fileName || "Media Preview"}
+        title={lightboxMedia?.fileName || (t("chat.media_preview") || "Media Preview")}
         className="max-w-4xl bg-black border-wa-border/20"
       >
         <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-black min-h-[60vh] relative group">
@@ -827,7 +827,7 @@ export function ChatHeader() {
               {lightboxMedia.type === "image" ? (
                 <img
                   src={lightboxMedia.mediaUrl}
-                  alt="Fullscreen"
+                  alt={t("chat.fullscreen") || "Fullscreen"}
                   className="max-h-[75vh] max-w-full object-contain rounded"
                 />
               ) : (
@@ -842,7 +842,7 @@ export function ChatHeader() {
                 <button
                   onClick={() => window.open(lightboxMedia.mediaUrl, "_blank")}
                   className="p-2 rounded-full bg-black/50 hover:bg-black/80 text-white transition-colors"
-                  title="Download / Open Original"
+                  title={t("chat.download_open_original") || "Download / Open Original"}
                 >
                   <Download className="h-5 w-5" />
                 </button>

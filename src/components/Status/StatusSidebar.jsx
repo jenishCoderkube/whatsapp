@@ -4,6 +4,7 @@ import React, { useRef } from "react";
 import { ArrowLeft, Plus, Type, CircleDashed } from "lucide-react";
 import { StatusAvatar } from "./StatusAvatar";
 import { cn } from "../../utils/cn";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export function StatusSidebar({
   user,
@@ -19,6 +20,7 @@ export function StatusSidebar({
   onTriggerMediaSelect,
   className,
 }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
 
   const handleFileChange = (e) => {
@@ -36,11 +38,11 @@ export function StatusSidebar({
         <button
           onClick={onClose}
           className="p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer text-white"
-          title="Back"
+          title={t("common.back") || "Back"}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <span className="font-semibold text-base sm:text-lg">Status</span>
+        <span className="font-semibold text-base sm:text-lg">{t("status.status") || "Status"}</span>
       </header>
 
       {/* Scrollable Status Content Lists */}
@@ -76,13 +78,13 @@ export function StatusSidebar({
             </div>
 
             <div className="flex flex-col text-left">
-              <span className="text-sm font-medium text-[#e9edef]">My status</span>
+              <span className="text-sm font-medium text-[#e9edef]">{t("status.my_status") || "My status"}</span>
               <span className="text-xs text-[#8696a0]">
                 {myStatuses.length > 0
-                  ? `Last updated: ${new Date(
-                      myStatuses[0].createdAt
-                    ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                  : "Tap to add status update"}
+                  ? t("status.last_updated", {
+                      time: new Date(myStatuses[0].createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    }) || `Last updated: ${new Date(myStatuses[0].createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : (t("status.tap_to_add") || "Tap to add status update")}
               </span>
             </div>
           </div>
@@ -92,14 +94,14 @@ export function StatusSidebar({
             <button
               onClick={onTriggerTextComposer}
               className="p-2 rounded-full hover:bg-[#202c33] text-[#8696a0] hover:text-[#e9edef] transition-colors cursor-pointer"
-              title="Write text status"
+              title={t("status.write_text_status") || "Write text status"}
             >
               <Type className="h-5 w-5" />
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-2 rounded-full hover:bg-[#202c33] text-[#8696a0] hover:text-[#e9edef] transition-colors cursor-pointer"
-              title="Upload photos or videos"
+              title={t("status.upload_photos_videos") || "Upload photos or videos"}
             >
               <Plus className="h-5 w-5" />
             </button>
@@ -115,12 +117,14 @@ export function StatusSidebar({
 
         {/* Privacy Link */}
         <div className="px-4 py-1.5 flex items-center justify-between">
-          <span className="text-xs text-[#8696a0]">Privacy is set to {privacy}</span>
+          <span className="text-xs text-[#8696a0]">
+            {t("status.privacy_set_to", { privacy }) || `Privacy is set to ${privacy}`}
+          </span>
           <button
             onClick={onOpenPrivacy}
             className="text-xs text-wa-primary hover:underline font-semibold cursor-pointer"
           >
-            Change
+            {t("common.change") || "Change"}
           </button>
         </div>
 
@@ -128,7 +132,7 @@ export function StatusSidebar({
         {recentUpdates.length > 0 && (
           <div className="flex flex-col">
             <span className="px-4 py-2 text-xs font-semibold text-wa-primary uppercase tracking-wider text-left">
-              Recent updates
+              {t("status.recent_updates") || "Recent updates"}
             </span>
             {recentUpdates.map((group) => {
               const lastUpdate = group.statuses[group.statuses.length - 1];
@@ -163,7 +167,7 @@ export function StatusSidebar({
         {viewedUpdates.length > 0 && (
           <div className="flex flex-col mt-2">
             <span className="px-4 py-2 text-xs font-semibold text-[#8696a0] uppercase tracking-wider text-left">
-              Viewed updates
+              {t("status.viewed_updates") || "Viewed updates"}
             </span>
             {viewedUpdates.map((group) => {
               const lastUpdate = group.statuses[group.statuses.length - 1];
@@ -198,7 +202,7 @@ export function StatusSidebar({
         {recentUpdates.length === 0 && viewedUpdates.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-[#8696a0]">
             <CircleDashed className="h-10 w-10 text-[#8696a0]/30 animate-pulse mb-3" />
-            <span className="text-xs">No updates from your contacts</span>
+            <span className="text-xs">{t("status.no_updates_from_contacts") || "No updates from your contacts"}</span>
           </div>
         )}
 

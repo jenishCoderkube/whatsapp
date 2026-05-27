@@ -8,8 +8,10 @@ import { messageService } from "../../services/messageService";
 import { addMessage } from "../../redux/slices/messageSlice";
 import { updateLastMessage } from "../../redux/slices/chatSlice";
 import { cn } from "../../utils/cn";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export function ForwardModal({ messageToForward, onClose }) {
+  const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const chats = useAppSelector((state) => state.chat.chats);
   const currentUser = useAppSelector((state) => state.auth.user);
@@ -117,7 +119,9 @@ export function ForwardModal({ messageToForward, onClose }) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 bg-wa-header border-b border-wa-border">
-          <h3 className="text-sm sm:text-base font-semibold text-wa-text">Forward message to</h3>
+          <h3 className="text-sm sm:text-base font-semibold text-wa-text">
+            {t("chat.forward_message_to") || "Forward message to"}
+          </h3>
           <button 
             onClick={() => onClose(false)} 
             className="p-1.5 rounded-full hover:bg-wa-hover text-wa-muted hover:text-wa-text transition-colors"
@@ -132,7 +136,7 @@ export function ForwardModal({ messageToForward, onClose }) {
             <Search className="h-4.5 w-4.5 text-wa-muted shrink-0" />
             <input
               type="text"
-              placeholder="Search chats"
+              placeholder={t("chat.search_chats") || "Search chats"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent border-none text-xs sm:text-sm text-wa-text focus:outline-none w-full placeholder:text-wa-muted"
@@ -152,7 +156,9 @@ export function ForwardModal({ messageToForward, onClose }) {
         <div className="flex-1 overflow-y-auto px-2 py-1 scrollbar-thin">
           {filteredChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-wa-muted">
-              <span className="text-xs sm:text-sm font-medium">No results found</span>
+              <span className="text-xs sm:text-sm font-medium">
+                {t("chat.no_results_found") || "No results found"}
+              </span>
             </div>
           ) : (
             filteredChats.map((chat) => {
@@ -176,7 +182,9 @@ export function ForwardModal({ messageToForward, onClose }) {
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm font-medium text-wa-text truncate">{chat.name}</p>
                       <p className="text-[10px] sm:text-[11px] text-wa-muted truncate">
-                        {chat.isGroup ? "Group Chat" : chat.phoneNumber || "WhatsApp Contact"}
+                        {chat.isGroup 
+                          ? (t("chat.group_chat") || "Group Chat") 
+                          : chat.phoneNumber || (t("chat.whatsapp_contact") || "WhatsApp Contact")}
                       </p>
                     </div>
                   </div>
@@ -204,7 +212,7 @@ export function ForwardModal({ messageToForward, onClose }) {
             onClick={handleForwardSubmit}
             disabled={isSending}
             className="absolute bottom-6 right-6 h-12 w-12 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 shrink-0 z-50 animate-scale-up"
-            title={`Forward message to ${selectedChatIds.length} chat${selectedChatIds.length > 1 ? "s" : ""}`}
+            title={t("chat.forward_message_count", { count: selectedChatIds.length }) || `Forward message to ${selectedChatIds.length} chat${selectedChatIds.length > 1 ? "s" : ""}`}
           >
             {isSending ? (
               <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">

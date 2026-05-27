@@ -2,10 +2,40 @@
 
 import React, { createContext, useState, useEffect, useContext } from "react";
 import enTranslations from "../locales/en.json";
+import hiTranslations from "../locales/hi.json";
+import guTranslations from "../locales/gu.json";
+import esTranslations from "../locales/es.json";
+import frTranslations from "../locales/fr.json";
+import deTranslations from "../locales/de.json";
+import arTranslations from "../locales/ar.json";
+import zhTranslations from "../locales/zh.json";
+import jaTranslations from "../locales/ja.json";
+import ruTranslations from "../locales/ru.json";
 
-// In the future, other languages can be added here
 const translations = {
   en: enTranslations,
+  hi: hiTranslations,
+  gu: guTranslations,
+  es: esTranslations,
+  fr: frTranslations,
+  de: deTranslations,
+  ar: arTranslations,
+  zh: zhTranslations,
+  ja: jaTranslations,
+  ru: ruTranslations,
+};
+
+export const languageNames = {
+  en: "English",
+  hi: "हिन्दी (Hindi)",
+  gu: "ગુજરાતી (Gujarati)",
+  es: "Español (Spanish)",
+  fr: "Français (French)",
+  de: "Deutsch (German)",
+  ar: "العربية (Arabic)",
+  zh: "中文 (Chinese)",
+  ja: "日本語 (Japanese)",
+  ru: "Русский (Russian)",
 };
 
 const I18nContext = createContext(null);
@@ -22,6 +52,14 @@ export function I18nProvider({ children }) {
       }
     }
   }, []);
+
+  // Update HTML dir and lang attributes dynamically for RTL / language support
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
+      document.documentElement.lang = locale;
+    }
+  }, [locale]);
 
   const changeLanguage = (langCode) => {
     if (translations[langCode]) {
@@ -82,6 +120,7 @@ export function I18nProvider({ children }) {
     t,
     changeLanguage,
     availableLanguages: Object.keys(translations),
+    languageNames,
   };
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

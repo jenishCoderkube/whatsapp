@@ -2,8 +2,10 @@
 
 import React from "react";
 import { MapPin, ExternalLink } from "lucide-react";
+import { useTranslation } from "../../hooks/useTranslation";
 
 export default function StaticLocationBubble({ message }) {
+  const { t } = useTranslation();
   const coordinates = message.mediaUrl || "";
   const [lat, lng] = coordinates.split(",");
 
@@ -36,7 +38,7 @@ export default function StaticLocationBubble({ message }) {
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[9px] sm:text-[10px] font-semibold gap-1 backdrop-blur-xs">
           <ExternalLink className="h-3 w-3" />
-          Open in Google Maps
+          {t("chat.open_in_google_maps") || "Open in Google Maps"}
         </div>
       </div>
 
@@ -44,14 +46,14 @@ export default function StaticLocationBubble({ message }) {
       <div className="p-1.5 sm:p-2 bg-wa-sidebar flex items-center justify-between">
         <div className="flex flex-col gap-0.5 text-left">
           <span className="font-semibold text-[10px] sm:text-[11px] text-wa-text">
-            Current Location
+            {t("chat.current_location") || "Current Location"}
           </span>
           <span className="text-[8px] sm:text-[9px] text-wa-muted">
-            {lat && lng ? `${parseFloat(lat).toFixed(4)}°, ${parseFloat(lng).toFixed(4)}°` : "Static Location"}
+            {lat && lng ? `${parseFloat(lat).toFixed(4)}°, ${parseFloat(lng).toFixed(4)}°` : (t("chat.static_location") || "Static Location")}
           </span>
         </div>
         <span className="text-[8px] sm:text-[9px] font-bold text-wa-primary hover:underline flex items-center gap-0.5">
-          View Map
+          {t("chat.view_map") || "View Map"}
         </span>
       </div>
     </div>
