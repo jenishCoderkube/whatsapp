@@ -34,6 +34,7 @@ import { Avatar } from "../ui/Avatar";
 import { locationService } from "../../services/locationService";
 import LocationDurationModal from "./LocationDurationModal";
 import { useAudioRecorder } from "../../hooks/useAudioRecorder";
+import { indexedDBService } from "../../services/indexedDBService";
 
 const EmojiPickerLoading = () => {
   const { t } = useTranslation();
@@ -341,6 +342,7 @@ export function ChatInput() {
         mediaUrl: uploadedUrl,
         duration: durationStr,
         timestampString: timeString,
+        clientId: tempId,
       });
 
       dispatch(
@@ -678,16 +680,44 @@ export function ChatInput() {
         "-" +
         Math.random().toString(36).substring(2, 6);
 
+      let finalFile = fileObj.file;
+      let finalSizeString = fileObj.sizeString;
+      let finalPreviewUrl = fileObj.previewUrl;
+
+      if (fileObj.type === "image") {
+        try {
+          const { compressImage } = await import("../../utils/mediaCompressor");
+          const compressed = await compressImage(fileObj.file);
+          if (compressed !== fileObj.file) {
+            finalFile = compressed;
+            const kb = compressed.size / 1024;
+            finalSizeString = kb > 1024 
+              ? `${(kb / 1024).toFixed(1)} MB` 
+              : `${Math.round(kb)} KB`;
+            
+            // Clean up original preview and generate a compressed preview
+            if (fileObj.previewUrl && fileObj.previewUrl.startsWith("blob:")) {
+              try {
+                URL.revokeObjectURL(fileObj.previewUrl);
+              } catch (e) {}
+            }
+            finalPreviewUrl = URL.createObjectURL(compressed);
+          }
+        } catch (compressErr) {
+          console.warn("Failed to compress image:", compressErr);
+        }
+      }
+
       const optimisticMsg = {
         id: tempId,
-        text: fileObj.type === "file" ? fileObj.file.name : "",
+        text: fileObj.type === "file" ? finalFile.name : "",
         timestamp: timeString,
         isOutgoing: true,
-        status: "sent",
+        status: "pending",
         type: fileObj.type,
-        mediaUrl: fileObj.previewUrl || null,
-        fileName: fileObj.file.name,
-        fileSize: fileObj.sizeString,
+        mediaUrl: finalPreviewUrl || null,
+        fileName: finalFile.name,
+        fileSize: finalSizeString,
         senderId: user.id,
         createdAt: new Date().toISOString(),
         replyTo: activeReplyPayload,
@@ -705,26 +735,40 @@ export function ChatInput() {
                 : "📎 " + t("chat.document"),
           timestamp: timeString,
           isOutgoing: true,
-          status: "sent",
+          status: "pending",
         }),
       );
 
+      // Save to IndexedDB queue first so we have the file blob for any retries
+      const offlinePayload = {
+        ...optimisticMsg,
+        conversation_id: activeChatId,
+        sender_id: user.id,
+        timestamp_string: timeString,
+        file_name: finalFile.name,
+        file_size: finalSizeString,
+        uiId: tempId
+      };
+      
       try {
+        await indexedDBService.savePendingMessage(offlinePayload, finalFile);
+
         const uploadedAbsoluteUrl = await storageService.uploadFile(
-          fileObj.file,
+          finalFile,
           fileObj.type + "s",
         );
 
         const confirmedRow = await messageService.sendMessage({
           conversationId: activeChatId,
           senderId: user.id,
-          text: fileObj.type === "file" ? fileObj.file.name : "",
+          text: fileObj.type === "file" ? finalFile.name : "",
           type: fileObj.type,
           mediaUrl: uploadedAbsoluteUrl,
-          fileName: fileObj.file.name,
-          fileSize: fileObj.sizeString,
+          fileName: finalFile.name,
+          fileSize: finalSizeString,
           timestampString: timeString,
           replyTo: activeReplyPayload,
+          clientId: tempId,
         });
 
         dispatch(
@@ -737,25 +781,13 @@ export function ChatInput() {
             },
           }),
         );
+        
+        // Remove from pending store on success
+        await indexedDBService.removePendingMessage(tempId);
       } catch (err) {
         if (err.message === "OFFLINE_PENDING") {
-          const pendingOfflineMsg = err.pendingMsg || { ...optimisticMsg, status: "pending" };
-          
-          dispatch(
-            replaceOptimisticMessage({
-              chatId: activeChatId,
-              tempId,
-              confirmedMessage: {
-                ...pendingOfflineMsg,
-                id: tempId, // Keep UI ID for now
-                isOutgoing: true,
-              },
-            }),
-          );
-          
-          import("../../services/indexedDBService").then(({ indexedDBService }) => {
-             indexedDBService.savePendingMessage({ ...pendingOfflineMsg, uiId: tempId }, fileObj.file).catch(console.error);
-          });
+          // Already saved to IndexedDB, leave it as pending
+          console.log("Device is offline, message stored in pending queue.");
         } else {
           console.error("Storage document transfer failed:", err);
           dispatch(
@@ -780,7 +812,7 @@ export function ChatInput() {
         text: textToSend,
         timestamp: timeString,
         isOutgoing: true,
-        status: "sent",
+        status: "pending",
         type: "text",
         senderId: user.id,
         createdAt: new Date().toISOString(),
@@ -795,11 +827,21 @@ export function ChatInput() {
           text: textToSend,
           timestamp: timeString,
           isOutgoing: true,
-          status: "sent",
+          status: "pending",
         }),
       );
 
+      const offlinePayload = {
+        ...optimisticMsg,
+        conversation_id: activeChatId,
+        sender_id: user.id,
+        timestamp_string: timeString,
+        uiId: tempId
+      };
+
       try {
+        await indexedDBService.savePendingMessage(offlinePayload);
+
         const confirmedRow = await messageService.sendMessage({
           conversationId: activeChatId,
           senderId: user.id,
@@ -808,6 +850,7 @@ export function ChatInput() {
           timestampString: timeString,
           replyTo: activeReplyPayload,
           noPreview: noPreview,
+          clientId: tempId,
         });
 
         dispatch(
@@ -820,25 +863,13 @@ export function ChatInput() {
             },
           }),
         );
+
+        // Remove from pending store on success
+        await indexedDBService.removePendingMessage(tempId);
       } catch (err) {
         if (err.message === "OFFLINE_PENDING") {
-          const pendingOfflineMsg = err.pendingMsg || { ...optimisticMsg, status: "pending" };
-          
-          dispatch(
-            replaceOptimisticMessage({
-              chatId: activeChatId,
-              tempId,
-              confirmedMessage: {
-                ...pendingOfflineMsg,
-                id: tempId,
-                isOutgoing: true,
-              },
-            }),
-          );
-          
-          import("../../services/indexedDBService").then(({ indexedDBService }) => {
-             indexedDBService.savePendingMessage({ ...pendingOfflineMsg, uiId: tempId }).catch(console.error);
-          });
+          // Already saved to IndexedDB, leave it as pending
+          console.log("Device is offline, text message stored in pending queue.");
         } else {
           dispatch(
             updateMessageStatus({

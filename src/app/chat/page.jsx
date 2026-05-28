@@ -50,6 +50,7 @@ export default function ChatPage() {
   const scrollContainerRef = useRef(null);
   const didInitialScrollRef = useRef(false);
   const isAtBottomRef = useRef(true);
+  const isSyncingRef = useRef(false);
 
   // Synchronous React refs supporting un-recreated streaming closure pointers
   const activeChatIdRef = useRef(activeChatId);
@@ -232,53 +233,7 @@ export default function ChatPage() {
 
     messageService.syncAllPendingDeliveries(user.id);
     
-    const handleOnline = async () => {
-      messageService.syncAllPendingDeliveries(user.id);
-      
-      try {
-        const { indexedDBService } = await import("../../services/indexedDBService");
-        const { storageService } = await import("../../services/storageService");
-        const pendingMsgs = await indexedDBService.getPendingMessages();
-        
-        for (const pMsg of pendingMsgs) {
-          try {
-            let uploadedUrl = pMsg.media_url;
-            const file = await indexedDBService.getPendingFile(pMsg.id);
-            if (file) {
-              uploadedUrl = await storageService.uploadFile(file, pMsg.type + "s");
-            }
-
-            const confirmedRow = await messageService.sendMessage({
-              conversationId: pMsg.conversation_id,
-              senderId: pMsg.sender_id,
-              text: pMsg.text,
-              type: pMsg.type,
-              mediaUrl: uploadedUrl,
-              fileName: pMsg.file_name,
-              fileSize: pMsg.file_size,
-              duration: pMsg.duration,
-              timestampString: pMsg.timestamp_string,
-            });
-
-            dispatch(
-              replaceOptimisticMessage({
-                chatId: pMsg.conversation_id,
-                tempId: pMsg.uiId,
-                confirmedMessage: { ...confirmedRow, isOutgoing: true },
-              })
-            );
-            await indexedDBService.removePendingMessage(pMsg.id);
-          } catch (e) {
-            console.warn("Failed to sync offline msg:", e);
-          }
-        }
-      } catch (e) {
-        console.warn("Offline sync error:", e);
-      }
-    };
-    window.addEventListener("online", handleOnline);
-
-    realtimeService.subscribeToUserGlobalMessages((eventType, incomingMsg) => {
+    const handleGlobalMessage = (eventType, incomingMsg) => {
       const isMine = incomingMsg.senderId === user.id;
       const targetChatId = incomingMsg.conversationId;
 
@@ -488,9 +443,9 @@ export default function ChatPage() {
           );
         }
       }
-    });
+    };
 
-    realtimeService.subscribeToProfileUpdates((updatedProfile) => {
+    const handleProfileUpdate = (updatedProfile) => {
       dispatch(
         updatePeerProfile({
           peerId: updatedProfile.id,
@@ -516,7 +471,141 @@ export default function ChatPage() {
           )
         );
       }
-    });
+    };
+
+    const handleOnline = async () => {
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+
+      // Force reconnect websocket channels to ensure zero stale connection references
+      realtimeService.reconnectAll(
+        user.id,
+        handleGlobalMessage,
+        handleProfileUpdate
+      );
+
+      messageService.syncAllPendingDeliveries(user.id);
+      
+      try {
+        const { indexedDBService } = await import("../../services/indexedDBService");
+        const { storageService } = await import("../../services/storageService");
+        const pendingMsgs = await indexedDBService.getPendingMessages();
+        
+        for (const pMsg of pendingMsgs) {
+          try {
+            // Deduplication Check
+            let existingConfirmedRow = null;
+            try {
+              // 1. Check using client_id column if migration is active
+              const { data: dbCheckClientId } = await supabase
+                .from("messages")
+                .select("*")
+                .eq("client_id", pMsg.id)
+                .limit(1);
+
+              if (dbCheckClientId && dbCheckClientId.length > 0) {
+                existingConfirmedRow = dbCheckClientId[0];
+              } else {
+                // 2. Heuristic fallback matching for backward-compatibility
+                const checkTimeBound = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+                let semanticQuery = supabase
+                  .from("messages")
+                  .select("*")
+                  .eq("conversation_id", pMsg.conversation_id)
+                  .eq("sender_id", pMsg.sender_id)
+                  .eq("type", pMsg.type)
+                  .gte("created_at", checkTimeBound);
+
+                if (pMsg.type === "text") {
+                  const { encodeMessageText } = await import("../../utils/messageParser");
+                  const encoded = encodeMessageText(pMsg.text, pMsg.replyTo, pMsg.isForwarded, {}, pMsg.noPreview);
+                  semanticQuery = semanticQuery.eq("text", encoded);
+                } else if (pMsg.file_name) {
+                  semanticQuery = semanticQuery.eq("file_name", pMsg.file_name);
+                }
+
+                const { data: dbCheckSemantic } = await semanticQuery.limit(1);
+                if (dbCheckSemantic && dbCheckSemantic.length > 0) {
+                  existingConfirmedRow = dbCheckSemantic[0];
+                }
+              }
+            } catch (dedupErr) {
+              console.warn("Sync deduplication query check failed:", dedupErr);
+            }
+
+            let confirmedRow = null;
+            if (existingConfirmedRow) {
+              const { parseMessageText } = await import("../../utils/messageParser");
+              const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward, noPreview: parsedNoPreview } = parseMessageText(existingConfirmedRow.text || "");
+              
+              confirmedRow = {
+                id: existingConfirmedRow.id,
+                conversationId: existingConfirmedRow.conversation_id,
+                conversation_id: existingConfirmedRow.conversation_id,
+                text: cleanText,
+                rawText: existingConfirmedRow.text || "",
+                reactions: {},
+                replyTo: existingConfirmedRow.reply_to || parsedReplyTo,
+                isForwarded: existingConfirmedRow.is_forwarded || parsedIsForward,
+                noPreview: existingConfirmedRow.no_preview || parsedNoPreview,
+                editedAt: existingConfirmedRow.edited_at,
+                editHistory: existingConfirmedRow.edit_history,
+                timestamp: existingConfirmedRow.timestamp_string,
+                status: existingConfirmedRow.status,
+                type: existingConfirmedRow.type,
+                mediaUrl: existingConfirmedRow.media_url,
+                fileName: existingConfirmedRow.file_name,
+                fileSize: existingConfirmedRow.file_size,
+                duration: existingConfirmedRow.duration,
+                senderId: existingConfirmedRow.sender_id,
+                sender_id: existingConfirmedRow.sender_id,
+                isOutgoing: true,
+                createdAt: existingConfirmedRow.created_at,
+              };
+            } else {
+              let uploadedUrl = pMsg.media_url;
+              const file = await indexedDBService.getPendingFile(pMsg.id);
+              if (file) {
+                uploadedUrl = await storageService.uploadFile(file, pMsg.type + "s");
+              }
+
+              confirmedRow = await messageService.sendMessage({
+                conversationId: pMsg.conversation_id,
+                senderId: pMsg.sender_id,
+                text: pMsg.text,
+                type: pMsg.type,
+                mediaUrl: uploadedUrl,
+                fileName: pMsg.file_name,
+                fileSize: pMsg.file_size,
+                duration: pMsg.duration,
+                timestampString: pMsg.timestamp_string,
+                clientId: pMsg.id,
+              });
+            }
+
+            dispatch(
+              replaceOptimisticMessage({
+                chatId: pMsg.conversation_id,
+                tempId: pMsg.uiId,
+                confirmedMessage: { ...confirmedRow, isOutgoing: true },
+              })
+            );
+            await indexedDBService.removePendingMessage(pMsg.id);
+          } catch (e) {
+            console.warn("Failed to sync offline msg:", e);
+          }
+        }
+      } catch (e) {
+        console.warn("Offline sync error:", e);
+      } finally {
+        isSyncingRef.current = false;
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+
+    realtimeService.subscribeToUserGlobalMessages(handleGlobalMessage);
+    realtimeService.subscribeToProfileUpdates(handleProfileUpdate);
 
     return () => {
       realtimeService.disconnectGlobalMessages();

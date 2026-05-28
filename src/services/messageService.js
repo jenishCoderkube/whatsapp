@@ -101,6 +101,7 @@ export const messageService = {
     replyTo = null,
     isForwarded = false,
     noPreview = false,
+    clientId = null,
   }) {
     try {
       const isUuid =
@@ -165,13 +166,39 @@ export const messageService = {
         throw new Error("Action restricted: You are no longer a participant in this conversation.");
       }
 
-      const { data: newMsg, error } = await supabase
-        .from("messages")
-        .insert(insertPayload)
-        .select()
-        .single();
-
-      if (error) throw error;
+      let newMsg = null;
+      if (clientId) {
+        try {
+          const { data, error } = await supabase
+            .from("messages")
+            .insert({ ...insertPayload, client_id: clientId })
+            .select()
+            .single();
+          if (error) throw error;
+          newMsg = data;
+        } catch (insertErr) {
+          // Fallback if client_id column is not yet present in the DB schema (Pg code 42703: undefined_column)
+          if (insertErr.code === "42703") {
+            const { data, error } = await supabase
+              .from("messages")
+              .insert(insertPayload)
+              .select()
+              .single();
+            if (error) throw error;
+            newMsg = data;
+          } else {
+            throw insertErr;
+          }
+        }
+      } else {
+        const { data, error } = await supabase
+          .from("messages")
+          .insert(insertPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        newMsg = data;
+      }
 
       // Update background parent preview text strips asynchronously
       let previewText = text;
@@ -188,7 +215,7 @@ export const messageService = {
           last_message_status: "sent",
           last_message_sender_id: senderId,
           updated_at: new Date().toISOString(),
-        })
+         })
         .eq("id", conversationId);
 
       // Increment unread_count in database for all other conversation members to guarantee true persistence across refresh boundaries

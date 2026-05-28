@@ -207,4 +207,23 @@ export const realtimeService = {
       globalChannel = null;
     }
   },
+
+  /**
+   * Forcibly tear down and rebuild all active channels to sync connections after reconnect events.
+   */
+  reconnectAll(currentUserId, onGlobalEvent, onProfileUpdate, onPresenceSync, onTypingReceived) {
+    this.disconnectGlobalMessages();
+    this.disconnectProfileUpdates();
+    this.disconnectGlobalPresence();
+
+    if (onGlobalEvent) {
+      this.subscribeToUserGlobalMessages(onGlobalEvent);
+    }
+    if (onProfileUpdate) {
+      this.subscribeToProfileUpdates(onProfileUpdate);
+    }
+    if (currentUserId) {
+      this.initializeGlobalPresence(currentUserId, onPresenceSync, onTypingReceived);
+    }
+  }
 };

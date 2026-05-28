@@ -12,12 +12,15 @@ A strategic roadmap of code refactorings, optimizations, and technical improveme
   * Extracted complex rich text markdown formatting, mentions highlighting, and link previews from `MessageBubble.jsx` into a standalone `ExpandableText.jsx` subcomponent.
 * **Benefits:** Drastically shrinks code sizes of main views, optimizes maintainability, enforces separation of concerns, and simplifies future unit-testing.
 
-### ➡️ Strict Optimistic Rollbacks & Resend Queue
-* **Current State:** If a message or media upload fails, the status updates to `failed`, but there is no mechanism to retry sending.
+### ✅ Low-Network Resiliency & Optimistic Resend Queue
+* **Current State:** Completed / Active
 * **Improvement:**
-  * Implement a "Retry" and "Delete" context-menu action on failed message bubbles.
-  * Integrate an automatic exponential-backoff retry scheduler in `messageService.js` for failed text messages.
-* **Benefits:** Improves user experience when operating under spotty network connections.
+  * Enabled pre-dispatch logging to IndexedDB `pending_messages` for all outgoing messages (texts & files).
+  * Implemented client-side image compression using canvas resizing and JPEG encoding in `mediaCompressor.js` to minimize uploads under weak bandwidth.
+  * Configured automatic queue retries on internet reconnect with concurrency protection locks (`isSyncingRef`).
+  * Built a WebSocket reconnect restorer (`reconnectAll`) in `realtimeService.js` that tears down and recreates subscriptions on network restoration.
+  * Guarded message streams against duplications from parallel retry-vs-broadcast events.
+* **Benefits:** Provides a premium, seamless WhatsApp-like offline experience, prevents data loss, reduces data consumption, and eliminates race conditions.
 
 ---
 

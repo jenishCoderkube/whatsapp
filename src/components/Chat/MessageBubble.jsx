@@ -43,7 +43,7 @@ import { Avatar } from "../ui/Avatar";
 import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
 import { setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
-import { updateMessage } from "../../redux/slices/messageSlice";
+import { updateMessage, updateMessageStatus, replaceOptimisticMessage } from "../../redux/slices/messageSlice";
 import {
   setStatusViewOpen,
   setStatuses,
@@ -306,6 +306,9 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       }
       setIsDeletedForMe(true);
       setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+      import("../../services/indexedDBService").then(({ indexedDBService }) => {
+        indexedDBService.removePendingMessage(id).catch(console.error);
+      });
     } catch (err) {}
   };
 
@@ -368,12 +371,157 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     } catch (err) {}
   };
 
+  const handleRetryResend = async (e) => {
+    if (e) e.stopPropagation();
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    
+    const conversationId = message.conversationId || message.conversation_id;
+    dispatch(
+      updateMessageStatus({
+        chatId: conversationId,
+        messageId: id,
+        status: "pending",
+      })
+    );
+
+    try {
+      // Deduplication Check
+      let existingConfirmedRow = null;
+      try {
+        const { supabase } = await import("../../lib/supabaseClient");
+        // 1. Check using client_id column if migration is active
+        const { data: dbCheckClientId } = await supabase
+          .from("messages")
+          .select("*")
+          .eq("client_id", id)
+          .limit(1);
+
+        if (dbCheckClientId && dbCheckClientId.length > 0) {
+          existingConfirmedRow = dbCheckClientId[0];
+        } else {
+          // 2. Heuristic fallback matching for backward-compatibility
+          const checkTimeBound = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+          let semanticQuery = supabase
+            .from("messages")
+            .select("*")
+            .eq("conversation_id", conversationId)
+            .eq("sender_id", currentUserId)
+            .eq("type", type)
+            .gte("created_at", checkTimeBound);
+
+          if (type === "text") {
+            const { encodeMessageText } = await import("../../utils/messageParser");
+            const encoded = encodeMessageText(text, message.replyTo, message.isForwarded, {}, noPreview);
+            semanticQuery = semanticQuery.eq("text", encoded);
+          } else if (fileName) {
+            semanticQuery = semanticQuery.eq("file_name", fileName);
+          }
+
+          const { data: dbCheckSemantic } = await semanticQuery.limit(1);
+          if (dbCheckSemantic && dbCheckSemantic.length > 0) {
+            existingConfirmedRow = dbCheckSemantic[0];
+          }
+        }
+      } catch (dedupErr) {
+        console.warn("Retry deduplication query check failed:", dedupErr);
+      }
+
+      let confirmedRow = null;
+      if (existingConfirmedRow) {
+        const { parseMessageText } = await import("../../utils/messageParser");
+        const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward, noPreview: parsedNoPreview } = parseMessageText(existingConfirmedRow.text || "");
+        
+        confirmedRow = {
+          id: existingConfirmedRow.id,
+          conversationId: existingConfirmedRow.conversation_id,
+          conversation_id: existingConfirmedRow.conversation_id,
+          text: cleanText,
+          rawText: existingConfirmedRow.text || "",
+          reactions: {},
+          replyTo: existingConfirmedRow.reply_to || parsedReplyTo,
+          isForwarded: existingConfirmedRow.is_forwarded || parsedIsForward,
+          noPreview: existingConfirmedRow.no_preview || parsedNoPreview,
+          editedAt: existingConfirmedRow.edited_at,
+          editHistory: existingConfirmedRow.edit_history,
+          timestamp: existingConfirmedRow.timestamp_string,
+          status: existingConfirmedRow.status,
+          type: existingConfirmedRow.type,
+          mediaUrl: existingConfirmedRow.media_url,
+          fileName: existingConfirmedRow.file_name,
+          fileSize: existingConfirmedRow.file_size,
+          duration: existingConfirmedRow.duration,
+          senderId: existingConfirmedRow.sender_id,
+          sender_id: existingConfirmedRow.sender_id,
+          isOutgoing: true,
+          createdAt: existingConfirmedRow.created_at,
+        };
+      } else {
+        let finalMediaUrl = mediaUrl;
+
+        if (type === "image" || type === "video" || type === "file") {
+          const { indexedDBService } = await import("../../services/indexedDBService");
+          const fileObj = await indexedDBService.getPendingFile(id);
+
+          if (fileObj) {
+            const { storageService } = await import("../../services/storageService");
+            finalMediaUrl = await storageService.uploadFile(fileObj, type + "s");
+          }
+        }
+
+        confirmedRow = await messageService.sendMessage({
+          conversationId: conversationId,
+          senderId: currentUserId,
+          text: text,
+          type: type,
+          mediaUrl: finalMediaUrl,
+          fileName: fileName,
+          fileSize: fileSize,
+          timestampString: timestamp,
+          replyTo: message.replyTo,
+          noPreview: noPreview,
+          clientId: id,
+        });
+      }
+
+      dispatch(
+        replaceOptimisticMessage({
+          chatId: conversationId,
+          tempId: id,
+          confirmedMessage: {
+            ...confirmedRow,
+            isOutgoing: true,
+          },
+        })
+      );
+
+      const { indexedDBService } = await import("../../services/indexedDBService");
+      await indexedDBService.removePendingMessage(id);
+    } catch (err) {
+      console.error("Manual resend failed:", err);
+      dispatch(
+        updateMessageStatus({
+          chatId: conversationId,
+          messageId: id,
+          status: "failed",
+        })
+      );
+    }
+  };
+
   const renderStatusTicks = () => {
     if (!isMsgOutgoing || isDeleted) return null;
     if (status === "failed") {
       return (
-        <span className="text-red-500 text-[10px] ml-1 font-medium inline-flex items-center gap-0.5">
-          <AlertCircle className="h-3 w-3 inline" /> {t("chat.failed") || "Failed"}
+        <span className="text-red-500 text-[10px] ml-1 font-medium inline-flex items-center gap-1 select-none">
+          <AlertCircle className="h-3 w-3 inline" /> 
+          <span>{t("chat.failed") || "Failed"}</span>
+          <button
+            onClick={handleRetryResend}
+            className="text-wa-primary hover:underline font-bold cursor-pointer border-none bg-transparent flex items-center leading-none"
+            title={t("chat.retry") || "Retry resending"}
+          >
+            ↺ {t("chat.retry") || "Retry"}
+          </button>
         </span>
       );
     }
@@ -828,6 +976,14 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     className="absolute bg-wa-modal border border-wa-border rounded-lg py-1 shadow-2xl z-50 min-w-[160px] text-xs overflow-hidden" 
                     onClick={(e) => e.stopPropagation()}
                   >
+                    {status === "failed" && (
+                      <button onClick={handleRetryResend} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-primary font-semibold transition-colors flex items-center gap-2">
+                        <svg viewBox="0 0 24 24" width="14" height="14" className="stroke-wa-primary stroke-2 fill-none inline shrink-0">
+                          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                        </svg>
+                        <span>{t("chat.retry") || "Retry"}</span>
+                      </button>
+                    )}
                     <button onClick={handleReplyAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Reply className="h-3.5 w-3.5 text-wa-muted" /><span>{t("chat.reply") || "Reply"}</span></button>
                     <button onClick={handleOpenReactions} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Smile className="h-3.5 w-3.5 text-wa-muted" /><span>{t("chat.react") || "React"}</span></button>
                     <button onClick={handleForwardAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><ArrowRight className="h-3.5 w-3.5 text-wa-muted" /><span>{t("chat.forward") || "Forward"}</span></button>
