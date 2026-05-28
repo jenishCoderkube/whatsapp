@@ -41,6 +41,14 @@ import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
 import { useVoiceCall } from "../../hooks/useVoiceCall";
 import { useTranslation } from "../../hooks/useTranslation";
+import { LockScreen } from "../Lock/LockScreen";
+import {
+  lockChat,
+  unlockChat,
+  authorizeChat,
+  setLockConfiguration,
+  setAppLockEnabled,
+} from "../../redux/slices/lockSlice";
 
 function MarqueeText({ text, className }) {
   const containerRef = useRef(null);
@@ -125,6 +133,18 @@ export function ChatHeader() {
   const [infoModal, setInfoModal] = useState(false);
   const [lightboxMedia, setLightboxMedia] = useState(null);
 
+  // Chat Lock States & Dialogs
+  const {
+    lockedChatIds,
+    savedPin,
+    savedPattern,
+    lockType,
+  } = useAppSelector((state) => state.lock);
+
+  const [showLockVerifyModal, setShowLockVerifyModal] = useState(false);
+  const [showLockSetupModal, setShowLockSetupModal] = useState(false);
+  const [lockActionType, setLockActionType] = useState("lock"); // 'lock' | 'unlock'
+
   // Group Management States
   const [groupMembers, setGroupMembers] = useState([]);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
@@ -138,6 +158,40 @@ export function ChatHeader() {
   const groupAvatarFileInputRef = useRef(null);
 
   const { startCall } = useVoiceCall();
+  const isChatLocked = activeChat ? lockedChatIds.includes(activeChat.id) : false;
+
+  const handleToggleChatLock = () => {
+    if (isChatLocked) {
+      setLockActionType("unlock");
+      setShowLockVerifyModal(true);
+    } else {
+      if (!savedPin && !savedPattern) {
+        setShowLockSetupModal(true);
+      } else {
+        setLockActionType("lock");
+        setShowLockVerifyModal(true);
+      }
+    }
+  };
+
+  const handleLockVerifySuccess = () => {
+    setShowLockVerifyModal(false);
+    if (lockActionType === "lock") {
+      dispatch(lockChat(activeChat.id));
+      dispatch(authorizeChat(activeChat.id));
+    } else {
+      dispatch(unlockChat(activeChat.id));
+    }
+  };
+
+  const handleLockSetupSuccess = (code) => {
+    setShowLockSetupModal(false);
+    dispatch(setLockConfiguration({ type: "pin", pin: code }));
+    dispatch(setAppLockEnabled(true));
+    dispatch(lockChat(activeChat.id));
+    dispatch(authorizeChat(activeChat.id));
+  };
+
   const [isUpdatingDuration, setIsUpdatingDuration] = useState(false);
 
   const handleUpdateDisappearingDuration = async (duration) => {
@@ -595,6 +649,29 @@ export function ChatHeader() {
                 {t("chat.encryption_desc") || "Messages and calls are end-to-end encrypted. No one outside of this chat can read or listen to them."}
               </p>
             </div>
+
+            {/* Chat Lock Switch */}
+            <div className="w-full mt-4 pt-4 border-t border-wa-border flex flex-col gap-2 text-left">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1 pr-4">
+                  <span className="text-xs text-wa-muted font-bold uppercase tracking-wider">
+                    {t("lock.chat_lock") || "Chat Lock"}
+                  </span>
+                  <p className="text-[11px] leading-relaxed text-wa-muted">
+                    {t("lock.chat_lock_desc") || "Lock and hide this chat on this device."}
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={isChatLocked}
+                    onChange={handleToggleChatLock}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-wa-hover peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-wa-muted peer-checked:after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-wa-primary"></div>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Right Side: Participants Management */}
@@ -919,6 +996,49 @@ export function ChatHeader() {
           )}
         </div>
       </Modal>
+
+      {/* Chat Lock Verification Modal */}
+      {showLockVerifyModal && (
+        <Modal
+          isOpen={showLockVerifyModal}
+          onClose={() => setShowLockVerifyModal(false)}
+          title={lockActionType === "lock" ? (t("lock.lock_chat") || "Lock Chat") : (t("lock.unlock_chat") || "Unlock Chat")}
+          className="max-w-2xl w-full"
+        >
+          <div className="py-2">
+            <LockScreen
+              layout="modal"
+              mode="unlock"
+              lockType={lockType}
+              savedCode={lockType === "pin" ? savedPin : savedPattern}
+              onSuccess={handleLockVerifySuccess}
+              onCancel={() => setShowLockVerifyModal(false)}
+              title={lockActionType === "lock" ? (t("lock.confirm_to_lock") || "Enter code to lock chat") : (t("lock.confirm_to_unlock") || "Enter code to unlock chat")}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {/* Chat Lock Setup Modal */}
+      {showLockSetupModal && (
+        <Modal
+          isOpen={showLockSetupModal}
+          onClose={() => setShowLockSetupModal(false)}
+          title={t("lock.setup_chat_lock") || "Setup Chat Lock"}
+          className="max-w-2xl w-full"
+        >
+          <div className="py-2">
+            <LockScreen
+              layout="modal"
+              mode="setup"
+              lockType="pin"
+              onSuccess={handleLockSetupSuccess}
+              onCancel={() => setShowLockSetupModal(false)}
+              title={t("lock.create_pin_desc") || "Create a PIN to secure locked chats and this application."}
+            />
+          </div>
+        </Modal>
+      )}
     </header>
   );
 }

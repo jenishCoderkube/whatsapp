@@ -14,6 +14,7 @@ import {
   Trash2,
   Loader2,
   CircleDashed,
+  Lock,
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
@@ -27,11 +28,14 @@ import { ProfileModal } from "./ProfileModal";
 import { NewChatModal } from "./NewChatModal";
 import { LinkedDevicesModal } from "./LinkedDevicesModal";
 import { LanguageModal } from "./LanguageModal";
+import { LockScreen } from "../Lock/LockScreen";
+import { LockSettingsModal } from "../Lock/LockSettingsModal";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
 import { toggleTheme, setArchivedViewOpen, setWallpaperModal } from "../../redux/slices/uiSlice";
 import { setStatusViewOpen } from "../../redux/slices/statusSlice";
+import { lockApp, setLockedChatsFolderUnlocked } from "../../redux/slices/lockSlice";
 import {
   setChats,
   appendChat,
@@ -64,6 +68,18 @@ export function Sidebar({ className }) {
   const theme = useAppSelector((state) => state.ui.theme);
   const archivedViewOpen = useAppSelector((state) => state.ui.archivedViewOpen);
   const onlineMap = useAppSelector((state) => state.chat.onlineMap);
+
+  // Screen/Chat Lock States
+  const {
+    lockedChatIds,
+    isLockedChatsFolderUnlocked,
+    savedPin,
+    savedPattern,
+    lockType,
+  } = useAppSelector((state) => state.lock);
+
+  const [lockSettingsOpen, setLockSettingsOpen] = useState(false);
+  const [lockedChatsOpen, setLockedChatsOpen] = useState(false);
 
   const chatsRef = useRef(chats);
   useEffect(() => {
@@ -321,7 +337,9 @@ export function Sidebar({ className }) {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const activeChats = filteredChats.filter((chat) => !chat.isArchived);
+  const activeChats = filteredChats.filter(
+    (chat) => !chat.isArchived && !lockedChatIds.includes(chat.id),
+  );
   const archivedChats = filteredChats.filter((chat) => chat.isArchived);
 
   const handleLogout = async () => {
@@ -371,6 +389,14 @@ export function Sidebar({ className }) {
     {
       label: theme === "light" ? t("sidebar.dark_theme") : t("sidebar.light_theme"),
       onClick: () => dispatch(toggleTheme()),
+    },
+    {
+      label: t("sidebar.screen_lock_settings") || "Screen Lock Settings",
+      onClick: () => setLockSettingsOpen(true),
+    },
+    {
+      label: t("sidebar.lock_screen_now") || "Lock Screen Now",
+      onClick: () => dispatch(lockApp()),
     },
     {
       label: t("sidebar.logout"),
@@ -573,6 +599,74 @@ export function Sidebar({ className }) {
     );
   }
 
+  // LOCKED CHATS SUB-VIEW
+  if (lockedChatsOpen) {
+    if (!isLockedChatsFolderUnlocked) {
+      return (
+        <aside
+          className={cn(
+            "flex flex-col h-full bg-wa-sidebar border-r border-wa-border select-none transition-colors duration-200",
+            className,
+          )}
+        >
+          <LockScreen
+            mode="unlock"
+            lockType={lockType}
+            savedCode={lockType === "pin" ? savedPin : savedPattern}
+            onSuccess={() => dispatch(setLockedChatsFolderUnlocked(true))}
+            onCancel={() => setLockedChatsOpen(false)}
+            title={t("lock.locked_chats") || "Locked Chats"}
+          />
+        </aside>
+      );
+    }
+
+    const lockedChats = filteredChats.filter((chat) => lockedChatIds.includes(chat.id));
+
+    return (
+      <aside
+        className={cn(
+          "flex flex-col h-full bg-wa-sidebar border-r border-wa-border select-none transition-colors duration-200",
+          className,
+        )}
+      >
+        <header className="flex items-center gap-6 px-4 py-4 bg-wa-primary text-white shrink-0">
+          <button
+            onClick={() => {
+              setLockedChatsOpen(false);
+              dispatch(setLockedChatsFolderUnlocked(false)); // auto-lock again on exit
+            }}
+            className="p-1 rounded-full hover:bg-white/10 transition-colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              className="fill-white rotate-180"
+            >
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"></path>
+            </svg>
+          </button>
+          <span className="font-semibold text-base sm:text-lg">
+            {t("lock.locked_chats") || "Locked Chats"}
+          </span>
+        </header>
+
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200">
+          {lockedChats.length > 0 ? (
+            lockedChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-wa-muted select-none">
+              <span className="text-xs sm:text-sm font-medium">
+                {t("lock.no_locked_chats_desc") || "No locked chats. Lock a chat from its contact profile."}
+              </span>
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside
       className={cn(
@@ -628,6 +722,28 @@ export function Sidebar({ className }) {
 
       {/* Filter engine */}
       <SearchBar />
+
+      {/* Locked Chats Folder Banner */}
+      {lockedChatIds.length > 0 && (
+        <div
+          onClick={() => setLockedChatsOpen(true)}
+          className="flex items-center justify-between px-4 py-3 hover:bg-wa-hover cursor-pointer border-b border-wa-border/40 select-none group transition-colors duration-150 shrink-0"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-wa-primary flex items-center justify-center">
+              <Lock className="h-5 w-5 text-wa-primary" />
+            </span>
+            <span className="font-semibold text-sm sm:text-base text-wa-text">
+              {t("lock.locked_chats") || "Locked Chats"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-wa-primary font-semibold bg-wa-primary/10 px-2 py-0.5 rounded-full">
+              {lockedChatIds.length}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Archived Chats Folder Banner */}
       {archivedChats.length > 0 && (
@@ -738,6 +854,11 @@ export function Sidebar({ className }) {
         locale={locale}
         languageNames={languageNames}
         changeLanguage={changeLanguage}
+      />
+
+      <LockSettingsModal
+        isOpen={lockSettingsOpen}
+        onClose={() => setLockSettingsOpen(false)}
       />
     </aside>
   );

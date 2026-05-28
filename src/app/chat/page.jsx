@@ -24,6 +24,8 @@ import { ForwardModal } from "../../components/Chat/ForwardModal";
 import { MessageSearchPanel } from "../../components/Chat/MessageSearchPanel";
 import { StatusPanel } from "../../components/Status/StatusPanel";
 import { WallpaperModal } from "../../components/Chat/WallpaperModal";
+import { LockScreen } from "../../components/Lock/LockScreen";
+import { initializeLock, unlockApp, lockApp, updateLastUnlockedTime, authorizeChat } from "../../redux/slices/lockSlice";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -38,6 +40,67 @@ export default function ChatPage() {
   const activeSearchPanelOpen = useAppSelector((state) => state.ui.activeSearchPanelOpen);
   const statusViewOpen = useAppSelector((state) => state.status.statusViewOpen);
   const globalWallpaper = useAppSelector((state) => state.ui.globalWallpaper);
+
+  // Screen/Chat Lock States
+  const {
+    isAppLocked,
+    isAppLockEnabled,
+    lockType,
+    savedPin,
+    savedPattern,
+    autoLockTimeout,
+    lastUnlockedTime,
+    lockedChatIds,
+    authorizedChatIds,
+  } = useAppSelector((state) => state.lock);
+
+  // Initialize lock on mount
+  useEffect(() => {
+    dispatch(initializeLock());
+  }, [dispatch]);
+
+  // Track user activity to extend unlock session duration (auto-lock prevention)
+  useEffect(() => {
+    if (isAppLocked || !isAppLockEnabled) return;
+
+    let timeoutId;
+    const handleActivity = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        dispatch(updateLastUnlockedTime());
+      }, 1000);
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("touchstart", handleActivity);
+    window.addEventListener("click", handleActivity);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("touchstart", handleActivity);
+      window.removeEventListener("click", handleActivity);
+    };
+  }, [isAppLocked, isAppLockEnabled, dispatch]);
+
+  // Check periodically for idle timeout (auto-locking)
+  useEffect(() => {
+    if (!isAuthenticated || isAppLocked || !isAppLockEnabled) return;
+
+    const checkTimeout = () => {
+      if (lastUnlockedTime && autoLockTimeout > 0) {
+        const elapsed = Date.now() - lastUnlockedTime;
+        if (elapsed >= autoLockTimeout * 60 * 1000) {
+          dispatch(lockApp());
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkTimeout, 5000);
+    return () => clearInterval(intervalId);
+  }, [isAuthenticated, isAppLocked, isAppLockEnabled, lastUnlockedTime, autoLockTimeout, dispatch]);
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -862,6 +925,18 @@ export default function ChatPage() {
 
   if (!isAuthenticated || !user?.id) return null;
 
+  if (isAppLocked) {
+    return (
+      <LockScreen
+        mode="unlock"
+        lockType={lockType}
+        savedCode={lockType === "pin" ? savedPin : savedPattern}
+        onSuccess={() => dispatch(unlockApp())}
+        title={t("lock.app_locked_title") || "WhatsApp is locked"}
+      />
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-0 flex overflow-hidden bg-wa-bg transition-colors duration-200">
       <main className="relative flex h-full w-full max-w-[1600px] mx-auto overflow-hidden z-10 bg-wa-bg">
@@ -881,8 +956,18 @@ export default function ChatPage() {
           )}
         >
           {activeChat ? (
-            <>
-              <ChatHeader />
+            lockedChatIds.includes(activeChat.id) && !authorizedChatIds.includes(activeChat.id) ? (
+              <LockScreen
+                mode="unlock"
+                lockType={lockType}
+                savedCode={lockType === "pin" ? savedPin : savedPattern}
+                onSuccess={() => dispatch(authorizeChat(activeChat.id))}
+                onCancel={mobileScreen === "chat" ? () => dispatch(setMobileScreen("list")) : null}
+                title={t("lock.chat_locked_title") || "Chat Locked"}
+              />
+            ) : (
+              <>
+                <ChatHeader />
 
               <div className="flex-1 relative overflow-hidden" style={chatBackgroundStyle}>
                 {/* Wallpaper Dimming Overlay */}
@@ -946,7 +1031,7 @@ export default function ChatPage() {
 
               <ChatInput />
             </>
-          ) : (
+          ) ) : (
             <EmptyState />
           )}
         </div>

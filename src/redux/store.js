@@ -5,6 +5,7 @@ import messageReducer from "./slices/messageSlice";
 import uiReducer from "./slices/uiSlice";
 import callReducer from "./slices/callSlice";
 import statusReducer from "./slices/statusSlice";
+import lockReducer from "./slices/lockSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     ui: uiReducer,
     call: callReducer,
     status: statusReducer,
+    lock: lockReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

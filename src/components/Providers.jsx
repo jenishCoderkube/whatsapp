@@ -8,6 +8,7 @@ import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import { loginSuccess, logout } from "../redux/slices/authSlice";
 import { setUserTyping, syncOnlineUsers } from "../redux/slices/chatSlice";
 import { setGlobalWallpaperState } from "../redux/slices/uiSlice";
+import { clearLockSettings, setLockSettingsFromSupabase } from "../redux/slices/lockSlice";
 import { authService } from "../services/authService";
 import { realtimeService } from "../services/realtimeService";
 import { MessageSquare } from "lucide-react";
@@ -91,13 +92,28 @@ function AuthSessionRecoveryGate({ children }) {
         const currentUser = await authService.getCurrentUser();
         if (mounted && currentUser) {
           dispatch(loginSuccess({ user: currentUser }));
+
+          // Hydrate lock settings from Supabase
+          import("../services/lockSyncService")
+            .then(({ lockSyncService }) => {
+              lockSyncService.fetchLockSettings().then((settings) => {
+                if (settings && mounted) {
+                  dispatch(setLockSettingsFromSupabase(settings));
+                }
+              });
+            })
+            .catch((err) => {
+              console.warn("Failed to import lockSyncService:", err);
+            });
         } else if (mounted) {
           dispatch(logout());
+          dispatch(clearLockSettings());
         }
       } catch (err) {
         console.warn("Session hydration bypass lookup exception:", err);
         if (mounted) {
           dispatch(logout());
+          dispatch(clearLockSettings());
         }
       } finally {
         if (mounted) {
@@ -115,10 +131,24 @@ function AuthSessionRecoveryGate({ children }) {
         if (event === "SIGNED_OUT" || !session) {
           realtimeService.disconnectGlobalPresence();
           dispatch(logout());
+          dispatch(clearLockSettings());
         } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
           const currentUser = await authService.getCurrentUser();
           if (currentUser && mounted) {
             dispatch(loginSuccess({ user: currentUser }));
+
+            // Hydrate lock settings from Supabase
+            import("../services/lockSyncService")
+              .then(({ lockSyncService }) => {
+                lockSyncService.fetchLockSettings().then((settings) => {
+                  if (settings && mounted) {
+                    dispatch(setLockSettingsFromSupabase(settings));
+                  }
+                });
+              })
+              .catch((err) => {
+                console.warn("Failed to import lockSyncService:", err);
+              });
           }
         }
       },
