@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Type, CircleDashed } from "lucide-react";
 import { StatusAvatar } from "./StatusAvatar";
 import { cn } from "../../utils/cn";
 import { useTranslation } from "../../hooks/useTranslation";
+import { formatMessageTime } from "../../utils/dateUtils";
 
 export function StatusSidebar({
   user,
@@ -83,8 +84,8 @@ export function StatusSidebar({
               <span className="text-xs text-[#8696a0]">
                 {myStatuses.length > 0
                   ? t("status.last_updated", {
-                      time: new Date(myStatuses[0].createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    }) || `Last updated: ${new Date(myStatuses[0].createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                      time: formatMessageTime(myStatuses[0].createdAt)
+                    }) || `Last updated: ${formatMessageTime(myStatuses[0].createdAt)}`
                   : (t("status.tap_to_add") || "Tap to add status update")}
               </span>
             </div>
@@ -153,10 +154,7 @@ export function StatusSidebar({
                   <div className="flex flex-col text-left">
                     <span className="text-sm font-medium text-[#e9edef]">{group.name}</span>
                     <span className="text-xs text-[#8696a0]">
-                      {new Date(lastUpdate.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatMessageTime(lastUpdate.createdAt)}
                     </span>
                   </div>
                 </div>
@@ -189,10 +187,7 @@ export function StatusSidebar({
                   <div className="flex flex-col text-left">
                     <span className="text-sm font-medium text-[#e9edef]">{group.name}</span>
                     <span className="text-xs text-[#8696a0]">
-                      {new Date(lastUpdate.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatMessageTime(lastUpdate.createdAt)}
                     </span>
                   </div>
                 </div>

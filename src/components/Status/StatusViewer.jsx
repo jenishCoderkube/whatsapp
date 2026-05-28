@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
+import { formatMessageTime } from "../../utils/dateUtils";
 
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   ssr: false,
@@ -203,11 +204,7 @@ export function StatusViewer({
               {activeUserId === currentUser?.id ? (t("status.my_status") || "My status") : activeGroup?.name}
             </span>
             <span className="text-xs text-white/70">
-              {new Date(activeStatus?.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: true,
-              })}
+              {formatMessageTime(activeStatus?.createdAt)}
             </span>
           </div>
         </div>

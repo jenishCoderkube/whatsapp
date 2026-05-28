@@ -5,6 +5,7 @@ import { X, Eye } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "../../hooks/useTranslation";
+import { formatMessageTime } from "../../utils/dateUtils";
 
 export function StatusViewersDrawer({ isOpen, onClose, views = [] }) {
   const { t } = useTranslation();
@@ -67,10 +68,7 @@ export function StatusViewersDrawer({ isOpen, onClose, views = [] }) {
                           {vw.name}
                         </span>
                         <span className="text-[10px] text-white/50">
-                          {new Date(vw.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {formatMessageTime(vw.createdAt)}
                         </span>
                       </div>
                     </div>

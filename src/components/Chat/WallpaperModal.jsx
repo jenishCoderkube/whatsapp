@@ -240,7 +240,7 @@ export function WallpaperModal() {
       title={t("chat.customize_wallpaper") || "Chat Wallpaper"}
       className="md:max-w-4xl"
     >
-      <div className="flex flex-col md:flex-row gap-6 max-h-[80vh] overflow-hidden">
+      <div className="flex flex-col md:flex-row gap-6 h-auto md:h-[560px] overflow-visible md:overflow-hidden">
         {/* Left pane: Options & Picker */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto pr-2 scrollbar-thin">
           

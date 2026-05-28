@@ -42,6 +42,68 @@ import { cn } from "../../utils/cn";
 import { useVoiceCall } from "../../hooks/useVoiceCall";
 import { useTranslation } from "../../hooks/useTranslation";
 
+function MarqueeText({ text, className }) {
+  const containerRef = useRef(null);
+  const textRef = useRef(null);
+  const [scrollAmount, setScrollAmount] = useState(0);
+
+  useEffect(() => {
+    setScrollAmount(0);
+
+    const checkOverflow = () => {
+      const container = containerRef.current;
+      const textEl = textRef.current;
+      if (container && textEl) {
+        const overflowWidth = textEl.scrollWidth - container.clientWidth;
+        if (overflowWidth > 0) {
+          setScrollAmount(overflowWidth);
+        } else {
+          setScrollAmount(0);
+        }
+      }
+    };
+
+    const timer = setTimeout(checkOverflow, 200);
+    window.addEventListener("resize", checkOverflow);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", checkOverflow);
+    };
+  }, [text]);
+
+  const style = scrollAmount > 0
+    ? {
+        animation: `waHeaderMarquee ${scrollAmount * 0.05 + 4}s linear infinite alternate`,
+        display: "inline-block",
+        paddingRight: "20px",
+      }
+    : {};
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn("w-full overflow-hidden whitespace-nowrap", className)}
+    >
+      <span
+        ref={textRef}
+        style={style}
+        className="inline-block"
+      >
+        {text}
+      </span>
+      {scrollAmount > 0 && (
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes waHeaderMarquee {
+            0%, 15% { transform: translate3d(0, 0, 0); }
+            85%, 100% { transform: translate3d(-${scrollAmount}px, 0, 0); }
+          }
+        `}} />
+      )}
+    </div>
+  );
+}
+
 export function ChatHeader() {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
@@ -384,19 +446,22 @@ export function ChatHeader() {
 
         <div
           onClick={() => setInfoModal(true)}
-          className="flex-1 min-w-0 cursor-pointer"
+          className="flex-1 min-w-0 cursor-pointer overflow-hidden"
         >
-          <h2 className="text-sm sm:text-base font-medium text-wa-text truncate">
-            {activeChat.name}
-          </h2>
+          <MarqueeText
+            text={activeChat.name}
+            className="text-sm sm:text-base font-medium text-wa-text"
+          />
           {isPeerTyping ? (
-            <p className="text-xs text-wa-primary font-medium italic animate-pulse truncate">
-              {typingText}
-            </p>
+            <MarqueeText
+              text={typingText}
+              className="text-xs text-wa-primary font-medium italic animate-pulse"
+            />
           ) : (
-            <p className="text-xs text-wa-muted truncate capitalize-first">
-              {renderSubtitle()}
-            </p>
+            <MarqueeText
+              text={renderSubtitle()}
+              className="text-xs text-wa-muted capitalize-first"
+            />
           )}
         </div>
       </div>

@@ -28,7 +28,7 @@ export function Modal({ isOpen, onClose, title, children, className }) {
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -36,27 +36,29 @@ export function Modal({ isOpen, onClose, title, children, className }) {
             onClick={onClose}
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
           />
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 10 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 10 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className={cn(
-              "relative z-50 w-full max-w-md rounded-md bg-wa-modal p-6 shadow-xl border border-wa-border transition-colors duration-200",
-              className
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-wa-border pb-3 mb-4">
-              <h3 className="text-base font-medium text-wa-text">{title}</h3>
-              <button
-                onClick={onClose}
-                className="rounded-full p-1 text-wa-muted hover:bg-wa-hover transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div>{children}</div>
-          </motion.div>
+          <div className="flex min-h-full items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className={cn(
+                "relative z-50 w-full max-w-md rounded-md bg-wa-modal p-6 shadow-xl border border-wa-border transition-colors duration-200 my-8",
+                className
+              )}
+            >
+              <div className="flex items-center justify-between border-b border-wa-border pb-3 mb-4">
+                <h3 className="text-base font-medium text-wa-text">{title}</h3>
+                <button
+                  onClick={onClose}
+                  className="rounded-full p-1 text-wa-muted hover:bg-wa-hover transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div>{children}</div>
+            </motion.div>
+          </div>
         </div>
       )}
     </AnimatePresence>,
