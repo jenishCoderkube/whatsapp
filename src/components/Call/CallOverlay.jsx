@@ -266,18 +266,20 @@ export const CallOverlay = () => {
                 </span>
               </div>
 
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="relative mb-8"
-              >
-                <div className="absolute inset-0 bg-wa-primary/10 rounded-full scale-125 animate-pulse" />
-                <Avatar
-                  src={currentPeer?.avatar}
-                  size="xl"
-                  className="w-28 h-28 sm:w-36 sm:h-36 border-4 border-white/10 shadow-2xl relative z-10"
-                />
-              </motion.div>
+              {!isVideoCall && (
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="relative mb-8"
+                >
+                  <div className="absolute inset-0 bg-wa-primary/10 rounded-full scale-125 animate-pulse" />
+                  <Avatar
+                    src={currentPeer?.avatar}
+                    size="xl"
+                    className="w-28 h-28 sm:w-36 sm:h-36 border-4 border-white/10 shadow-2xl relative z-10"
+                  />
+                </motion.div>
+              )}
 
               <h1 className="text-2xl sm:text-4xl font-light mb-2 drop-shadow-lg">
                 {currentPeer?.name || t("call.whatsapp_user")}

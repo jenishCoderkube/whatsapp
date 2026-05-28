@@ -74,8 +74,7 @@ export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", 
       <Avatar
         src={src}
         fallback={fallback}
-        size="sm"
-        className={cn("absolute", avatarSize)}
+        className={avatarSize}
         uid={uid}
       />
     </div>
