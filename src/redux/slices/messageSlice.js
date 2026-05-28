@@ -64,10 +64,40 @@ const messageSlice = createSlice({
         state.messages[chatId] = [];
       }
       const list = state.messages[chatId];
+      
       // Prevent duplicate row insertion if key identity matches exactly
       if (list.some((m) => m.id === message.id)) {
         return;
       }
+
+      // If this is a real database message, try to find and resolve its optimistic counterpart
+      if (message.id && !message.id.startsWith("msg-temp-")) {
+        const optIdx = list.findIndex(
+          (m) =>
+            m.id &&
+            m.id.startsWith("msg-temp-") &&
+            m.type === message.type &&
+            (message.fileName ? m.fileName === message.fileName : m.text === message.text)
+        );
+
+        if (optIdx !== -1) {
+          const prevMsg = list[optIdx];
+          const statusWeight = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
+          const oldWeight = statusWeight[prevMsg.status] || 0;
+          const newWeight = statusWeight[message.status] || 0;
+          const finalStatus = newWeight >= oldWeight ? message.status : prevMsg.status;
+
+          list[optIdx] = {
+            ...prevMsg,
+            ...message,
+            id: message.id,
+            uiId: prevMsg.uiId || prevMsg.id,
+            status: finalStatus,
+          };
+          return;
+        }
+      }
+
       // Accurately prevent duplication while permitting identical payload arrays on batch transfers
       const exists = list.some(
         (m) =>
@@ -97,9 +127,20 @@ const messageSlice = createSlice({
       const { chatId, message } = action.payload;
       const list = state.messages[chatId];
       if (list) {
-        const idx = list.findIndex((m) => m.id === message.id);
+        let idx = list.findIndex((m) => m.id === message.id);
+        if (idx === -1 && message.id && !message.id.startsWith("msg-temp-")) {
+          idx = list.findIndex(
+            (m) =>
+              m.id &&
+              m.id.startsWith("msg-temp-") &&
+              m.type === message.type &&
+              (message.fileName ? m.fileName === message.fileName : m.text === message.text)
+          );
+        }
+
         if (idx !== -1) {
-          const oldStatus = list[idx].status;
+          const prevMsg = list[idx];
+          const oldStatus = prevMsg.status;
           const newStatus = message.status;
           const statusWeight = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
           
@@ -112,7 +153,13 @@ const messageSlice = createSlice({
             }
           }
           
-          list[idx] = { ...list[idx], ...message, status: finalStatus || oldStatus };
+          list[idx] = {
+            ...prevMsg,
+            ...message,
+            id: message.id,
+            uiId: prevMsg.uiId || prevMsg.id,
+            status: finalStatus || oldStatus,
+          };
         }
       }
     },
