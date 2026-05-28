@@ -168,7 +168,7 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
                       className="flex items-center justify-between p-2 rounded hover:bg-wa-hover cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <Avatar src={prof.avatar} fallback={prof.name?.[0] || "?"} size="sm" />
+                        <Avatar src={prof.avatar} fallback={prof.name?.[0] || "?"} size="sm" uid={prof.id} />
                         <div className="flex flex-col">
                           <span className="text-xs font-medium text-wa-text">{prof.name}</span>
                           <span className="text-[10px] text-wa-muted truncate max-w-[180px]">

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { cn } from "../../utils/cn";
 
 export const Avatar = React.forwardRef(
-  ({ src, alt = "", size = "md", className, isOnline = false, fallback = "?" }, ref) => {
+  ({ src, alt = "", size = "md", className, isOnline = false, fallback = "?", uid }, ref) => {
     const [hasError, setHasError] = useState(false);
 
     useEffect(() => {
@@ -21,10 +21,25 @@ export const Avatar = React.forwardRef(
 
     const displayFallback = !src || hasError;
 
+    const getAvatarColor = (str) => {
+      if (!str) return null;
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const hue = Math.abs(hash) % 360;
+      // High quality, vibrant but legible background color
+      return `hsl(${hue}, 55%, 42%)`;
+    };
+
+    const hashSeed = uid || fallback || alt;
+    const customBgColor = displayFallback && hashSeed ? getAvatarColor(hashSeed) : null;
+
     return (
       <div className="relative inline-block select-none shrink-0">
         <div
           ref={ref}
+          style={customBgColor ? { backgroundColor: customBgColor } : undefined}
           className={cn(
             "relative flex items-center justify-center rounded-full overflow-hidden bg-wa-muted text-white font-semibold transition-colors",
             sizes[size],

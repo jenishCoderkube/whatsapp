@@ -170,6 +170,17 @@ const messageSlice = createSlice({
         state.messages[chatId] = list.filter((m) => m.id !== messageId);
       }
     },
+    updateSenderProfile(state, action) {
+      const { senderId, name, avatar } = action.payload;
+      Object.keys(state.messages).forEach((chatId) => {
+        state.messages[chatId].forEach((msg) => {
+          if (msg.senderId === senderId) {
+            if (name && msg.senderName !== name) msg.senderName = name;
+            if (avatar && msg.senderAvatar !== avatar) msg.senderAvatar = avatar;
+          }
+        });
+      });
+    },
     resetMessages(state) {
       state.messages = {};
     },
@@ -185,6 +196,7 @@ export const {
   updateMessageStatus,
   updateMessage,
   deleteMessage,
+  updateSenderProfile,
   resetMessages,
 } = messageSlice.actions;
 

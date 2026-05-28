@@ -4,11 +4,11 @@ import React from "react";
 import { Avatar } from "../ui/Avatar";
 import { cn } from "../../utils/cn";
 
-export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", className }) {
+export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", className, uid }) {
   const sizes = {
-    md: { box: 48, center: 24, radius: 21, strokeWidth: 2, avatarSize: "h-9 w-9" },
-    lg: { box: 56, center: 28, radius: 25, strokeWidth: 2.5, avatarSize: "h-11 w-11" },
-    xl: { box: 72, center: 36, radius: 32, strokeWidth: 3, avatarSize: "h-15 w-15" },
+    md: { box: 48, center: 24, radius: 21, strokeWidth: 2, avatarSize: "h-9 w-9 text-xs" },
+    lg: { box: 56, center: 28, radius: 25, strokeWidth: 2.5, avatarSize: "h-11 w-11 text-sm" },
+    xl: { box: 72, center: 36, radius: 32, strokeWidth: 3, avatarSize: "h-15 w-15 text-base" },
   };
 
   const currentSize = sizes[size] || sizes.lg;
@@ -24,6 +24,7 @@ export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", 
         fallback={fallback}
         size={size === "md" ? "md" : size === "lg" ? "lg" : "xl"}
         className={className}
+        uid={uid}
       />
     );
   }
@@ -70,13 +71,13 @@ export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", 
       </svg>
 
       {/* Avatar placed inside the ring */}
-      <div className={cn("rounded-full overflow-hidden flex items-center justify-center bg-wa-hover", avatarSize)}>
-        {src ? (
-          <img src={src} alt="Status Avatar" className="h-full w-full object-cover" />
-        ) : (
-          <span className="text-wa-text font-semibold uppercase">{fallback}</span>
-        )}
-      </div>
+      <Avatar
+        src={src}
+        fallback={fallback}
+        size="sm"
+        className={cn("absolute", avatarSize)}
+        uid={uid}
+      />
     </div>
   );
 }

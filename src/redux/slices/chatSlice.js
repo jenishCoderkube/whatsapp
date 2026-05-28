@@ -240,6 +240,17 @@ const chatSlice = createSlice({
         }
       });
     },
+    updatePeerProfile(state, action) {
+      const { peerId, name, avatar, online, lastSeen } = action.payload;
+      state.chats.forEach((chat) => {
+        if (!chat.isGroup && chat.peerId === peerId) {
+          if (name && chat.name !== name) chat.name = name;
+          if (avatar && chat.avatar !== avatar) chat.avatar = avatar;
+          if (online !== undefined && chat.online !== online) chat.online = online;
+          if (lastSeen !== undefined && chat.lastSeen !== lastSeen) chat.lastSeen = lastSeen;
+        }
+      });
+    },
     resetChats(state) {
       state.chats = [];
       state.activeChatId = null;
@@ -264,6 +275,7 @@ export const {
   updateChatDisappearingDuration,
   setUserTyping,
   syncOnlineUsers,
+  updatePeerProfile,
   resetChats,
 } = chatSlice.actions;
 

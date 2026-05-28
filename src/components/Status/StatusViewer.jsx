@@ -196,6 +196,7 @@ export function StatusViewer({
             src={activeGroup?.avatar}
             fallback={activeGroup?.name?.[0] || "?"}
             size="sm"
+            uid={activeUserId}
           />
           <div className="flex flex-col text-left">
             <span className="text-sm font-semibold text-white">

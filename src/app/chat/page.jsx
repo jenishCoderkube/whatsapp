@@ -10,8 +10,8 @@ import { ChatInput } from "../../components/Chat/ChatInput";
 import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
-import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage } from "../../redux/slices/messageSlice";
-import { updateLastMessage, incrementUnread, setChats } from "../../redux/slices/chatSlice";
+import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage, updateSenderProfile } from "../../redux/slices/messageSlice";
+import { updateLastMessage, incrementUnread, setChats, updatePeerProfile } from "../../redux/slices/chatSlice";
 import { setActiveSearchPanelOpen, setMobileScreen } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { chatService } from "../../services/chatService";
@@ -490,8 +490,37 @@ export default function ChatPage() {
       }
     });
 
+    realtimeService.subscribeToProfileUpdates((updatedProfile) => {
+      dispatch(
+        updatePeerProfile({
+          peerId: updatedProfile.id,
+          name: updatedProfile.name,
+          avatar: updatedProfile.avatar,
+          online: updatedProfile.online,
+          lastSeen: updatedProfile.last_seen,
+        })
+      );
+      dispatch(
+        updateSenderProfile({
+          senderId: updatedProfile.id,
+          name: updatedProfile.name,
+          avatar: updatedProfile.avatar,
+        })
+      );
+      if (activeChatIdRef.current) {
+        setGroupMembers((prev) =>
+          prev.map((m) =>
+            m.id === updatedProfile.id
+              ? { ...m, name: updatedProfile.name, avatar: updatedProfile.avatar, online: updatedProfile.online, lastSeen: updatedProfile.last_seen }
+              : m
+          )
+        );
+      }
+    });
+
     return () => {
       realtimeService.disconnectGlobalMessages();
+      realtimeService.disconnectProfileUpdates();
       window.removeEventListener("online", handleOnline);
     };
   }, [user?.id, dispatch]);

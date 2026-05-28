@@ -23,6 +23,10 @@ import { Button } from "../ui/Button";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { SearchBar } from "./SearchBar";
 import { ChatCard } from "./ChatCard";
+import { ProfileModal } from "./ProfileModal";
+import { NewChatModal } from "./NewChatModal";
+import { LinkedDevicesModal } from "./LinkedDevicesModal";
+import { LanguageModal } from "./LanguageModal";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
@@ -584,6 +588,7 @@ export function Sidebar({ className }) {
             fallback={user?.name?.[0] || "U"}
             size="md"
             isOnline={true}
+            uid={user?.id}
           />
         </div>
 
@@ -673,503 +678,63 @@ export function Sidebar({ className }) {
       </div>
 
       {/* Profile Settings Engine Modal */}
-      <Modal
+      <ProfileModal
         isOpen={profileModal}
         onClose={() => setProfileModal(false)}
-        title={t("sidebar.profile_info")}
-      >
-        <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-2">
-          {profileMessage && (
-            <div className="w-full mb-3 p-2 rounded text-center text-xs bg-wa-active text-wa-text border border-wa-border animate-fade-in">
-              {profileMessage}
-            </div>
-          )}
+        user={user}
+        profileMessage={profileMessage}
+        isUpdatingProfile={isUpdatingProfile}
+        editingName={editingName}
+        setEditingName={setEditingName}
+        tempName={tempName}
+        setTempName={setTempName}
+        editingStatus={editingStatus}
+        setEditingStatus={setEditingStatus}
+        tempStatus={tempStatus}
+        setTempStatus={setTempStatus}
+        handleProfileAvatarSelectChange={handleProfileAvatarSelectChange}
+        handleRemoveAvatarImage={handleRemoveAvatarImage}
+        handleSaveName={handleSaveName}
+        handleSaveStatus={handleSaveStatus}
+        profileFileInputRef={profileFileInputRef}
+      />
 
-          {/* Hidden Avatar Uploader element */}
-          <input
-            type="file"
-            ref={profileFileInputRef}
-            onChange={handleProfileAvatarSelectChange}
-            accept="image/*"
-            className="hidden"
-          />
-
-          {/* Realtime Interactive Profile photo block */}
-          <div className="relative group cursor-pointer my-2 block rounded-full">
-            <Avatar
-              src={user?.avatar}
-              fallback={user?.name?.[0] || "U"}
-              size="xxl"
-              className="shadow-md ring-2 ring-wa-border"
-            />
-            <div
-              onClick={() => profileFileInputRef.current?.click()}
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white text-center p-2"
-            >
-              <Upload className="h-5 w-5 mb-1" />
-              <span className="text-[10px] leading-tight">{t("sidebar.change_photo")}</span>
-            </div>
-            {isUpdatingProfile && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-wa-modal/80 backdrop-blur-xs">
-                <Loader2 className="h-6 w-6 text-wa-primary animate-spin" />
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 mt-1 mb-4 text-xs">
-            <button
-              onClick={() => profileFileInputRef.current?.click()}
-              disabled={isUpdatingProfile}
-              className="text-wa-primary font-medium hover:underline block cursor-pointer"
-            >
-              {t("sidebar.upload_image")}
-            </button>
-            <span className="text-wa-muted">•</span>
-            <button
-              onClick={handleRemoveAvatarImage}
-              disabled={isUpdatingProfile}
-              className="text-red-500 font-medium hover:underline block cursor-pointer"
-            >
-              {t("common.remove")}
-            </button>
-          </div>
-
-          {/* Fully Interactive Edit Fields mapping */}
-          <div className="w-full pt-3 border-t border-wa-border flex flex-col gap-4 text-left">
-            {/* Username Section */}
-            <div className="flex flex-col gap-1">
-              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">
-                {t("sidebar.your_name")}
-              </div>
-              {editingName ? (
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="text"
-                    value={tempName}
-                    onChange={(e) => setTempName(e.target.value)}
-                    className="h-8 text-xs flex-1"
-                    placeholder={t("sidebar.your_name")}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleSaveName}
-                    disabled={isUpdatingProfile || !tempName.trim()}
-                    className="p-1.5 rounded bg-wa-primary text-white hover:opacity-90 block cursor-pointer"
-                    title={t("common.save")}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setTempName(user?.name || "");
-                      setEditingName(false);
-                    }}
-                    disabled={isUpdatingProfile}
-                    className="p-1.5 rounded bg-wa-active text-wa-muted hover:text-wa-text block cursor-pointer"
-                    title={t("common.cancel")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
-                  <span className="text-xs sm:text-sm font-medium text-wa-text truncate">
-                    {user?.name}
-                  </span>
-                  <button
-                    onClick={() => setEditingName(true)}
-                    className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
-                    title={t("sidebar.edit_name") || "Edit name"}
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-              <span className="text-[10px] text-wa-muted px-1 block">
-                {t("sidebar.name_disclaimer")}
-              </span>
-            </div>
-
-            {/* About description Section */}
-            <div className="flex flex-col gap-1">
-              <div className="text-[11px] text-wa-primary font-medium uppercase tracking-wider px-1">
-                {t("sidebar.about")}
-              </div>
-              {editingStatus ? (
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="text"
-                    value={tempStatus}
-                    onChange={(e) => setTempStatus(e.target.value)}
-                    className="h-8 text-xs flex-1"
-                    placeholder={t("status.type_status")}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleSaveStatus}
-                    disabled={isUpdatingProfile || !tempStatus.trim()}
-                    className="p-1.5 rounded bg-wa-primary text-white hover:opacity-90 block cursor-pointer"
-                    title={t("common.save")}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setTempStatus(user?.status || "Available");
-                      setEditingStatus(false);
-                    }}
-                    disabled={isUpdatingProfile}
-                    className="p-1.5 rounded bg-wa-active text-wa-muted hover:text-wa-text block cursor-pointer"
-                    title={t("common.cancel")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between bg-wa-header px-3 py-2 rounded-md group">
-                  <span className="text-xs sm:text-sm text-wa-text truncate">
-                    {user?.status || t("sidebar.available") || "Available"}
-                  </span>
-                  <button
-                    onClick={() => setEditingStatus(true)}
-                    className="text-wa-muted hover:text-wa-primary transition-colors block cursor-pointer"
-                    title={t("sidebar.edit_about") || "Edit about"}
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Interactive New Chat / Create Group Chat Modals */}
-      <Modal
+      <NewChatModal
         isOpen={newChatModal}
         onClose={() => setNewChatModal(false)}
-        title={t("sidebar.new_chat")}
-      >
-        <div className="flex flex-col h-[420px]">
-          {/* Internal view switching strip */}
-          <div className="flex border-b border-wa-border mb-3">
-            <button
-              onClick={() => setActiveTab("direct")}
-              className={cn(
-                "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors block cursor-pointer",
-                activeTab === "direct"
-                  ? "border-wa-primary text-wa-primary"
-                  : "border-transparent text-wa-muted hover:text-wa-text",
-              )}
-            >
-              {t("sidebar.direct_chat")}
-            </button>
-            <button
-              onClick={() => setActiveTab("group")}
-              className={cn(
-                "flex-1 py-2 text-xs font-medium text-center border-b-2 transition-colors block cursor-pointer",
-                activeTab === "group"
-                  ? "border-wa-primary text-wa-primary"
-                  : "border-transparent text-wa-muted hover:text-wa-text",
-              )}
-            >
-              {t("sidebar.create_group")}
-            </button>
-          </div>
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        userSearchQuery={userSearchQuery}
+        setUserSearchQuery={setUserSearchQuery}
+        isSearching={isSearching}
+        searchResults={searchResults}
+        handleStartDirectChat={handleStartDirectChat}
+        groupName={groupName}
+        setGroupName={setGroupName}
+        groupAvatar={groupAvatar}
+        handleRandomGroupAvatar={handleRandomGroupAvatar}
+        selectedMembers={selectedMembers}
+        toggleMemberSelection={toggleMemberSelection}
+        handleCreateGroup={handleCreateGroup}
+        onlineMap={onlineMap}
+      />
 
-          {/* Direct Chat search view */}
-          {activeTab === "direct" ? (
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <div className="relative mb-3 p-0.5">
-                <Input
-                  type="text"
-                  placeholder={t("sidebar.search_profiles")}
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="pl-9 bg-wa-header border border-wa-border rounded-lg text-xs sm:text-sm py-2 focus:ring-1 focus:ring-wa-primary"
-                />
-                <Search className="absolute left-3.5 top-3 h-4 w-4 text-wa-muted" />
-              </div>
-
-              <div className="flex-1 overflow-y-auto pr-1">
-                {isSearching ? (
-                  <div className="py-8 text-center text-xs text-wa-muted animate-pulse">
-                    {t("sidebar.searching_profiles")}
-                  </div>
-                ) : searchResults.length > 0 ? (
-                  searchResults.map((profile) => (
-                    <div
-                      key={profile.id}
-                      onClick={() => handleStartDirectChat(profile)}
-                      className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors"
-                    >
-                      <Avatar
-                        src={profile.avatar}
-                        fallback={profile.name[0]}
-                        size="md"
-                        isOnline={!!onlineMap[profile.id]}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-wa-text truncate">
-                          {profile.name}
-                        </div>
-                        <div className="text-[11px] text-wa-muted truncate">
-                          {profile.email}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="py-8 text-center text-xs text-wa-muted">
-                    {userSearchQuery.trim()
-                      ? t("sidebar.no_profiles_found")
-                      : t("sidebar.type_to_discover")}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Multi-User Native Group Creation Layer */
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  onClick={handleRandomGroupAvatar}
-                  className="cursor-pointer block"
-                  title={t("sidebar.generate_preset_icon")}
-                >
-                  <Avatar
-                    src={groupAvatar}
-                    fallback="G"
-                    size="lg"
-                    className="border border-wa-border hover:opacity-80 transition-opacity"
-                  />
-                </div>
-                <div className="flex-1 p-0.5">
-                  <Input
-                    className="bg-wa-header border border-wa-border rounded-lg text-xs sm:text-sm py-2 font-medium focus:ring-1 focus:ring-wa-primary"
-                    type="text"
-                    placeholder={t("sidebar.group_subject_placeholder")}
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
-                  />
-                  <span className="text-[10px] text-wa-muted block mt-1">
-                    {t("sidebar.click_placeholder_desc")}
-                  </span>
-                </div>
-              </div>
-
-              <div className="text-xs font-medium text-wa-muted mb-1.5">
-                {t("sidebar.select_participants")}
-              </div>
-
-              <div className="flex-1 overflow-y-auto border border-wa-border rounded-md p-1.5 mb-3 bg-wa-sidebar">
-                {searchResults.length > 0 ? (
-                  searchResults.map((profile) => {
-                    const isSelected = selectedMembers.includes(profile.id);
-                    return (
-                      <div
-                        key={profile.id}
-                        onClick={() => toggleMemberSelection(profile.id)}
-                        className={cn(
-                          "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none",
-                          isSelected && "bg-wa-active",
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "flex items-center justify-center h-4 w-4 rounded border transition-colors shrink-0",
-                            isSelected
-                              ? "bg-wa-primary border-wa-primary text-white"
-                              : "border-wa-muted",
-                          )}
-                        >
-                          {isSelected && (
-                            <Check className="h-3 w-3 stroke-[3]" />
-                          )}
-                        </div>
-                        <Avatar
-                          src={profile.avatar}
-                          fallback={profile.name[0]}
-                          size="sm"
-                        />
-                        <span className="text-xs text-wa-text truncate flex-1">
-                          {profile.name}
-                        </span>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="py-8 text-center text-xs text-wa-muted">
-                    {t("sidebar.no_peers_desc")}
-                  </div>
-                )}
-              </div>
-
-              <Button
-                onClick={handleCreateGroup}
-                disabled={!groupName.trim()}
-                className="w-full"
-                variant="default"
-              >
-                {t("sidebar.create_group_with_count", { count: selectedMembers.length })}
-              </Button>
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
+      <LinkedDevicesModal
         isOpen={linkedDevicesModalOpen}
         onClose={() => setLinkedDevicesModalOpen(false)}
-        title={t("sidebar.linked_devices")}
-      >
-        <div className="flex flex-col items-center py-2 max-h-[75vh] overflow-y-auto px-4 select-none">
-          {/* Main Visual Graphic (laptop + phone sync mockup) */}
-          <div className="flex flex-col items-center justify-center text-center py-6 px-4 bg-wa-header/20 border border-wa-border/50 rounded-2xl w-full mb-6 relative overflow-hidden">
-            <div className="h-16 w-16 rounded-full bg-wa-primary/10 flex items-center justify-center mb-3">
-              <svg
-                viewBox="0 0 24 24"
-                width="32"
-                height="32"
-                className="fill-wa-primary animate-pulse"
-              >
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"></path>
-              </svg>
-            </div>
-            <h4 className="text-sm sm:text-base font-semibold text-wa-text">
-              {t("sidebar.active_login_sessions")}
-            </h4>
-            <p className="text-xs text-wa-muted mt-1 max-w-sm leading-relaxed">
-              {t("sidebar.active_login_sessions_desc")}
-            </p>
-          </div>
+        activeDevices={activeDevices}
+        handleLogoutDevice={handleLogoutDevice}
+        handleLogoutAllDevices={handleLogoutAllDevices}
+      />
 
-          {/* Linked Sessions List */}
-          <div className="w-full text-left">
-            <span className="text-xs text-wa-muted font-bold uppercase tracking-wider block mb-3 px-1">
-              {t("sidebar.active_sessions")}
-            </span>
-
-            <div className="flex flex-col gap-2.5">
-              {activeDevices.map((dev) => (
-                <div 
-                  key={dev.id} 
-                  className={cn(
-                    "flex items-center gap-3.5 p-3 rounded-xl bg-wa-header border border-wa-border/40 transition-all",
-                    dev.active ? "border-wa-border/60" : "opacity-75 group hover:opacity-100"
-                  )}
-                >
-                  <div className="h-10 w-10 rounded-full bg-wa-active flex items-center justify-center shrink-0 text-wa-muted">
-                    {dev.isBrowser ? (
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="20"
-                        height="20"
-                        className="fill-wa-primary"
-                      >
-                        <path d="M20 4H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-2 12H6V6h12v10z"></path>
-                      </svg>
-                    ) : (
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="20"
-                        height="20"
-                        className="fill-wa-muted"
-                      >
-                        <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"></path>
-                      </svg>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs sm:text-sm font-semibold text-wa-text flex items-center gap-2">
-                      {dev.name}
-                      {dev.active && (
-                        <>
-                          <span className="h-2 w-2 rounded-full bg-green-500 shrink-0 inline-block animate-ping" />
-                          <span className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">
-                            {t("sidebar.active")}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    <p className="text-[10px] sm:text-xs text-wa-muted truncate mt-0.5">
-                      {dev.desc}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleLogoutDevice(dev)}
-                    className="text-[10px] sm:text-xs font-bold text-red-500 hover:underline shrink-0 block"
-                  >
-                    {t("sidebar.logout")}
-                  </button>
-                </div>
-              ))}
-
-              {activeDevices.length > 0 && (
-                <button
-                  onClick={handleLogoutAllDevices}
-                  className="w-full mt-4 py-2.5 rounded-xl border border-red-500/30 hover:bg-red-500/10 text-red-500 font-bold text-xs sm:text-sm transition-all text-center block outline-none"
-                >
-                  {t("sidebar.logout_all_devices")}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Language Settings Modal */}
-      <Modal
+      <LanguageModal
         isOpen={languageModalOpen}
         onClose={() => setLanguageModalOpen(false)}
-        title={t("sidebar.language_settings")}
-      >
-        <div className="flex flex-col py-2 max-h-[75vh] overflow-y-auto px-4 select-none">
-          <p className="text-xs text-wa-muted mb-4">
-            {t("sidebar.select_language")}
-          </p>
-          <div className="flex flex-col gap-2">
-            {availableLanguages.map((langCode) => {
-              const isSelected = locale === langCode;
-              return (
-                <button
-                  key={langCode}
-                  onClick={() => {
-                    changeLanguage(langCode);
-                  }}
-                  className={cn(
-                    "flex items-center justify-between p-3 rounded-xl border transition-all text-left w-full outline-none cursor-pointer",
-                    isSelected
-                      ? "bg-wa-primary/10 border-wa-primary text-wa-primary font-semibold"
-                      : "bg-wa-header border-wa-border/40 text-wa-text hover:bg-wa-hover hover:border-wa-border/60"
-                  )}
-                >
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">
-                      {languageNames[langCode] || langCode}
-                    </span>
-                    <span className="text-[10px] text-wa-muted uppercase mt-0.5">
-                      {langCode}
-                    </span>
-                  </div>
-                  <div
-                    className={cn(
-                      "flex items-center justify-center h-5 w-5 rounded-full border transition-all shrink-0",
-                      isSelected
-                        ? "border-wa-primary bg-wa-primary"
-                        : "border-wa-border"
-                    )}
-                  >
-                    {isSelected && (
-                      <div className="h-2 w-2 rounded-full bg-white" />
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </Modal>
+        availableLanguages={availableLanguages}
+        locale={locale}
+        languageNames={languageNames}
+        changeLanguage={changeLanguage}
+      />
     </aside>
   );
 }

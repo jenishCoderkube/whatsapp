@@ -60,6 +60,7 @@ export function StatusViewersDrawer({ isOpen, onClose, views = [] }) {
                         src={vw.avatar}
                         fallback={vw.name?.[0] || "?"}
                         size="sm"
+                        uid={vw.viewerId}
                       />
                       <div className="flex flex-col text-left">
                         <span className="text-xs font-semibold text-white">

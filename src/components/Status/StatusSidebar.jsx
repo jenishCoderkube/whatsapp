@@ -69,6 +69,7 @@ export function StatusSidebar({
                   isSeen: true,
                 }))}
                 size="lg"
+                uid={user?.id}
               />
               {myStatuses.length === 0 && (
                 <div className="absolute -bottom-1 -right-1 bg-wa-primary text-white rounded-full p-1 border-2 border-[#111b21]">
@@ -147,6 +148,7 @@ export function StatusSidebar({
                     fallback={group.name?.[0] || "?"}
                     statuses={group.statuses}
                     size="lg"
+                    uid={group.userId}
                   />
                   <div className="flex flex-col text-left">
                     <span className="text-sm font-medium text-[#e9edef]">{group.name}</span>
@@ -182,6 +184,7 @@ export function StatusSidebar({
                     fallback={group.name?.[0] || "?"}
                     statuses={group.statuses}
                     size="lg"
+                    uid={group.userId}
                   />
                   <div className="flex flex-col text-left">
                     <span className="text-sm font-medium text-[#e9edef]">{group.name}</span>

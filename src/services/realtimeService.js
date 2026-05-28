@@ -3,6 +3,7 @@ import { parseMessageText } from "../utils/messageParser";
 
 let globalChannel = null;
 let globalMessagesChannel = null;
+let globalProfilesChannel = null;
 
 export const realtimeService = {
   /**
@@ -71,6 +72,38 @@ export const realtimeService = {
         supabase.removeChannel(globalMessagesChannel);
       } catch (e) {}
       globalMessagesChannel = null;
+    }
+  },
+
+  /**
+   * Listen for user profile updates globally in real-time.
+   */
+  subscribeToProfileUpdates(onProfileUpdate) {
+    if (globalProfilesChannel) return;
+
+    globalProfilesChannel = supabase
+      .channel("user_global_profiles")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          if (payload.new) {
+            onProfileUpdate(payload.new);
+          }
+        }
+      )
+      .subscribe();
+  },
+
+  /**
+   * Terminate profile updates channel.
+   */
+  disconnectProfileUpdates() {
+    if (globalProfilesChannel) {
+      try {
+        supabase.removeChannel(globalProfilesChannel);
+      } catch (e) {}
+      globalProfilesChannel = null;
     }
   },
 

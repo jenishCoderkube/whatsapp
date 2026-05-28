@@ -33,6 +33,7 @@ import { chatService } from "../../services/chatService";
 import { Avatar } from "../ui/Avatar";
 import { locationService } from "../../services/locationService";
 import LocationDurationModal from "./LocationDurationModal";
+import { useAudioRecorder } from "../../hooks/useAudioRecorder";
 
 const EmojiPickerLoading = () => {
   const { t } = useTranslation();
@@ -283,181 +284,86 @@ export function ChatInput() {
   const attachmentsRef = useRef(null);
   const emojiPickerRef = useRef(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
+  const {
+    isRecording,
+    recordingDuration,
+    startVoiceRecording,
+    cancelVoiceRecording,
+    sendVoiceRecording,
+  } = useAudioRecorder({
+    t,
+    onSend: (voiceFile, durationStr) => handleSendVoiceFile(voiceFile, durationStr),
+    onError: (errMessage) => setToastError(errMessage),
+  });
 
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const recordingIntervalRef = useRef(null);
+  const handleSendVoiceFile = async (voiceFile, durationStr) => {
+    const tempId = "msg-temp-voice-" + Date.now();
+    const timeString = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
 
-  const startVoiceRecording = async () => {
+    const optimisticMsg = {
+      id: tempId,
+      text: "",
+      timestamp: timeString,
+      isOutgoing: true,
+      status: "sent",
+      type: "voice",
+      duration: durationStr,
+      senderId: user?.id,
+      createdAt: new Date().toISOString(),
+    };
+
+    dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
+    dispatch(
+      updateLastMessage({
+        chatId: activeChatId,
+        text: "🎤 " + t("chat.voice_message"),
+        timestamp: timeString,
+        isOutgoing: true,
+        status: "sent",
+      }),
+    );
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+      const uploadedUrl = await storageService.uploadFile(
+        voiceFile,
+        "voice",
+      );
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
+      const confirmedRow = await messageService.sendMessage({
+        conversationId: activeChatId,
+        senderId: user?.id,
+        text: "",
+        type: "voice",
+        mediaUrl: uploadedUrl,
+        duration: durationStr,
+        timestampString: timeString,
+      });
 
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingDuration(0);
-
-      if (recordingIntervalRef.current)
-        clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingDuration((prev) => prev + 1);
-      }, 1000);
+      dispatch(
+        replaceOptimisticMessage({
+          chatId: activeChatId,
+          tempId,
+          confirmedMessage: {
+            ...confirmedRow,
+            isOutgoing: true,
+          },
+        }),
+      );
     } catch (err) {
-      console.error("Microphone permission denied or device error:", err);
-      setToastError(
-        t("chat.mic_access_denied"),
+      console.error("Voice file payload storage upload exception:", err);
+      dispatch(
+        updateMessageStatus({
+          chatId: activeChatId,
+          messageId: tempId,
+          status: "failed",
+        }),
       );
     }
   };
-
-  const cancelVoiceRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      try {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream
-          .getTracks()
-          .forEach((track) => track.stop());
-      } catch (e) {}
-    }
-    if (recordingIntervalRef.current)
-      clearInterval(recordingIntervalRef.current);
-    setIsRecording(false);
-    setRecordingDuration(0);
-    audioChunksRef.current = [];
-  };
-
-  const sendVoiceRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.onstop = async () => {
-        if (recordingIntervalRef.current)
-          clearInterval(recordingIntervalRef.current);
-        try {
-          mediaRecorderRef.current.stream
-            .getTracks()
-            .forEach((track) => track.stop());
-        } catch (e) {}
-
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/webm",
-        });
-        setIsRecording(false);
-        const finalDurationSeconds = recordingDuration;
-        setRecordingDuration(0);
-        audioChunksRef.current = [];
-
-        if (audioBlob.size < 100 || finalDurationSeconds < 1) {
-          setToastError(t("chat.voice_recording_short"));
-          return;
-        }
-
-        const mins = Math.floor(finalDurationSeconds / 60);
-        const secs = finalDurationSeconds % 60;
-        const durationStr = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-
-        const voiceFile = new File(
-          [audioBlob],
-          `voice_note_${Date.now()}.webm`,
-          { type: "audio/webm" },
-        );
-
-        const tempId = "msg-temp-voice-" + Date.now();
-        const timeString = new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-
-        const optimisticMsg = {
-          id: tempId,
-          text: "",
-          timestamp: timeString,
-          isOutgoing: true,
-          status: "sent",
-          type: "voice",
-          duration: durationStr,
-          senderId: user?.id,
-          createdAt: new Date().toISOString(),
-        };
-
-        dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
-        dispatch(
-          updateLastMessage({
-            chatId: activeChatId,
-            text: "🎤 " + t("chat.voice_message"),
-            timestamp: timeString,
-            isOutgoing: true,
-            status: "sent",
-          }),
-        );
-
-        try {
-          const uploadedUrl = await storageService.uploadFile(
-            voiceFile,
-            "voice",
-          );
-
-          const confirmedRow = await messageService.sendMessage({
-            conversationId: activeChatId,
-            senderId: user?.id,
-            text: "",
-            type: "voice",
-            mediaUrl: uploadedUrl,
-            duration: durationStr,
-            timestampString: timeString,
-          });
-
-          dispatch(
-            replaceOptimisticMessage({
-              chatId: activeChatId,
-              tempId,
-              confirmedMessage: {
-                ...confirmedRow,
-                isOutgoing: true,
-              },
-            }),
-          );
-        } catch (err) {
-          console.error("Voice file payload storage upload exception:", err);
-          dispatch(
-            updateMessageStatus({
-              chatId: activeChatId,
-              messageId: tempId,
-              status: "failed",
-            }),
-          );
-        }
-      };
-
-      try {
-        mediaRecorderRef.current.stop();
-      } catch (e) {}
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (recordingIntervalRef.current)
-        clearInterval(recordingIntervalRef.current);
-      if (
-        mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== "inactive"
-      ) {
-        try {
-          mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
-        } catch (e) {}
-      }
-    };
-  }, []);
 
   // Auto-close attachment/emoji dropdowns natively on outside clicks and Escape keystrokes
   useEffect(() => {

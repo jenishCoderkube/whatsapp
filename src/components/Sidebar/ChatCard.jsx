@@ -147,7 +147,7 @@ export const ChatCard = React.memo(({ chat }) => {
       )}
     >
       <div className="relative shrink-0">
-        <Avatar src={chat.avatar} fallback={chat.name[0]} isOnline={chat.online} size="lg" />
+        <Avatar src={chat.avatar} fallback={chat.name[0]} isOnline={chat.online} size="lg" uid={chat.isGroup ? chat.id : chat.peerId} />
         {chat.disappearingDuration > 0 && (
           <div className="absolute -bottom-1 -right-1 bg-wa-sidebar rounded-full p-0.5 border border-wa-border shadow-xs" title="Disappearing messages active">
             <Clock className="h-3 w-3 text-[#00a884]" />

@@ -356,6 +356,7 @@ export function ChatHeader() {
             fallback={activeChat.name[0]}
             isOnline={activeChat.online}
             size="md"
+            uid={activeChat.isGroup ? activeChat.id : activeChat.peerId}
           />
           {activeChat.disappearingDuration > 0 && (
             <div
@@ -484,6 +485,7 @@ export function ChatHeader() {
                 fallback={activeChat.name[0]}
                 size="xxl"
                 className="shadow-md"
+                uid={activeChat.isGroup ? activeChat.id : activeChat.peerId}
               />
               {activeChat.isGroup && isAdmin && !activeChat.isLeft && (
                 <div
@@ -567,6 +569,7 @@ export function ChatHeader() {
                             src={member.avatar}
                             fallback={member.name[0]}
                             size="md"
+                            uid={member.id}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-wa-text truncate flex items-center gap-2">
@@ -695,6 +698,7 @@ export function ChatHeader() {
                                 src={p.avatar}
                                 fallback={p.name[0]}
                                 size="md"
+                                uid={p.id}
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-bold text-wa-text truncate">
