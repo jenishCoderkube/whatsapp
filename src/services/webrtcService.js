@@ -256,9 +256,9 @@ class WebRTCService {
   async createAnswer(offerSdp) {
     if (!this.pc) return null;
     await this.pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
-    this.processQueuedCandidates();
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
+    this.processQueuedCandidates();
     console.log("[WebRTC] Answer created");
     return answer;
   }
@@ -277,26 +277,26 @@ class WebRTCService {
   // ─── ICE Candidate Queue ────────────────────────────────────────────
 
   async addIceCandidate(candidate) {
-    if (!this.pc || !this.pc.remoteDescription) {
+    if (!this.pc || !this.pc.remoteDescription || !this.pc.localDescription) {
       this.candidatesQueue.push(candidate);
       return;
     }
     try {
-      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      await this.pc.addIceCandidate(candidate);
     } catch (e) {
       console.warn("[WebRTC] ICE candidate add failed:", e);
     }
   }
 
   processQueuedCandidates() {
-    if (!this.pc || !this.pc.remoteDescription) return;
+    if (!this.pc || !this.pc.remoteDescription || !this.pc.localDescription) return;
     const count = this.candidatesQueue.length;
     if (count > 0) {
       console.log(`[WebRTC] Draining ${count} queued ICE candidates`);
     }
     while (this.candidatesQueue.length > 0) {
       const candidate = this.candidatesQueue.shift();
-      this.pc.addIceCandidate(new RTCIceCandidate(candidate))
+      this.pc.addIceCandidate(candidate)
         .catch(e => console.warn("[WebRTC] Queued ICE add failed:", e));
     }
   }
