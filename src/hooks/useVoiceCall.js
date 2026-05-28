@@ -42,35 +42,38 @@ export const useVoiceCall = () => {
   /**
    * Log call to conversation message history.
    */
-  const logCallMessage = useCallback(async (callData, statusOverride = null) => {
-    if (!callData?.conversationId || !user?.id) return;
-    const duration = callData.startTime
-      ? Math.floor((Date.now() - callData.startTime) / 1000)
-      : 0;
-    const finalStatus =
-      statusOverride || (duration > 0 ? "completed" : "missed");
-    const isVideo = callData.type === "video";
-    const callLabel = isVideo ? "Video call" : "Voice call";
+  const logCallMessage = useCallback(
+    async (callData, statusOverride = null) => {
+      if (!callData?.conversationId || !user?.id) return;
+      const duration = callData.startTime
+        ? Math.floor((Date.now() - callData.startTime) / 1000)
+        : 0;
+      const finalStatus =
+        statusOverride || (duration > 0 ? "completed" : "missed");
+      const isVideo = callData.type === "video";
+      const callLabel = isVideo ? "Video call" : "Voice call";
 
-    try {
-      await messageService.sendMessage({
-        conversationId: callData.conversationId,
-        senderId: user.id,
-        text:
-          finalStatus === "completed"
-            ? `${callLabel} (${duration}s)`
-            : `Missed ${callLabel.toLowerCase()}`,
-        type: "voice_call",
-        metadata: {
-          callStatus: finalStatus,
-          duration,
-          callType: callData.type || "voice",
-        },
-      });
-    } catch (err) {
-      console.error("Failed to log call message:", err);
-    }
-  }, [user?.id]);
+      try {
+        await messageService.sendMessage({
+          conversationId: callData.conversationId,
+          senderId: user.id,
+          text:
+            finalStatus === "completed"
+              ? `${callLabel} (${duration}s)`
+              : `Missed ${callLabel.toLowerCase()}`,
+          type: "voice_call",
+          metadata: {
+            callStatus: finalStatus,
+            duration,
+            callType: callData.type || "voice",
+          },
+        });
+      } catch (err) {
+        console.error("Failed to log call message:", err);
+      }
+    },
+    [user?.id],
+  );
 
   /**
    * Play remote audio for voice-only calls via a hidden Audio element.
@@ -96,66 +99,81 @@ export const useVoiceCall = () => {
    * useState detects the change and triggers a re-render, which causes
    * the video elements in CallOverlay to reattach their srcObject.
    */
-  const setupPeerConnection = useCallback((peerId, callType) => {
-    webrtcService.createPeerConnection(
-      // ICE candidate handler
-      (candidate) => {
-        if (peerId) {
-          signalingService.sendCandidate(peerId, { candidate });
-        }
-      },
-      // Remote track handler — receives a NEW MediaStream snapshot each time
-      (remoteStreamSnapshot) => {
-        console.log("[Call] Remote stream snapshot received, tracks:", 
-          remoteStreamSnapshot.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`)
-        );
-        setRemoteStreamState(remoteStreamSnapshot);
+  const setupPeerConnection = useCallback(
+    (peerId, callType) => {
+      webrtcService.createPeerConnection(
+        // ICE candidate handler
+        (candidate) => {
+          if (peerId) {
+            signalingService.sendCandidate(peerId, { candidate });
+          }
+        },
+        // Remote track handler — receives a NEW MediaStream snapshot each time
+        (remoteStreamSnapshot) => {
+          console.log(
+            "[Call] Remote stream snapshot received, tracks:",
+            remoteStreamSnapshot
+              .getTracks()
+              .map((t) => `${t.kind}:${t.enabled}:${t.readyState}`),
+          );
+          setRemoteStreamState(remoteStreamSnapshot);
 
-        // Always ensure audio playback (voice calls have no <video> element)
-        if (callType === "voice" || remoteStreamSnapshot.getAudioTracks().length > 0) {
-          playRemoteAudio(remoteStreamSnapshot);
-        }
-      },
-    );
-  }, [playRemoteAudio]);
+          // Always ensure audio playback (voice calls have no <video> element)
+          if (
+            callType === "voice" ||
+            remoteStreamSnapshot.getAudioTracks().length > 0
+          ) {
+            playRemoteAudio(remoteStreamSnapshot);
+          }
+        },
+      );
+    },
+    [playRemoteAudio],
+  );
 
   // ─── Start Outgoing Call ──────────────────────────────────────────
 
-  const startCall = useCallback(async (peer, conversationId, type = "voice") => {
-    if (activeCallRef.current) return;
+  const startCall = useCallback(
+    async (peer, conversationId, type = "voice") => {
+      if (activeCallRef.current) return;
 
-    const isVideo = type === "video";
+      const isVideo = type === "video";
 
-    // 1. Try to acquire local media (returns null if no devices — that's OK)
-    const stream = await webrtcService.acquireLocalMedia(isVideo);
-    setLocalStreamState(stream); // null is fine
+      // 1. Try to acquire local media (returns null if no devices — that's OK)
+      const stream = await webrtcService.acquireLocalMedia(isVideo);
+      setLocalStreamState(stream); // null is fine
 
-    // 2. Update Redux state
-    dispatch(initiateOutgoingCall({ peer, type, conversationId }));
+      // 2. Update Redux state
+      dispatch(initiateOutgoingCall({ peer, type, conversationId }));
 
-    // 3. Create peer connection (works with zero local tracks)
-    setupPeerConnection(peer.id, type);
+      // 3. Create peer connection (works with zero local tracks)
+      setupPeerConnection(peer.id, type);
 
-    try {
-      // 4. Create offer and send invite
-      const callId = "call-" + Date.now();
-      const offer = await webrtcService.createOffer();
-      console.log("[Call] Outgoing offer created, sending invite to", peer.id);
-      await signalingService.sendInvite(peer.id, {
-        id: callId,
-        caller: user,
-        sdp: offer,
-        conversationId,
-        type,
-        timestamp: Date.now(),
-      });
-    } catch (err) {
-      console.error("[Call] Failed to create/send offer:", err);
-      webrtcService.cleanup();
-      setLocalStreamState(null);
-      dispatch(endCall());
-    }
-  }, [user, dispatch, setupPeerConnection]);
+      try {
+        // 4. Create offer and send invite
+        const callId = "call-" + Date.now();
+        const offer = await webrtcService.createOffer();
+        console.log(
+          "[Call] Outgoing offer created, sending invite to",
+          peer.id,
+        );
+        await signalingService.sendInvite(peer.id, {
+          id: callId,
+          caller: user,
+          sdp: offer,
+          conversationId,
+          type,
+          timestamp: Date.now(),
+        });
+      } catch (err) {
+        console.error("[Call] Failed to create/send offer:", err);
+        webrtcService.cleanup();
+        setLocalStreamState(null);
+        dispatch(endCall());
+      }
+    },
+    [user, dispatch, setupPeerConnection],
+  );
 
   // ─── Answer Incoming Call ─────────────────────────────────────────
 
