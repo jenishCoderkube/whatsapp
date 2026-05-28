@@ -25,6 +25,7 @@ import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import {
   setMobileScreen,
   setActiveSearchPanelOpen,
+  setWallpaperModal,
 } from "../../redux/slices/uiSlice";
 import {
   clearUnread,
@@ -327,6 +328,7 @@ export function ChatHeader() {
 
   const headerOptions = [
     { label: t("chat.contact_info") || "Contact Info", onClick: () => setInfoModal(true) },
+    { label: t("chat.chat_wallpaper") || "Chat Wallpaper", onClick: () => dispatch(setWallpaperModal({ open: true, targetChatId: activeChatId })) },
     { label: t("chat.select_messages") || "Select Messages", onClick: () => {} },
     { label: t("chat.close_chat") || "Close Chat", onClick: () => dispatch(setMobileScreen("list")) },
     { label: t("chat.clear_messages") || "Clear messages", danger: true, onClick: () => {} },

@@ -7,6 +7,7 @@ import { I18nProvider, useTranslation } from "../contexts/I18nContext";
 import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import { loginSuccess, logout } from "../redux/slices/authSlice";
 import { setUserTyping, syncOnlineUsers } from "../redux/slices/chatSlice";
+import { setGlobalWallpaperState } from "../redux/slices/uiSlice";
 import { authService } from "../services/authService";
 import { realtimeService } from "../services/realtimeService";
 import { MessageSquare } from "lucide-react";
@@ -39,8 +40,20 @@ function AuthSessionRecoveryGate({ children }) {
   const processedCallSessionsRef = useRef(new Set());
 
   useEffect(() => {
+    if (!user?.id) return;
+    import("../services/wallpaperService").then(({ wallpaperService }) => {
+      wallpaperService.getGlobalWallpaper(user.id).then((val) => {
+        if (val) {
+          dispatch(setGlobalWallpaperState(val));
+        }
+      });
+    });
+  }, [user?.id, dispatch]);
+
+  useEffect(() => {
     activeCallRef.current = activeCall;
   }, [activeCall]);
+
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);

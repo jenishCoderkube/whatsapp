@@ -10,6 +10,10 @@ const initialState = {
   activeSearchPanelOpen: false, // in-chat search panel
   archivedViewOpen: false, // archived chats sidebar list
   linkedDevicesOpen: false, // linked devices modal state
+  globalWallpaper: null, // global default wallpaper
+  chatWallpapers: {}, // per-chat wallpaper config map { [chatId]: wallpaperValue }
+  wallpaperModalOpen: false, // wallpaper settings panel visibility
+  wallpaperTargetChatId: null, // target chat UUID for wallpapers, null for global/default setting
 };
 
 const uiSlice = createSlice({
@@ -72,6 +76,18 @@ const uiSlice = createSlice({
     setLinkedDevicesOpen(state, action) {
       state.linkedDevicesOpen = action.payload;
     },
+    setGlobalWallpaperState(state, action) {
+      state.globalWallpaper = action.payload;
+    },
+    setChatWallpaperState(state, action) {
+      const { chatId, value } = action.payload;
+      state.chatWallpapers[chatId] = value;
+    },
+    setWallpaperModal(state, action) {
+      const { open, targetChatId } = action.payload;
+      state.wallpaperModalOpen = open;
+      state.wallpaperTargetChatId = targetChatId || null;
+    },
   },
 });
 
@@ -86,6 +102,10 @@ export const {
   setActiveSearchPanelOpen,
   setArchivedViewOpen,
   setLinkedDevicesOpen,
+  setGlobalWallpaperState,
+  setChatWallpaperState,
+  setWallpaperModal,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;
+

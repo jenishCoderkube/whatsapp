@@ -23,6 +23,7 @@ export const chatService = {
             pinned_at,
             is_archived,
             archived_at,
+            wallpaper,
             conversations (*)
           `)
           .eq("user_id", userId);
@@ -128,6 +129,13 @@ export const chatService = {
           }
         }
 
+        let chatWallpaper = item.wallpaper || null;
+        if (!chatWallpaper && typeof window !== "undefined") {
+          try {
+            chatWallpaper = localStorage.getItem(`wa_wallpaper_user_${userId}_chat_${conv.id}`);
+          } catch (e) {}
+        }
+
         mappedChats.push({
           id: conv.id,
           name,
@@ -153,8 +161,10 @@ export const chatService = {
           groupMembersCount: conv.group_members_count || 0,
           updatedAt: conv.updated_at,
           disappearingDuration: conv.disappearing_duration || 0,
+          wallpaper: chatWallpaper,
         });
       }
+
 
       // Sort natively pushing pinned first, then sorting chronologically
       return mappedChats.sort((a, b) => {

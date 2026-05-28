@@ -215,6 +215,13 @@ const chatSlice = createSlice({
         chat.disappearingDuration = disappearingDuration;
       }
     },
+    updateChatWallpaper(state, action) {
+      const { chatId, wallpaper } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.wallpaper = wallpaper;
+      }
+    },
     setUserTyping(state, action) {
       const { chatId, userId, isTyping, userName } = action.payload;
       if (!state.typingMap[chatId]) {
@@ -273,6 +280,7 @@ export const {
   updateChatMembership,
   updateChatAvatar,
   updateChatDisappearingDuration,
+  updateChatWallpaper,
   setUserTyping,
   syncOnlineUsers,
   updatePeerProfile,
@@ -280,3 +288,4 @@ export const {
 } = chatSlice.actions;
 
 export default chatSlice.reducer;
+

@@ -12,7 +12,7 @@ import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage, updateSenderProfile } from "../../redux/slices/messageSlice";
 import { updateLastMessage, incrementUnread, setChats, updatePeerProfile } from "../../redux/slices/chatSlice";
-import { setActiveSearchPanelOpen, setMobileScreen } from "../../redux/slices/uiSlice";
+import { setActiveSearchPanelOpen, setMobileScreen, setWallpaperModal } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { chatService } from "../../services/chatService";
 import { realtimeService } from "../../services/realtimeService";
@@ -23,6 +23,7 @@ import { getChatDateLabel } from "../../utils/dateUtils";
 import { ForwardModal } from "../../components/Chat/ForwardModal";
 import { MessageSearchPanel } from "../../components/Chat/MessageSearchPanel";
 import { StatusPanel } from "../../components/Status/StatusPanel";
+import { WallpaperModal } from "../../components/Chat/WallpaperModal";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function ChatPage() {
   const mobileScreen = useAppSelector((state) => state.ui.mobileScreen);
   const activeSearchPanelOpen = useAppSelector((state) => state.ui.activeSearchPanelOpen);
   const statusViewOpen = useAppSelector((state) => state.status.statusViewOpen);
+  const globalWallpaper = useAppSelector((state) => state.ui.globalWallpaper);
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -85,6 +87,54 @@ export default function ChatPage() {
 
   const activeChat = chats.find((c) => c.id === activeChatId);
   const activeMessages = activeChatId ? messagesDict[activeChatId] || [] : [];
+
+  const activeWallpaper = activeChat?.wallpaper || globalWallpaper;
+
+  const wallpaperConfig = useMemo(() => {
+    if (!activeWallpaper) return null;
+    try {
+      if (activeWallpaper.startsWith("{")) {
+        return JSON.parse(activeWallpaper);
+      }
+    } catch (e) {
+      console.warn("Parse wallpaper failed", e);
+    }
+    if (activeWallpaper.startsWith("linear-gradient") || activeWallpaper.startsWith("radial-gradient")) {
+      return { type: "gradient", value: activeWallpaper, dim: 0 };
+    }
+    if (activeWallpaper.startsWith("http") || activeWallpaper.startsWith("url(")) {
+      return { type: "gallery", value: activeWallpaper, dim: 0 };
+    }
+    return { type: "color", value: activeWallpaper, dim: 0 };
+  }, [activeWallpaper]);
+
+  const chatBackgroundStyle = useMemo(() => {
+    if (!wallpaperConfig) return {};
+    const { type, value } = wallpaperConfig;
+    if (type === "color") {
+      return { backgroundColor: value, backgroundImage: "none" };
+    }
+    if (type === "gradient") {
+      return { backgroundImage: value };
+    }
+    if (type === "gallery" || type === "upload") {
+      return {
+        backgroundImage: `url(${value})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
+    }
+    return {};
+  }, [wallpaperConfig]);
+
+  const chatBgOverlayStyle = useMemo(() => {
+    if (!wallpaperConfig) return {};
+    const style = { backgroundColor: "transparent" };
+    if (wallpaperConfig.type === "gallery" || wallpaperConfig.type === "upload") {
+      style.backgroundImage = "none";
+    }
+    return style;
+  }, [wallpaperConfig]);
 
   // Grouped messages memoization to prevent expensive re-calculates
   const groupedItems = useMemo(() => {
@@ -834,12 +884,20 @@ export default function ChatPage() {
             <>
               <ChatHeader />
 
-              <div className="flex-1 relative overflow-hidden">
+              <div className="flex-1 relative overflow-hidden" style={chatBackgroundStyle}>
+                {/* Wallpaper Dimming Overlay */}
+                {wallpaperConfig && wallpaperConfig.dim > 0 && (
+                  <div 
+                    className="absolute inset-0 bg-black pointer-events-none z-0 transition-opacity duration-200" 
+                    style={{ opacity: wallpaperConfig.dim / 100 }}
+                  />
+                )}
+
                 <div
                   ref={scrollContainerRef}
                   onScroll={handleScroll}
-                  className="h-full overflow-y-auto px-2 sm:px-6 py-4 wa-chat-bg relative select-text scroll-smooth-gpu"
-                  style={{ overflowAnchor: "auto" }}
+                  className="h-full overflow-y-auto px-2 sm:px-6 py-4 wa-chat-bg relative select-text scroll-smooth-gpu z-10"
+                  style={{ overflowAnchor: "auto", ...chatBgOverlayStyle }}
                 >
                   {isFetchingHistory && (
                     <div className="flex justify-center sticky top-2 z-20">
@@ -905,6 +963,8 @@ export default function ChatPage() {
         )}
 
         {statusViewOpen && <StatusPanel />}
+
+        <WallpaperModal />
 
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes waHighlightFlash {

@@ -30,7 +30,7 @@ import { LanguageModal } from "./LanguageModal";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
-import { toggleTheme, setArchivedViewOpen } from "../../redux/slices/uiSlice";
+import { toggleTheme, setArchivedViewOpen, setWallpaperModal } from "../../redux/slices/uiSlice";
 import { setStatusViewOpen } from "../../redux/slices/statusSlice";
 import {
   setChats,
@@ -355,6 +355,10 @@ export function Sidebar({ className }) {
     {
       label: t("sidebar.profile_info"),
       onClick: () => setProfileModal(true),
+    },
+    {
+      label: t("sidebar.chat_wallpaper") || "Chat Wallpaper",
+      onClick: () => dispatch(setWallpaperModal({ open: true })),
     },
     {
       label: t("sidebar.linked_devices"),

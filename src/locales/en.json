@@ -190,7 +190,27 @@
     "search_messages_desc": "Search for messages in this chat.",
     "messages_found_count": "{count} messages found",
     "message_found_count": "{count} message found",
-    "member": "Member"
+    "member": "Member",
+    "customize_wallpaper": "Chat Wallpaper",
+    "apply_wallpaper_to": "Apply Wallpaper To",
+    "this_chat_only": "This Chat only",
+    "all_chats_default": "All Chats (Default)",
+    "solid_colors": "Solid Colors",
+    "gradients": "Gradients",
+    "gallery": "Gallery",
+    "upload_custom": "Upload Custom",
+    "uploading_image": "Uploading image...",
+    "upload_custom_desc": "Choose a local image",
+    "upload_limit_desc": "PNG, JPG or WebP up to 5MB",
+    "choose_file": "Choose Image",
+    "uploaded_file": "Uploaded Image",
+    "wallpaper_dimming": "Wallpaper Dimming",
+    "wallpaper_dimming_desc": "Drag to dim the wallpaper to improve message bubble text readability and contrast.",
+    "reset_default": "Reset to Default",
+    "apply_wallpaper": "Apply Wallpaper",
+    "preview_incoming": "Hey! How does this wallpaper look in real chat bubbles?",
+    "preview_outgoing": "Looks amazing! Contrast and readability are perfect. 🔥",
+    "chat_wallpaper": "Chat Wallpaper"
   },
   "call": {
     "video_call": "Video Call",
@@ -339,6 +359,7 @@
     "browser": "Browser",
     "mobile": "Mobile",
     "active": "Active",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "chat_wallpaper": "Chat Wallpaper"
   }
 }
