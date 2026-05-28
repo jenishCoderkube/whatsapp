@@ -248,8 +248,8 @@ export function Sidebar({ className }) {
               (c) => c.id === updatedConv.id,
             );
             if (existing) {
-              // Update avatar if changed
-              if (updatedConv.avatar !== existing.avatar) {
+              // Update avatar if changed (only for groups, since 1-to-1 avatars are managed via peer profiles)
+              if (existing.isGroup && updatedConv.avatar !== existing.avatar) {
                 dispatch(
                   updateChatAvatar({
                     chatId: updatedConv.id,

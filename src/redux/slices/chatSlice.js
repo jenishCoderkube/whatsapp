@@ -63,7 +63,7 @@ const chatSlice = createSlice({
       state.searchQuery = action.payload;
     },
     updateLastMessage(state, action) {
-      const { chatId, text, timestamp, isOutgoing, status } = action.payload;
+      const { chatId, text, timestamp, isOutgoing, status, avatar, name } = action.payload;
       const chat = state.chats.find((c) => c.id === chatId);
       if (chat) {
         let finalStatus = status;
@@ -84,6 +84,16 @@ const chatSlice = createSlice({
 
         chat.lastMessage = { text, timestamp, isOutgoing, status: finalStatus };
         chat.updatedAt = new Date().toISOString();
+
+        if (!chat.isGroup) {
+          if (avatar && chat.avatar !== avatar) {
+            chat.avatar = avatar;
+          }
+          if (name && chat.name !== name) {
+            chat.name = name;
+          }
+        }
+
         const filtered = state.chats.filter((c) => c.id !== chatId);
         state.chats = sortChatsHelper([chat, ...filtered]);
       }

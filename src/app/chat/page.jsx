@@ -398,15 +398,47 @@ export default function ChatPage() {
         if (incomingMsg.type === "file") previewText = `📎 ${t("chat.document")}`;
         if (incomingMsg.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
 
-        dispatch(
-          updateLastMessage({
-            chatId: targetChatId,
-            text: previewText,
-            timestamp: incomingMsg.timestamp,
-            isOutgoing: isMine,
-            status: incomingMsg.status,
-          })
-        );
+        const dispatchUpdate = (profile = null) => {
+          dispatch(
+            updateLastMessage({
+              chatId: targetChatId,
+              text: previewText,
+              timestamp: incomingMsg.timestamp,
+              isOutgoing: isMine,
+              status: incomingMsg.status,
+              avatar: profile?.avatar,
+              name: profile?.name,
+            })
+          );
+        };
+
+        if (!isMine && incomingMsg.senderId) {
+          const activeChat = chatsRef.current.find((c) => c.id === targetChatId);
+          let localProfile = null;
+          if (activeChat) {
+            if (activeChat.isGroup) {
+              localProfile = groupMembersRef.current.find(m => m.id === incomingMsg.senderId);
+            } else {
+              localProfile = {
+                name: activeChat.name,
+                avatar: activeChat.avatar
+              };
+            }
+          }
+
+          if (localProfile) {
+            dispatchUpdate(localProfile);
+            profileService.getProfileById(incomingMsg.senderId).then((latestProfile) => {
+              if (latestProfile && (latestProfile.avatar !== localProfile.avatar || latestProfile.name !== localProfile.name)) {
+                dispatchUpdate(latestProfile);
+              }
+            });
+          } else {
+            profileService.getProfileById(incomingMsg.senderId).then(dispatchUpdate);
+          }
+        } else {
+          dispatchUpdate(null);
+        }
 
         if (!chatsRef.current.some((c) => c.id === targetChatId)) {
           import("../../services/chatService").then(({ chatService }) => {

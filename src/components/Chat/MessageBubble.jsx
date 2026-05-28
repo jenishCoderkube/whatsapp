@@ -1166,6 +1166,8 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
          prevProps.message.text === nextProps.message.text &&
          prevProps.message.noPreview === nextProps.message.noPreview &&
          prevProps.message.editedAt === nextProps.message.editedAt &&
+         prevProps.message.senderAvatar === nextProps.message.senderAvatar &&
+         prevProps.message.senderName === nextProps.message.senderName &&
          JSON.stringify(prevProps.message.reactions) === JSON.stringify(nextProps.message.reactions) &&
          prevProps.isGroup === nextProps.isGroup &&
          prevProps.groupMembers?.length === nextProps.groupMembers?.length;
