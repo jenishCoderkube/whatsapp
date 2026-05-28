@@ -131,29 +131,45 @@ export function Sidebar({ className }) {
   // Fetch linked database conversations dynamically upon load
   useEffect(() => {
     if (user?.id) {
-      setIsChatsLoading(true);
+      // Try to load cached chats immediately from localStorage for instant display
+      let hasCache = false;
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem(`wa_cached_chats_${user.id}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.length > 0) {
+              dispatch(setChats(parsed));
+              setIsChatsLoading(false);
+              hasCache = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to load cached chats:", e);
+        }
+      }
+
+      if (!hasCache) {
+        setIsChatsLoading(true);
+      }
       
       const loadChats = () => {
         chatService.getUserChats(user.id).then((fetchedChats) => {
           if (fetchedChats && fetchedChats.length > 0) {
             dispatch(setChats(fetchedChats));
 
-            // Batch acknowledge delivery for all active sidebar conversations
-            fetchedChats.forEach((chat) => {
-              if (
-                chat.lastMessage &&
-                !chat.lastMessage.isOutgoing &&
-                chat.lastMessage.status === "sent"
-              ) {
-                import("../../services/messageService").then(
-                  ({ messageService }) => {
-                    messageService.markConversationMessagesAsDelivered(
-                      chat.id,
-                      user.id,
-                    );
-                  },
-                );
+            // Cache the fresh chats in localStorage
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem(`wa_cached_chats_${user.id}`, JSON.stringify(fetchedChats));
+              } catch (e) {
+                console.warn("Failed to cache chats:", e);
               }
+            }
+
+            // Batch acknowledge delivery for all active sidebar conversations at once
+            messageService.syncAllPendingDeliveries(user.id).catch((err) => {
+              console.warn("Failed syncing pending deliveries:", err);
             });
           }
           setIsChatsLoading(false);
@@ -163,10 +179,18 @@ export function Sidebar({ className }) {
         });
       };
 
-      // Clean up database-level expired disappearing messages before loading conversation list
-      supabase.rpc("cleanup_expired_messages")
-        .then(() => loadChats())
-        .catch(() => loadChats());
+      // Clean up database-level expired disappearing messages asynchronously in the background
+      const runCleanup = async () => {
+        try {
+          await supabase.rpc("cleanup_expired_messages");
+        } catch (err) {
+          console.warn("Expired disappearing messages cleanup failed:", err);
+        }
+      };
+      runCleanup();
+
+      // Load fresh conversations from the network
+      loadChats();
 
       // Listen for membership changes (being added, removed, or leaving groups)
       const membershipChannel = supabase

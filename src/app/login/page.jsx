@@ -166,7 +166,9 @@ export default function LoginPage() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded accent-wa-primary"
                 />
-                <span className="text-xs text-wa-muted">{t("auth.remember_me")}</span>
+                <span className="text-xs text-wa-muted">
+                  {t("auth.remember_me")}
+                </span>
               </label>
             </div>
 
@@ -176,7 +178,7 @@ export default function LoginPage() {
               className="w-full mt-2"
               isLoading={loading}
             >
-              {t("auth.login_title").split(" ")[0] || "Log In"}
+              {t("auth.login_title") || "Log In"}
             </Button>
           </form>
 

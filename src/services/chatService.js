@@ -46,6 +46,37 @@ export const chatService = {
 
       if (members.length === 0) return [];
 
+      // Batch query all peer conversation members and their profiles for 1-to-1 chats at once
+      const oneToOneConvIds = members
+        .filter((item) => item.conversations && !item.conversations.is_group)
+        .map((item) => item.conversation_id);
+
+      const peerMap = {};
+      if (oneToOneConvIds.length > 0) {
+        const { data: peerMembers, error: peerError } = await supabase
+          .from("conversation_members")
+          .select(`
+            conversation_id,
+            user_id,
+            profiles (*)
+          `)
+          .in("conversation_id", oneToOneConvIds)
+          .neq("user_id", userId);
+
+        if (peerError) {
+          console.error("Failed fetching peer profiles in batch:", peerError);
+        } else if (peerMembers) {
+          for (const pm of peerMembers) {
+            if (pm.profiles) {
+              peerMap[pm.conversation_id] = {
+                peerId: pm.user_id,
+                profile: pm.profiles
+              };
+            }
+          }
+        }
+      }
+
       const mappedChats = [];
 
       for (const item of members) {
@@ -81,25 +112,14 @@ export const chatService = {
           } catch (e) {}
         }
 
-        // For 1-to-1, resolve the dynamic peer profile profile details
+        // For 1-to-1, resolve the dynamic peer profile profile details using pre-fetched peerMap
         if (!conv.is_group) {
-          const { data: peerMembers } = await supabase
-            .from("conversation_members")
-            .select("user_id")
-            .eq("conversation_id", conv.id)
-            .neq("user_id", userId)
-            .limit(1);
-
-          if (peerMembers && peerMembers.length > 0) {
-            peerId = peerMembers[0].user_id;
-            const { data: peerProfile } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", peerId)
-              .single();
-
+          const peerData = peerMap[conv.id];
+          if (peerData) {
+            peerId = peerData.peerId;
+            const peerProfile = peerData.profile;
             if (peerProfile) {
-              name = peerProfile.name;
+              name = peerProfile.name || name;
               avatar = peerProfile.avatar || avatar;
               online = peerProfile.online || false;
               phoneNumber = peerProfile.email || "Direct Contact";
