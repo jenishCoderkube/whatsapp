@@ -36,6 +36,7 @@ function AuthSessionRecoveryGate({ children }) {
 
   const activeCallRef = useRef(activeCall);
   const incomingCallRef = useRef(incomingCall);
+  const processedCallSessionsRef = useRef(new Set());
 
   useEffect(() => {
     activeCallRef.current = activeCall;
@@ -43,6 +44,10 @@ function AuthSessionRecoveryGate({ children }) {
   useEffect(() => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
+
+  useEffect(() => {
+    processedCallSessionsRef.current.clear();
+  }, [user?.id]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -172,8 +177,15 @@ function AuthSessionRecoveryGate({ children }) {
     const handleEndCall = () => {
       const peerId =
         activeCallRef.current?.peer?.id || incomingCallRef.current?.caller?.id;
+      const sessionId =
+        activeCallRef.current?.id || incomingCallRef.current?.id;
+
+      if (sessionId) {
+        processedCallSessionsRef.current.add(sessionId);
+      }
+
       if (peerId) {
-        signalingService.sendEnd(peerId, { reason: "ended" });
+        signalingService.sendEnd(peerId, { reason: "ended", sessionId });
       }
 
       if (activeCallRef.current) {
@@ -207,28 +219,45 @@ function AuthSessionRecoveryGate({ children }) {
     signalingService.initialize(user.id, async (type, data) => {
       console.log("Global signaling handler received event:", type);
       switch (type) {
-        case "invite":
+        case "invite": {
+          const inviteAge = Date.now() - (data.timestamp || 0);
+          const isStale = !data.timestamp || inviteAge > 10000 || inviteAge < -10000;
+          const isAlreadyProcessed = data.id && processedCallSessionsRef.current.has(data.id);
+
+          if (isStale || isAlreadyProcessed) {
+            console.log("[Call] Ignoring stale or already processed call invite:", data.id, "age:", inviteAge);
+            return;
+          }
+
           if (activeCallRef.current || incomingCallRef.current) {
-            signalingService.sendEnd(data.caller.id, { reason: "busy" });
+            signalingService.sendEnd(data.caller.id, { reason: "busy", sessionId: data.id });
             return;
           }
           dispatch(setIncomingCall(data));
           break;
+        }
 
-        case "answer":
+        case "answer": {
           if (activeCallRef.current?.status === "outgoing" && webrtcService.pc) {
             await webrtcService.setRemoteAnswer(data.sdp);
             dispatch(setCallStatus("connected"));
           }
           break;
+        }
 
-        case "candidate":
+        case "candidate": {
           if (activeCallRef.current || incomingCallRef.current) {
             await webrtcService.addIceCandidate(data.candidate);
           }
           break;
+        }
 
-        case "end":
+        case "end": {
+          const sessionId = data.sessionId || data.id;
+          if (sessionId) {
+            processedCallSessionsRef.current.add(sessionId);
+          }
+
           if (activeCallRef.current) {
             await logCallMessage(activeCallRef.current);
           } else if (incomingCallRef.current) {
@@ -237,6 +266,7 @@ function AuthSessionRecoveryGate({ children }) {
           webrtcService.cleanup();
           dispatch(endCall());
           break;
+        }
 
         case "mute_status":
           dispatch(setRemoteMuted(data.isMuted));

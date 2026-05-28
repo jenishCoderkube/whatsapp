@@ -10,6 +10,12 @@
  *   they NEVER close or recreate the peer connection.
  *   Connection state "disconnected" is treated as transient (ICE recovery),
  *   only "failed" triggers call termination.
+ *
+ * MEDIA STREAMING FIX:
+ *   The remoteStream object is persistent, but React can't detect mutations
+ *   to it (addTrack). We now use a version counter (_remoteStreamVersion)
+ *   and clone the stream reference to force React re-renders when tracks
+ *   arrive, ensuring video/audio elements receive the stream.
  */
 
 const servers = {
@@ -36,6 +42,7 @@ class WebRTCService {
     this.onConnectionStateChange = null;
     this.onTrack = null;
     this._isNegotiating = false;
+    this._remoteStreamVersion = 0;
   }
 
   // ─── Device Detection ───────────────────────────────────────────────
@@ -175,6 +182,7 @@ class WebRTCService {
     this.cleanupPC();
     this.onTrack = onTrack;
     this._isNegotiating = false;
+    this._remoteStreamVersion = 0;
 
     console.log("[WebRTC] Creating RTCPeerConnection (media-independent)...");
     this.pc = new RTCPeerConnection(servers);
@@ -186,7 +194,7 @@ class WebRTCService {
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         console.log(
-          `[WebRTC] Adding local track: kind=${track.kind}, label=${track.label}, enabled=${track.enabled}`,
+          `[WebRTC] Adding local track to PC: kind=${track.kind}, label=${track.label}, enabled=${track.enabled}, readyState=${track.readyState}`,
         );
         this.pc.addTrack(track, this.localStream);
       });
@@ -199,6 +207,7 @@ class WebRTCService {
     // ICE Candidates
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`[WebRTC] ICE candidate generated: ${event.candidate.candidate.substring(0, 60)}...`);
         onIceCandidate(event.candidate);
       }
     };
@@ -241,9 +250,11 @@ class WebRTCService {
     };
 
     // Remote Tracks — use a single persistent MediaStream to prevent flicker
+    // CRITICAL FIX: We increment _remoteStreamVersion and create a new
+    // MediaStream wrapping the same tracks so React detects the change.
     this.pc.ontrack = (event) => {
       console.log(
-        `[WebRTC] Remote track arrived: kind=${event.track.kind}, id=${event.track.id}, readyState=${event.track.readyState}`,
+        `[WebRTC] ★ Remote track arrived: kind=${event.track.kind}, id=${event.track.id}, readyState=${event.track.readyState}, enabled=${event.track.enabled}, muted=${event.track.muted}`,
       );
 
       // Add track to persistent remote stream if not already present
@@ -251,6 +262,8 @@ class WebRTCService {
       if (!existingTrack) {
         this.remoteStream.addTrack(event.track);
         console.log(`[WebRTC] Added remote ${event.track.kind} track. Total remote tracks: ${this.remoteStream.getTracks().length}`);
+      } else {
+        console.log(`[WebRTC] Remote ${event.track.kind} track already present, skipping add.`);
       }
 
       // Monitor track lifecycle
@@ -258,19 +271,37 @@ class WebRTCService {
         console.log(`[WebRTC] Remote ${event.track.kind} track ended.`);
       };
       event.track.onmute = () => {
-        console.log(`[WebRTC] Remote ${event.track.kind} track muted.`);
+        console.log(`[WebRTC] Remote ${event.track.kind} track muted (this is normal during setup).`);
       };
       event.track.onunmute = () => {
-        console.log(`[WebRTC] Remote ${event.track.kind} track unmuted.`);
+        console.log(`[WebRTC] Remote ${event.track.kind} track unmuted — media is flowing.`);
+        // Re-notify UI when track unmutes (media actually starts flowing)
+        this._notifyTrackUpdate();
       };
 
-      // Notify the UI with the persistent stream reference
-      if (this.onTrack) {
-        this.onTrack(this.remoteStream);
-      }
+      // Notify the UI with incremented version to force React re-render
+      this._notifyTrackUpdate();
     };
 
     return this.pc;
+  }
+
+  /**
+   * Create a new MediaStream snapshot from the current remote tracks.
+   * This forces React useState to see a new object reference.
+   */
+  _notifyTrackUpdate() {
+    this._remoteStreamVersion++;
+    if (this.onTrack && this.remoteStream) {
+      // Create a NEW MediaStream with the same tracks so React sees a
+      // different object reference and triggers a re-render + reattach.
+      const snapshot = new MediaStream(this.remoteStream.getTracks());
+      console.log(
+        `[WebRTC] Notifying UI of remote stream update (v${this._remoteStreamVersion}), tracks:`,
+        snapshot.getTracks().map(t => `${t.kind}:enabled=${t.enabled}:state=${t.readyState}:muted=${t.muted}`)
+      );
+      this.onTrack(snapshot);
+    }
   }
 
   // ─── ICE Restart (Recovery from transient disconnects) ──────────────
@@ -297,11 +328,15 @@ class WebRTCService {
       return null;
     }
     console.log("[WebRTC] Creating offer...");
+    console.log("[WebRTC] Local tracks on PC senders:", this.pc.getSenders().map(s => 
+      s.track ? `${s.track.kind}:${s.track.enabled}:${s.track.readyState}` : "null"
+    ));
     const offer = await this.pc.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,
     });
     await this.pc.setLocalDescription(offer);
+    console.log("[WebRTC] Offer created and set as local description. SDP type:", offer.type);
     return offer;
   }
 
@@ -310,11 +345,15 @@ class WebRTCService {
       console.warn("[WebRTC] createAnswer: PeerConnection not initialized.");
       return null;
     }
-    console.log("[WebRTC] Creating answer...");
+    console.log("[WebRTC] Setting remote offer SDP...");
     await this.pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+    console.log("[WebRTC] Remote offer set. Draining queued candidates...");
     this.processQueuedCandidates();
+    
+    console.log("[WebRTC] Creating answer...");
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
+    console.log("[WebRTC] Answer created and set as local description. SDP type:", answer.type);
     return answer;
   }
 
@@ -323,8 +362,13 @@ class WebRTCService {
       console.warn("[WebRTC] setRemoteAnswer: PeerConnection not initialized. Ignoring stale answer.");
       return;
     }
-    console.log("[WebRTC] Setting remote answer...");
+    if (this.pc.signalingState !== "have-local-offer") {
+      console.warn("[WebRTC] setRemoteAnswer: PC is in state", this.pc.signalingState, "— expected have-local-offer. Ignoring.");
+      return;
+    }
+    console.log("[WebRTC] Setting remote answer SDP...");
     await this.pc.setRemoteDescription(new RTCSessionDescription(answerSdp));
+    console.log("[WebRTC] Remote answer set. Draining queued candidates...");
     this.processQueuedCandidates();
   }
 
@@ -332,6 +376,7 @@ class WebRTCService {
 
   async addIceCandidate(candidate) {
     if (!this.pc || !this.pc.remoteDescription) {
+      console.log("[WebRTC] Queueing ICE candidate (no remote description yet).");
       this.candidatesQueue.push(candidate);
       return;
     }
@@ -452,15 +497,17 @@ class WebRTCService {
         muted: t.muted,
       })) || [],
       senders: this.pc?.getSenders().map((s) => ({
-        kind: s.track?.kind,
+        kind: s.track?.kind || "null",
         enabled: s.track?.enabled,
         readyState: s.track?.readyState,
       })) || [],
       receivers: this.pc?.getReceivers().map((r) => ({
-        kind: r.track?.kind,
+        kind: r.track?.kind || "null",
         enabled: r.track?.enabled,
         readyState: r.track?.readyState,
+        muted: r.track?.muted,
       })) || [],
+      remoteStreamVersion: this._remoteStreamVersion,
     };
     console.log("[WebRTC] Debug info:", JSON.stringify(info, null, 2));
     return info;
@@ -495,6 +542,7 @@ class WebRTCService {
     this.remoteStream = null;
     this.candidatesQueue = [];
     this._isNegotiating = false;
+    this._remoteStreamVersion = 0;
   }
 
   cleanup() {

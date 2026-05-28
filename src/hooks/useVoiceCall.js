@@ -77,6 +77,8 @@ export const useVoiceCall = () => {
    * This ensures audio plays even without a visible <video> tag.
    */
   const playRemoteAudio = useCallback((stream) => {
+    if (!stream || stream.getAudioTracks().length === 0) return;
+
     if (!remoteAudioRef.current) {
       remoteAudioRef.current = new Audio();
       remoteAudioRef.current.autoplay = true;
@@ -89,8 +91,10 @@ export const useVoiceCall = () => {
 
   /**
    * Set up PeerConnection with ICE + remote track handlers.
-   * The onTrack callback uses a stable remoteStream reference from webrtcService
-   * to prevent unnecessary React re-renders that cause video flicker.
+   * CRITICAL FIX: The onTrack callback now receives a NEW MediaStream
+   * snapshot each time (from the fixed webrtcService), so React's
+   * useState detects the change and triggers a re-render, which causes
+   * the video elements in CallOverlay to reattach their srcObject.
    */
   const setupPeerConnection = useCallback((peerId, callType) => {
     webrtcService.createPeerConnection(
@@ -100,14 +104,16 @@ export const useVoiceCall = () => {
           signalingService.sendCandidate(peerId, { candidate });
         }
       },
-      // Remote track handler — receives the persistent remoteStream
-      (remoteStreamRef) => {
-        console.log("[Call] Remote stream updated, tracks:", remoteStreamRef.getTracks().length);
-        setRemoteStreamState(remoteStreamRef);
+      // Remote track handler — receives a NEW MediaStream snapshot each time
+      (remoteStreamSnapshot) => {
+        console.log("[Call] Remote stream snapshot received, tracks:", 
+          remoteStreamSnapshot.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`)
+        );
+        setRemoteStreamState(remoteStreamSnapshot);
 
-        // Always ensure audio playback for voice calls
-        if (callType === "voice" || remoteStreamRef.getAudioTracks().length > 0) {
-          playRemoteAudio(remoteStreamRef);
+        // Always ensure audio playback (voice calls have no <video> element)
+        if (callType === "voice" || remoteStreamSnapshot.getAudioTracks().length > 0) {
+          playRemoteAudio(remoteStreamSnapshot);
         }
       },
     );
@@ -132,13 +138,16 @@ export const useVoiceCall = () => {
 
     try {
       // 4. Create offer and send invite
+      const callId = "call-" + Date.now();
       const offer = await webrtcService.createOffer();
+      console.log("[Call] Outgoing offer created, sending invite to", peer.id);
       await signalingService.sendInvite(peer.id, {
-        id: "call-" + Date.now(),
+        id: callId,
         caller: user,
         sdp: offer,
         conversationId,
         type,
+        timestamp: Date.now(),
       });
     } catch (err) {
       console.error("[Call] Failed to create/send offer:", err);
@@ -162,11 +171,14 @@ export const useVoiceCall = () => {
     // 2. Update Redux state
     dispatch(acceptCall());
 
-    // 3. Create peer connection
+    // 3. Create peer connection WITH local tracks attached
     setupPeerConnection(incomingCall.caller.id, incomingCall.type);
 
     try {
-      // 4. Create answer and send it
+      // 4. Set remote offer and create answer — this is the correct order:
+      //    setRemoteDescription(offer) → createAnswer → setLocalDescription(answer)
+      //    webrtcService.createAnswer handles all of this internally.
+      console.log("[Call] Answering call from", incomingCall.caller.id);
       const answer = await webrtcService.createAnswer(incomingCall.sdp);
       await signalingService.sendAnswer(incomingCall.caller.id, {
         sdp: answer,
@@ -184,8 +196,9 @@ export const useVoiceCall = () => {
 
   const handleEndCall = useCallback(() => {
     const peerId = activeCallRef.current?.peer?.id || incomingCall?.caller?.id;
+    const sessionId = activeCallRef.current?.id || incomingCall?.id;
     if (peerId) {
-      signalingService.sendEnd(peerId, { reason: "ended" });
+      signalingService.sendEnd(peerId, { reason: "ended", sessionId });
     }
 
     if (activeCallRef.current) {

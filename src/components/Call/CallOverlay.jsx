@@ -52,6 +52,8 @@ export const CallOverlay = () => {
 
   const localVideoRef = React.useRef(null);
   const remoteVideoRef = React.useRef(null);
+  // Hidden audio element for voice-only call playback
+  const remoteAudioRef = React.useRef(null);
   const containerRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -87,9 +89,12 @@ export const CallOverlay = () => {
     const el = localVideoRef.current;
     if (el) {
       if (localStream) {
-        el.srcObject = localStream;
-        el.play().catch((e) => console.warn("[CallUI] Local video play failed:", e));
-        console.log("[CallUI] Local stream attached:", localStream.getTracks().map(t => `${t.kind}:${t.enabled}`));
+        // Only reassign if different to avoid interrupting playback
+        if (el.srcObject !== localStream) {
+          el.srcObject = localStream;
+          el.play().catch((e) => console.warn("[CallUI] Local video play failed:", e));
+        }
+        console.log("[CallUI] Local stream attached:", localStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
       } else {
         el.srcObject = null;
       }
@@ -102,22 +107,46 @@ export const CallOverlay = () => {
     });
   }, [localStream]);
 
-  // Attach remote stream reactively with explicit play() for reliable rendering
+  // CRITICAL FIX: Attach remote stream to BOTH the visible <video> element
+  // AND the hidden <audio> element for guaranteed playback.
+  // The remote stream is a NEW MediaStream snapshot each time ontrack fires,
+  // so this effect re-runs and re-attaches correctly.
   React.useEffect(() => {
-    const el = remoteVideoRef.current;
-    if (el) {
+    // Attach to visible video element
+    const videoEl = remoteVideoRef.current;
+    if (videoEl) {
       if (remoteStream) {
-        el.srcObject = remoteStream;
-        // Force explicit play with muted=false for remote audio
-        el.muted = false;
-        el.volume = 1.0;
-        el.play().catch((e) => console.warn("[CallUI] Remote video play failed:", e));
-        console.log("[CallUI] Remote stream attached:", remoteStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
+        videoEl.srcObject = remoteStream;
+        videoEl.muted = false;
+        videoEl.volume = 1.0;
+        videoEl.play().catch((e) => console.warn("[CallUI] Remote video play failed:", e));
+        console.log("[CallUI] Remote stream attached to <video>:", remoteStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}:muted=${t.muted}`));
       } else {
-        el.srcObject = null;
+        videoEl.srcObject = null;
+      }
+    }
+
+    // ALWAYS attach to hidden audio element as well (guarantees audio for voice-only calls)
+    const audioEl = remoteAudioRef.current;
+    if (audioEl) {
+      if (remoteStream && remoteStream.getAudioTracks().length > 0) {
+        audioEl.srcObject = remoteStream;
+        audioEl.play().catch((e) => console.warn("[CallUI] Remote audio play failed:", e));
+        console.log("[CallUI] Remote audio stream attached to hidden <audio>");
+      } else if (audioEl.srcObject) {
+        audioEl.srcObject = null;
       }
     }
   }, [remoteStream]);
+
+  // Periodic debug logging during active calls
+  React.useEffect(() => {
+    if (!activeCall || activeCall.status !== "connected") return;
+    const debugTimer = setInterval(() => {
+      webrtcService.getDebugInfo();
+    }, 5000);
+    return () => clearInterval(debugTimer);
+  }, [activeCall?.status]);
 
   if (!isMounted) return null;
   if (!activeCall && !incomingCall) return null;
@@ -136,30 +165,42 @@ export const CallOverlay = () => {
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] flex flex-col bg-[#0a1014] text-white overflow-hidden select-none"
       >
+        {/* Hidden audio element — ALWAYS mounted for guaranteed remote audio playback */}
+        {/* This is the safety net: even if the <video> can't autoplay, audio still works */}
+        <audio
+          ref={remoteAudioRef}
+          autoPlay
+          playsInline
+          style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
+        />
+
         {/* Immersive Background/Video Layer (Absolute Base) */}
         <div className="absolute inset-0 z-0 bg-black">
-          {isConnected && isVideoCall ? (
+          {isVideoCall ? (
             <>
-              {/* Remote Video (Full Screen) - Persistently mounted to guarantee continuous audio/video playback */}
+              {/* Remote Video (Full Screen) - ALWAYS mounted so tracks can attach
+                  even before "connected" status, preventing the black-screen race */}
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
                 className={cn(
                   "w-full h-full object-cover transition-all duration-500",
-                  remoteVideoDisabled ? "opacity-0 absolute pointer-events-none scale-95" : "opacity-100 scale-100"
+                  (remoteVideoDisabled || !isConnected) ? "opacity-0 absolute pointer-events-none scale-95" : "opacity-100 scale-100"
                 )}
               />
 
-              {/* Remote Avatar Fallback Layer when video is paused/disabled by peer */}
-              {remoteVideoDisabled && (
+              {/* Remote Avatar Fallback Layer when video is paused/disabled by peer or not yet connected */}
+              {(remoteVideoDisabled || !isConnected) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a1014] z-10 transition-opacity duration-300">
                   <Avatar
                     src={currentPeer?.avatar}
                     size="xl"
                     className="w-28 h-28 sm:w-36 sm:h-36 border-4 border-white/10 shadow-2xl relative mb-4"
                   />
-                  <p className="text-white/60 text-sm">{t("call.video_paused")}</p>
+                  {isConnected && remoteVideoDisabled && (
+                    <p className="text-white/60 text-sm">{t("call.video_paused")}</p>
+                  )}
                 </div>
               )}
 
@@ -198,6 +239,14 @@ export const CallOverlay = () => {
             </>
           ) : (
             <>
+              {/* Voice call background — remote video element is still mounted but hidden
+                  so audio can play through it as a fallback */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
+              />
               <div
                 className="absolute inset-0 bg-cover bg-center scale-110 blur-3xl opacity-40 saturate-150"
                 style={{ backgroundImage: `url(${currentPeer?.avatar})` }}
