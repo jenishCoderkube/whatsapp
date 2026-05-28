@@ -4,38 +4,17 @@ import React, { createContext, useState, useEffect, useContext } from "react";
 import enTranslations from "../locales/en.json";
 import hiTranslations from "../locales/hi.json";
 import guTranslations from "../locales/gu.json";
-import esTranslations from "../locales/es.json";
-import frTranslations from "../locales/fr.json";
-import deTranslations from "../locales/de.json";
-import arTranslations from "../locales/ar.json";
-import zhTranslations from "../locales/zh.json";
-import jaTranslations from "../locales/ja.json";
-import ruTranslations from "../locales/ru.json";
 
 const translations = {
   en: enTranslations,
   hi: hiTranslations,
   gu: guTranslations,
-  es: esTranslations,
-  fr: frTranslations,
-  de: deTranslations,
-  ar: arTranslations,
-  zh: zhTranslations,
-  ja: jaTranslations,
-  ru: ruTranslations,
 };
 
 export const languageNames = {
   en: "English",
   hi: "हिन्दी (Hindi)",
   gu: "ગુજરાતી (Gujarati)",
-  es: "Español (Spanish)",
-  fr: "Français (French)",
-  de: "Deutsch (German)",
-  ar: "العربية (Arabic)",
-  zh: "中文 (Chinese)",
-  ja: "日本語 (Japanese)",
-  ru: "Русский (Russian)",
 };
 
 const I18nContext = createContext(null);
