@@ -1180,16 +1180,16 @@ export function ChatInput() {
       )}
 
       {editingMessage && (
-        <div className="flex items-center justify-between bg-wa-sidebar/80 dark:bg-[#1f2c34]/95 backdrop-blur-md border-l-[4px] border-[#00a884] px-3 sm:px-4 py-2 sm:py-2.5 mb-2.5 rounded-lg text-xs select-none animate-scale-up relative gap-3 shadow-sm border border-wa-border/30">
+        <div className="flex items-center justify-between bg-wa-sidebar/80 dark:bg-wa-sidebar/95 backdrop-blur-md border-l-[4px] border-wa-primary px-3 sm:px-4 py-2 sm:py-2.5 mb-2.5 rounded-lg text-xs select-none animate-scale-up relative gap-3 shadow-sm border border-wa-border/30">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="flex items-center justify-center h-8 w-8 rounded bg-[#00a884]/10 text-[#00a884] shrink-0">
+            <div className="flex items-center justify-center h-8 w-8 rounded bg-wa-primary/10 text-wa-primary shrink-0">
               <svg viewBox="0 0 24 24" width="15" height="15" className="fill-none stroke-current stroke-2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
               </svg>
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="font-semibold text-[#00a884] truncate text-[11px] sm:text-xs">
+              <span className="font-semibold text-wa-primary truncate text-[11px] sm:text-xs">
                 {t("chat.edit_message")}
               </span>
               <span className="text-wa-muted truncate text-[11px] sm:text-xs leading-normal">
@@ -1213,7 +1213,7 @@ export function ChatInput() {
       )}
 
       {replyingMessage && (
-        <div className="flex items-center justify-between bg-wa-sidebar/80 dark:bg-[#1f2c34]/95 backdrop-blur-md border-l-[4px] border-wa-primary px-3 sm:px-4 py-2 sm:py-2.5 mb-2.5 rounded-lg text-xs select-none animate-scale-up relative gap-3 shadow-sm border border-wa-border/30">
+        <div className="flex items-center justify-between bg-wa-sidebar/80 dark:bg-wa-sidebar/95 backdrop-blur-md border-l-[4px] border-wa-primary px-3 sm:px-4 py-2 sm:py-2.5 mb-2.5 rounded-lg text-xs select-none animate-scale-up relative gap-3 shadow-sm border border-wa-border/30">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="flex items-center justify-center h-8 w-8 rounded bg-wa-primary/10 text-wa-primary shrink-0">
               {replyingMessage.type === "image" ? (

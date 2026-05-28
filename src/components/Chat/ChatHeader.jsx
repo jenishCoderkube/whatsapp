@@ -46,37 +46,42 @@ function MarqueeText({ text, className }) {
   const containerRef = useRef(null);
   const textRef = useRef(null);
   const [scrollAmount, setScrollAmount] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    setScrollAmount(0);
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
 
-    const checkOverflow = () => {
+    const observer = new ResizeObserver(() => {
       const container = containerRef.current;
       const textEl = textRef.current;
       if (container && textEl) {
         const overflowWidth = textEl.scrollWidth - container.clientWidth;
-        if (overflowWidth > 0) {
-          setScrollAmount(overflowWidth);
-        } else {
-          setScrollAmount(0);
-        }
+        setScrollAmount(overflowWidth > 0 ? overflowWidth : 0);
       }
-    };
+    });
 
-    const timer = setTimeout(checkOverflow, 200);
-    window.addEventListener("resize", checkOverflow);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
 
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", checkOverflow);
+      window.removeEventListener("resize", checkMobile);
+      observer.disconnect();
     };
   }, [text]);
 
-  const style = scrollAmount > 0
+  const shouldScroll = isMobile && scrollAmount > 0;
+
+  const style = shouldScroll
     ? {
+        "--scroll-amount": `${scrollAmount}px`,
         animation: `waHeaderMarquee ${scrollAmount * 0.05 + 4}s linear infinite alternate`,
         display: "inline-block",
-        paddingRight: "20px",
+        paddingRight: "24px",
       }
     : {};
 
@@ -88,18 +93,10 @@ function MarqueeText({ text, className }) {
       <span
         ref={textRef}
         style={style}
-        className="inline-block"
+        className={cn("inline-block", !shouldScroll && "truncate max-w-full")}
       >
         {text}
       </span>
-      {scrollAmount > 0 && (
-        <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes waHeaderMarquee {
-            0%, 15% { transform: translate3d(0, 0, 0); }
-            85%, 100% { transform: translate3d(-${scrollAmount}px, 0, 0); }
-          }
-        `}} />
-      )}
     </div>
   );
 }

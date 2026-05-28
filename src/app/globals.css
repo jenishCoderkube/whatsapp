@@ -30,11 +30,11 @@
 
     /* Legacy mapping support for pre-existing utility code */
     --wa-bg-light: #efeae2;
-    --wa-bg-dark: #0a1014;
+    --wa-bg-dark: #0b141a;
     --wa-header-light: #f0f2f5;
-    --wa-header-dark: #0a1014;
+    --wa-header-dark: #202c33;
     --wa-sidebar-light: #ffffff;
-    --wa-sidebar-dark: #0a1014;
+    --wa-sidebar-dark: #111b21;
     --wa-bubble-in-light: #ffffff;
     --wa-bubble-in-dark: #202c33;
     --wa-bubble-out-light: #d9fdd3;
@@ -53,11 +53,11 @@
     --wa-primary-hover: #008f72;
 
     --wa-app-bg: #0a1014;
-    --wa-bg: #0a1014;
-    --wa-sidebar: #0a1014;
-    --wa-header: #0a1014;
-    --wa-input: #111b21;
-    --wa-modal: #0a1014;
+    --wa-bg: #0b141a;
+    --wa-sidebar: #111b21;
+    --wa-header: #202c33;
+    --wa-input: #202c33;
+    --wa-modal: #222e35;
     --wa-encrypted: #182229;
 
     --wa-bubble-in: #202c33;
@@ -180,4 +180,16 @@
 
 .animate-fade-in {
   animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Header auto scroll / marquee animation */
+@keyframes waHeaderMarquee {
+  0%,
+  15% {
+    transform: translate3d(0, 0, 0);
+  }
+  85%,
+  100% {
+    transform: translate3d(calc(-1 * var(--scroll-amount, 0px)), 0, 0);
+  }
 }

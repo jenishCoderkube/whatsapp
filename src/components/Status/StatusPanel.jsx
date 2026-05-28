@@ -430,7 +430,7 @@ export function StatusPanel() {
   const showViewer = !!activeUserId || !!composingType;
 
   return (
-    <div className="fixed inset-0 z-[150] flex bg-[#0c1317] text-white select-none transition-colors duration-200">
+    <div className="fixed inset-0 z-[150] flex bg-wa-sidebar text-wa-text select-none transition-colors duration-200">
       <div className="flex h-full w-full max-w-[1600px] mx-auto overflow-hidden">
         
         {/* SIDEBAR */}
@@ -451,7 +451,7 @@ export function StatusPanel() {
 
         {/* MAIN CANVAS */}
         <main className={cn(
-          "flex-1 h-full bg-[#0c1317] flex flex-col items-center justify-center relative overflow-hidden",
+          "flex-1 h-full bg-wa-bg flex flex-col items-center justify-center relative overflow-hidden",
           !showViewer ? "hidden md:flex" : "flex"
         )}>
           <AnimatePresence mode="wait">
