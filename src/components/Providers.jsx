@@ -240,7 +240,7 @@ function AuthSessionRecoveryGate({ children }) {
         case "answer": {
           if (activeCallRef.current?.status === "outgoing" && webrtcService.pc) {
             await webrtcService.setRemoteAnswer(data.sdp);
-            dispatch(setCallStatus("connected"));
+            // "connected" will be dispatched by onConnectionStateChange when ICE completes
           }
           break;
         }

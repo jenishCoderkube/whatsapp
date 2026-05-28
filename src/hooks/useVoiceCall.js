@@ -19,8 +19,6 @@ export const useVoiceCall = () => {
   const [localStream, setLocalStreamState] = useState(null);
   const [remoteStream, setRemoteStreamState] = useState(null);
 
-  // Keep a hidden <audio> ref alive for voice-only calls so remote
-  // audio plays even when there is no visible <video> element.
   const remoteAudioRef = useRef(null);
   const activeCallRef = useRef(activeCall);
 
@@ -28,8 +26,7 @@ export const useVoiceCall = () => {
     activeCallRef.current = activeCall;
   }, [activeCall]);
 
-  // Sync localStream from webrtcService when it changes
-  // Use a stable interval that checks reference equality
+  // Sync localStream from webrtcService
   useEffect(() => {
     const timer = setInterval(() => {
       if (webrtcService.localStream !== localStream) {
@@ -39,9 +36,6 @@ export const useVoiceCall = () => {
     return () => clearInterval(timer);
   }, [localStream]);
 
-  /**
-   * Log call to conversation message history.
-   */
   const logCallMessage = useCallback(
     async (callData, statusOverride = null) => {
       if (!callData?.conversationId || !user?.id) return;
@@ -75,54 +69,35 @@ export const useVoiceCall = () => {
     [user?.id],
   );
 
-  /**
-   * Play remote audio for voice-only calls via a hidden Audio element.
-   * This ensures audio plays even without a visible <video> tag.
-   */
   const playRemoteAudio = useCallback((stream) => {
     if (!stream || stream.getAudioTracks().length === 0) return;
-
     if (!remoteAudioRef.current) {
       remoteAudioRef.current = new Audio();
       remoteAudioRef.current.autoplay = true;
     }
     remoteAudioRef.current.srcObject = stream;
-    remoteAudioRef.current.play().catch((e) => {
-      console.warn("[Call] Remote audio autoplay blocked:", e);
-    });
+    remoteAudioRef.current.play().catch(() => {});
   }, []);
 
   /**
    * Set up PeerConnection with ICE + remote track handlers.
-   * CRITICAL FIX: The onTrack callback now receives a NEW MediaStream
-   * snapshot each time (from the fixed webrtcService), so React's
-   * useState detects the change and triggers a re-render, which causes
-   * the video elements in CallOverlay to reattach their srcObject.
+   * The onTrack callback receives a NEW MediaStream snapshot each time
+   * so React re-renders and video elements reattach srcObject.
    */
   const setupPeerConnection = useCallback(
     (peerId, callType) => {
       webrtcService.createPeerConnection(
-        // ICE candidate handler
         (candidate) => {
           if (peerId) {
             signalingService.sendCandidate(peerId, { candidate });
           }
         },
-        // Remote track handler — receives a NEW MediaStream snapshot each time
         (remoteStreamSnapshot) => {
-          console.log(
-            "[Call] Remote stream snapshot received, tracks:",
-            remoteStreamSnapshot
-              .getTracks()
-              .map((t) => `${t.kind}:${t.enabled}:${t.readyState}`),
-          );
+          console.log("[Call] Remote stream snapshot, tracks:",
+            remoteStreamSnapshot.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
           setRemoteStreamState(remoteStreamSnapshot);
 
-          // Always ensure audio playback (voice calls have no <video> element)
-          if (
-            callType === "voice" ||
-            remoteStreamSnapshot.getAudioTracks().length > 0
-          ) {
+          if (callType === "voice" || remoteStreamSnapshot.getAudioTracks().length > 0) {
             playRemoteAudio(remoteStreamSnapshot);
           }
         },
@@ -138,25 +113,15 @@ export const useVoiceCall = () => {
       if (activeCallRef.current) return;
 
       const isVideo = type === "video";
-
-      // 1. Try to acquire local media (returns null if no devices — that's OK)
       const stream = await webrtcService.acquireLocalMedia(isVideo);
-      setLocalStreamState(stream); // null is fine
+      setLocalStreamState(stream);
 
-      // 2. Update Redux state
       dispatch(initiateOutgoingCall({ peer, type, conversationId }));
-
-      // 3. Create peer connection (works with zero local tracks)
       setupPeerConnection(peer.id, type);
 
       try {
-        // 4. Create offer and send invite
         const callId = "call-" + Date.now();
         const offer = await webrtcService.createOffer();
-        console.log(
-          "[Call] Outgoing offer created, sending invite to",
-          peer.id,
-        );
         await signalingService.sendInvite(peer.id, {
           id: callId,
           caller: user,
@@ -176,32 +141,28 @@ export const useVoiceCall = () => {
   );
 
   // ─── Answer Incoming Call ─────────────────────────────────────────
+  //
+  // CRITICAL: We do NOT dispatch setCallStatus("connected") here.
+  // The ONLY source of truth for "connected" is the PC's
+  // onconnectionstatechange callback handled in Providers.jsx.
+  // This prevents showing "connected" before ICE actually completes.
 
   const handleAnswerCall = useCallback(async () => {
     if (!incomingCall) return;
 
     const isVideo = incomingCall.type === "video";
-
-    // 1. Try to acquire local media (null is valid — receive-only)
     const stream = await webrtcService.acquireLocalMedia(isVideo);
     setLocalStreamState(stream);
 
-    // 2. Update Redux state
     dispatch(acceptCall());
-
-    // 3. Create peer connection WITH local tracks attached
     setupPeerConnection(incomingCall.caller.id, incomingCall.type);
 
     try {
-      // 4. Set remote offer and create answer — this is the correct order:
-      //    setRemoteDescription(offer) → createAnswer → setLocalDescription(answer)
-      //    webrtcService.createAnswer handles all of this internally.
-      console.log("[Call] Answering call from", incomingCall.caller.id);
       const answer = await webrtcService.createAnswer(incomingCall.sdp);
       await signalingService.sendAnswer(incomingCall.caller.id, {
         sdp: answer,
       });
-      dispatch(setCallStatus("connected"));
+      // "connected" will be dispatched by Providers.jsx when ICE completes
     } catch (err) {
       console.error("[Call] Failed to answer call:", err);
       webrtcService.cleanup();
@@ -225,7 +186,6 @@ export const useVoiceCall = () => {
       logCallMessage(incomingCall, "declined");
     }
 
-    // Stop the hidden audio element
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
