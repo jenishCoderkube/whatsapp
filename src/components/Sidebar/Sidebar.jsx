@@ -47,6 +47,7 @@ import {
   updateChatAvatar,
   setUserTyping,
   syncOnlineUsers,
+  setDrafts,
 } from "../../redux/slices/chatSlice";
 import { resetMessages } from "../../redux/slices/messageSlice";
 import { chatService } from "../../services/chatService";
@@ -208,6 +209,26 @@ export function Sidebar({ className }) {
         }
       };
       runCleanup();
+
+      // Load drafts from IndexedDB
+      const loadDrafts = async () => {
+        try {
+          const { indexedDBService } = await import("../../services/indexedDBService");
+          const allDrafts = await indexedDBService.getAllDrafts();
+          const draftMap = {};
+          allDrafts.forEach((d) => {
+            draftMap[d.chatId] = {
+              text: d.text,
+              replyTo: d.replyTo,
+              files: d.files || [],
+            };
+          });
+          dispatch(setDrafts(draftMap));
+        } catch (e) {
+          console.warn("Failed to load drafts from IndexedDB:", e);
+        }
+      };
+      loadDrafts();
 
       // Load fresh conversations from the network
       loadChats();

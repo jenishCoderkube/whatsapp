@@ -163,8 +163,16 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
                 <User className="h-5 w-5 text-neutral-300" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-neutral-100 truncate">
-                  {activeMedia.senderName || t("chat.shared_image") || "Shared Photo"}
+                <p className="text-sm font-semibold text-neutral-100 truncate flex items-center gap-1.5">
+                  {activeMedia.isForwarded && (
+                    <span className="text-[10px] bg-white/10 text-neutral-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-normal">
+                      <svg viewBox="0 0 24 24" width="10" height="10" className="fill-neutral-300 inline shrink-0 rotate-[-45deg]">
+                        <path d="M15 5l-1.41 1.41L18.17 11H2V13h16.17l-4.59 4.59L15 19l7-7-7-7z" />
+                      </svg>
+                      {t("chat.forwarded")}
+                    </span>
+                  )}
+                  <span>{activeMedia.senderName || t("chat.shared_image") || "Shared Photo"}</span>
                 </p>
                 <div className="flex items-center gap-1.5 text-xs text-neutral-400">
                   <Calendar className="h-3.5 w-3.5" />

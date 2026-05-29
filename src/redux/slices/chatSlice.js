@@ -21,6 +21,7 @@ const initialState = {
   searchQuery: "",
   typingMap: {}, // { [chatId]: { [userId]: boolean } }
   onlineMap: {}, // { [userId]: boolean }
+  drafts: {}, // { [chatId]: { text, replyTo, files } }
 };
 
 const chatSlice = createSlice({
@@ -263,6 +264,17 @@ const chatSlice = createSlice({
       state.activeChatId = null;
       state.searchQuery = "";
     },
+    setDrafts(state, action) {
+      state.drafts = action.payload || {};
+    },
+    setDraft(state, action) {
+      const { chatId, draft } = action.payload;
+      state.drafts[chatId] = draft;
+    },
+    deleteDraft(state, action) {
+      const chatId = action.payload;
+      delete state.drafts[chatId];
+    },
   },
 });
 
@@ -285,6 +297,9 @@ export const {
   syncOnlineUsers,
   updatePeerProfile,
   resetChats,
+  setDrafts,
+  setDraft,
+  deleteDraft,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

@@ -205,7 +205,12 @@ export default function ChatPage() {
     let lastDate = null;
     let currentImageGroup = null;
 
-    activeMessages.forEach((msg) => {
+    let firstUnreadIndex = -1;
+    if (activeChat && activeChat.unreadCount > 0) {
+      firstUnreadIndex = activeMessages.findIndex(m => !m.isOutgoing && m.status !== "read");
+    }
+
+    activeMessages.forEach((msg, idx) => {
       const msgDate = new Date(msg.createdAt || Date.now()).toDateString();
       if (msgDate !== lastDate) {
         if (currentImageGroup) {
@@ -218,6 +223,17 @@ export default function ChatPage() {
           id: `date-${msgDate}-${msg.uiId || msg.id}`,
         });
         lastDate = msgDate;
+      }
+
+      if (idx === firstUnreadIndex) {
+        if (currentImageGroup) {
+          items.push(currentImageGroup);
+          currentImageGroup = null;
+        }
+        items.push({
+          type: "unread_separator",
+          id: `unread-separator-${msg.uiId || msg.id}`,
+        });
       }
 
       // Group consecutive image messages of the same sender sent within 1 minute of each other
@@ -261,7 +277,7 @@ export default function ChatPage() {
       items.push(currentImageGroup);
     }
     return items;
-  }, [activeMessages]);
+  }, [activeMessages, activeChat]);
 
   // Instantly mark targeted unread sequences as read whenever actively viewing a thread
   const markAsReadIfAtBottom = () => {
@@ -1049,6 +1065,15 @@ export default function ChatPage() {
                           {getChatDateLabel(item.date)}
                         </span>
                       </div>
+                    ) : item.type === "unread_separator" ? (
+                      <div key={item.id} className="flex items-center justify-center my-5 select-none relative w-full">
+                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                          <div className="w-full border-t border-red-500/25 dark:border-red-500/20"></div>
+                        </div>
+                        <span className="relative bg-red-500 dark:bg-red-600 text-white text-[10px] sm:text-[11px] px-3.5 py-1 rounded-full shadow-md font-semibold tracking-wider uppercase border border-red-500/30">
+                          {t("chat.unread_messages") || "Unread Messages"}
+                        </span>
+                      </div>
                     ) : (
                       <MessageBubble key={item.uiId || item.id} message={item} isGroup={activeChat.isGroup} groupMembers={groupMembers} />
                     )
@@ -1056,6 +1081,17 @@ export default function ChatPage() {
 
                   <div ref={messagesEndRef} className="h-1" />
                 </div>
+
+                {/* Floating "New Messages" indicator */}
+                {localUnreadCount > 0 && showScrollBottom && (
+                  <button
+                    onClick={scrollToBottom}
+                    className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-red-500 dark:bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 hover:bg-red-600 transition-all transform hover:scale-105 active:scale-95 z-30 animate-bounce select-none"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    {(t && t("chat.new_messages")) || "New Messages"} ({localUnreadCount})
+                  </button>
+                )}
 
                 {/* WhatsApp-style Floating Unread Indicator */}
                 {showScrollBottom && (

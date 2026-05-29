@@ -19,6 +19,7 @@ export const ChatCard = React.memo(({ chat }) => {
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = currentUser?.id;
   const messagesList = useAppSelector((state) => state.message.messages[chat.id]);
+  const draft = useAppSelector((state) => state.chat.drafts[chat.id]);
 
   // Natively access the LAST element in the chronological array to guarantee the absolute latest message preview displays
   const latestLoadedMsg = messagesList && messagesList.length > 0 
@@ -52,6 +53,7 @@ export const ChatCard = React.memo(({ chat }) => {
   const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);
 
   const renderStatus = () => {
+    if (draft && (draft.text || (draft.files && draft.files.length > 0))) return null;
     if (isDeleted) return null;
     if (isPeerTyping) return null;
     if (!isOutgoing) return null;
@@ -69,7 +71,24 @@ export const ChatCard = React.memo(({ chat }) => {
       return <span className="text-wa-primary font-medium italic animate-pulse">Typing...</span>;
     }
 
-    const baseText = chat.lastMessage?.text || (latestLoadedMsg ? latestLoadedMsg.text : "");
+    // Render Draft preview if exists
+    if (draft && (draft.text || (draft.files && draft.files.length > 0))) {
+      let previewText = draft.text || "";
+      if (!previewText && draft.files && draft.files.length > 0) {
+        const firstFile = draft.files[0];
+        if (firstFile.type === "image") previewText = "📷 Photo";
+        else if (firstFile.type === "video") previewText = "🎥 Video";
+        else previewText = "📎 Document";
+      }
+      return (
+        <span className="truncate">
+          <span className="text-red-500 dark:text-red-400 font-normal mr-1">Draft:</span>
+          <span className="text-wa-muted">{previewText}</span>
+        </span>
+      );
+    }
+
+    let baseText = chat.lastMessage?.text || (latestLoadedMsg ? latestLoadedMsg.text : "");
     const type = latestLoadedMsg ? latestLoadedMsg.type : "text";
 
     if (isDeleted) {
@@ -81,20 +100,27 @@ export const ChatCard = React.memo(({ chat }) => {
       );
     }
 
+    const isForwarded = chat.lastMessage?.isForwarded || latestLoadedMsg?.isForwarded;
+    let displayString = baseText;
+
     // Dynamic type icon labeling support matching standard WhatsApp lists
-    if (baseText === "📷 Photo" || type === "image") return "📷 Photo";
-    if (baseText === "🎥 Video" || type === "video") return "🎥 Video";
-    if (baseText === "📎 Document" || type === "file") return "📎 Document";
-    if (baseText === "🎤 Voice Message" || type === "voice") return "🎤 Voice Message";
-    if (type === "live_location" || baseText?.includes("live location")) return "📍 Live Location";
-    if (type === "location" || baseText?.includes("Current Location")) return "📍 Location";
-    
-    if (!baseText) return "No messages yet";
+    if (baseText === "📷 Photo" || type === "image") displayString = "📷 Photo";
+    else if (baseText === "🎥 Video" || type === "video") displayString = "🎥 Video";
+    else if (baseText === "📎 Document" || type === "file") displayString = "📎 Document";
+    else if (baseText === "🎤 Voice Message" || type === "voice") displayString = "🎤 Voice Message";
+    else if (type === "live_location" || baseText?.includes("live location")) displayString = "📍 Live Location";
+    else if (type === "location" || baseText?.includes("Current Location")) displayString = "📍 Location";
+
+    if (isForwarded && displayString && !displayString.startsWith("↪️")) {
+      displayString = `↪️ ${displayString}`;
+    }
+
+    if (!displayString) return "No messages yet";
 
     // Format mentions in the preview text
     const mentionRegex = /@([^@\s\n]+(?:\s+[^@\s\n]+)?)/g;
-    const parts = baseText.split(mentionRegex);
-    if (parts.length === 1) return baseText;
+    const parts = displayString.split(mentionRegex);
+    if (parts.length === 1) return displayString;
 
     const currentUserName = currentUser?.name;
     return parts.map((part, i) => {

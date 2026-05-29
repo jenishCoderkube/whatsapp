@@ -42,6 +42,7 @@ import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
 import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
+import { supabase } from "../../lib/supabaseClient";
 import { setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
 import { updateMessage, updateMessageStatus, replaceOptimisticMessage } from "../../redux/slices/messageSlice";
 import {
@@ -176,6 +177,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     isOpen: false,
     style: {},
   });
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
@@ -352,6 +354,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     e.stopPropagation();
     setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
     dispatch(setEditingMessage(message));
+  };
+
+  const handleInfoAction = (e) => {
+    e.stopPropagation();
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+    setIsInfoModalOpen(true);
   };
 
   const handleOpenReactions = (e) => {
@@ -789,12 +797,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
             <div className="text-xs font-semibold text-wa-primary mb-0.5 truncate max-w-xs">{message.senderName || (t("chat.group_member") || "Group Member")}</div>
           )}
 
-          {message.isForwarded && (
+          {(message.isForwarded || (message.type === "image_group" && message.messages?.some(m => m.isForwarded))) && (
             <div className="flex items-center gap-1 text-[10px] text-wa-muted/80 italic mb-1.5 select-none">
               <svg viewBox="0 0 24 24" width="12" height="12" className="fill-wa-muted/70 inline shrink-0 rotate-[-45deg]">
                 <path d="M15 5l-1.41 1.41L18.17 11H2V13h16.17l-4.59 4.59L15 19l7-7-7-7z" />
               </svg>
-              <span>{t("chat.forwarded") || "Forwarded"}</span>
+              <span>{t("chat.forwarded")}</span>
             </div>
           )}
 
@@ -1003,6 +1011,16 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     )}
                     <div className="border-t border-wa-border my-1" />
                     <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>{t("chat.delete_for_me") || "Delete for me"}</span></button>
+                    {isMsgOutgoing && (
+                      <button onClick={handleInfoAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2">
+                        <svg viewBox="0 0 24 24" width="14" height="14" className="stroke-wa-muted stroke-2 fill-none inline shrink-0">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="16" x2="12" y2="12" />
+                          <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                        <span>{t("chat.info") || "Message info"}</span>
+                      </button>
+                    )}
                     {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>{t("chat.delete_for_everyone") || "Delete for everyone"}</span></button>}
                   </motion.div>
                 )}
@@ -1055,6 +1073,15 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
           </div>
         )}
       </div>
+      {isInfoModalOpen && (
+        <MessageInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => setIsInfoModalOpen(false)}
+          message={message}
+          isGroup={isGroup}
+          groupMembers={groupMembers}
+        />
+      )}
     </motion.div>
   );
 }, (prevProps, nextProps) => {
@@ -1091,3 +1118,229 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
   return true;
 });
+
+const formatReceiptTime = (isoString) => {
+  if (!isoString) return "—";
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "—";
+  
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
+};
+
+function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
+  const { t } = useTranslation();
+  const [msgData, setMsgData] = useState(null);
+  const [members, setMembers] = useState([]);
+
+  useEffect(() => {
+    if (!isOpen || !message?.id) return;
+
+    // Fetch initial receipts
+    const fetchInitialData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("messages")
+          .select("receipts, status, delivered_at, seen_at, created_at, text, type, media_url, file_name")
+          .eq("id", message.id)
+          .single();
+        if (error) throw error;
+        setMsgData(data);
+      } catch (err) {
+        console.warn("Failed to fetch initial message info receipts:", err);
+      }
+    };
+    fetchInitialData();
+
+    // Resolve group members names and profiles
+    if (isGroup) {
+      if (groupMembers && groupMembers.length > 0) {
+        setMembers(groupMembers);
+      } else {
+        // Fallback fetch if not passed
+        import("../../services/chatService").then(({ chatService }) => {
+          chatService.getGroupMembers(message.conversationId || message.conversation_id).then(setMembers).catch(console.error);
+        });
+      }
+    }
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel(`msg-info-${message.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `id=eq.${message.id}`
+        },
+        (payload) => {
+          setMsgData(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, message?.id, isGroup, groupMembers, message?.conversationId, message?.conversation_id]);
+
+  if (!isOpen) return null;
+
+  const currentMsg = msgData || message;
+  const receipts = currentMsg.receipts || {};
+  const deliveredList = receipts.delivered || {};
+  const readList = receipts.read || {};
+
+  // Render message preview
+  const renderMsgPreview = () => {
+    switch (currentMsg.type) {
+      case "image":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            {currentMsg.mediaUrl && (
+              <img src={currentMsg.mediaUrl} alt="Thumbnail" className="w-12 h-12 object-cover rounded-md" />
+            )}
+            <span className="text-xs text-wa-muted font-medium">📷 Photo</span>
+          </div>
+        );
+      case "video":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            <div className="relative w-12 h-12 bg-black rounded-md flex items-center justify-center">
+              <Play className="h-4 w-4 text-white fill-white" />
+            </div>
+            <span className="text-xs text-wa-muted font-medium">🎥 Video</span>
+          </div>
+        );
+      case "voice":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            <span className="text-xs text-wa-muted font-medium">🎤 Voice Message</span>
+          </div>
+        );
+      case "file":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            <FileText className="h-6 w-6 text-wa-primary" />
+            <span className="text-xs text-wa-muted font-medium truncate max-w-[200px]">{currentMsg.file_name || currentMsg.fileName || "Document"}</span>
+          </div>
+        );
+      default:
+        return (
+          <div className="bg-[#d9fdd3] dark:bg-[#005c4b] text-wa-text text-sm p-3.5 rounded-lg max-w-md shadow-xs border border-wa-border/20 whitespace-pre-wrap break-words leading-relaxed font-normal">
+            {currentMsg.text}
+          </div>
+        );
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t("chat.message_info") || "Message info"} className="max-w-md">
+      <div className="flex flex-col gap-6 py-2 select-none">
+        {/* Message preview */}
+        <div className="flex flex-col gap-2">
+          <span className="text-[10px] text-wa-muted font-bold uppercase tracking-wider">{t("chat.message_preview") || "Message Preview"}</span>
+          <div className="flex justify-end pr-2">{renderMsgPreview()}</div>
+        </div>
+
+        {/* Info detail list */}
+        <div className="border-t border-wa-border pt-4 flex flex-col gap-5">
+          {!isGroup ? (
+            // One-to-One receipts
+            <div className="flex flex-col gap-4">
+              {/* Read receipt */}
+              <div className="flex items-start gap-4 p-1">
+                <CheckCheck className={cn("h-5 w-5 mt-0.5 shrink-0", currentMsg.status === "read" ? "text-[#53bdeb]" : "text-wa-muted")} />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-wa-text">{t("chat.read") || "Read"}</span>
+                  <span className="text-xs text-wa-muted mt-0.5">
+                    {formatReceiptTime(currentMsg.seen_at || readList[Object.keys(readList)[0]])}
+                  </span>
+                </div>
+              </div>
+
+              {/* Delivered receipt */}
+              <div className="flex items-start gap-4 p-1">
+                <CheckCheck className={cn("h-5 w-5 mt-0.5 shrink-0 text-wa-muted")} />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-wa-text">{t("chat.delivered") || "Delivered"}</span>
+                  <span className="text-xs text-wa-muted mt-0.5">
+                    {formatReceiptTime(currentMsg.delivered_at || deliveredList[Object.keys(deliveredList)[0]] || currentMsg.seen_at || readList[Object.keys(readList)[0]])}
+                  </span>
+                </div>
+              </div>
+
+              {/* Sent receipt */}
+              <div className="flex items-start gap-4 p-1">
+                <Check className="h-5 w-5 mt-0.5 shrink-0 text-wa-muted" />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-wa-text">{t("chat.sent") || "Sent"}</span>
+                  <span className="text-xs text-wa-muted mt-0.5">
+                    {formatReceiptTime(currentMsg.created_at || currentMsg.createdAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Group Chat Receipts
+            <div className="flex flex-col gap-6 max-h-[45vh] overflow-y-auto pr-1 custom-scrollbar">
+              {/* Read By List */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] text-wa-muted font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCheck className="h-4 w-4 text-[#53bdeb]" />
+                  {t("chat.read_by") || "Read by"}
+                </span>
+                <div className="flex flex-col gap-2.5 pl-5">
+                  {members.filter(m => m.id !== currentMsg.senderId && readList[m.id]).length === 0 ? (
+                    <span className="text-xs text-wa-muted italic font-medium">{t("chat.no_one_yet") || "No one yet"}</span>
+                  ) : (
+                    members.filter(m => m.id !== currentMsg.senderId && readList[m.id]).map(m => (
+                      <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar src={m.avatar} fallback={m.name[0]} size="sm" uid={m.id} />
+                          <span className="font-semibold text-wa-text truncate max-w-[150px]">{m.name}</span>
+                        </div>
+                        <span className="text-wa-muted shrink-0 font-medium">{formatReceiptTime(readList[m.id])}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Delivered To List */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] text-wa-muted font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCheck className="h-4 w-4 text-wa-muted" />
+                  {t("chat.delivered_to") || "Delivered to"}
+                </span>
+                <div className="flex flex-col gap-2.5 pl-5">
+                  {members.filter(m => m.id !== currentMsg.senderId && deliveredList[m.id] && !readList[m.id]).length === 0 ? (
+                    <span className="text-xs text-wa-muted italic font-medium">{t("chat.no_one_yet") || "No one yet"}</span>
+                  ) : (
+                    members.filter(m => m.id !== currentMsg.senderId && deliveredList[m.id] && !readList[m.id]).map(m => (
+                      <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar src={m.avatar} fallback={m.name[0]} size="sm" uid={m.id} />
+                          <span className="font-semibold text-wa-text truncate max-w-[150px]">{m.name}</span>
+                        </div>
+                        <span className="text-wa-muted shrink-0 font-medium">{formatReceiptTime(deliveredList[m.id])}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}

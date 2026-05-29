@@ -1,6 +1,6 @@
 export const indexedDBService = {
   dbName: "WhatsAppCloneDB",
-  dbVersion: 1,
+  dbVersion: 2,
   db: null,
 
   async initDB() {
@@ -16,6 +16,9 @@ export const indexedDBService = {
         }
         if (!db.objectStoreNames.contains("pending_files")) {
           db.createObjectStore("pending_files", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("drafts")) {
+          db.createObjectStore("drafts", { keyPath: "chatId" });
         }
       };
 
@@ -90,6 +93,60 @@ export const indexedDBService = {
 
       const fileStore = transaction.objectStore("pending_files");
       fileStore.delete(messageId);
+    });
+  },
+
+  // ─── DRAFT METHODS ────────────────────────────────────────────────────────
+
+  async saveDraft(chatId, draft) {
+    const db = await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(["drafts"], "readwrite");
+      const store = transaction.objectStore("drafts");
+      const request = store.put({ chatId, ...draft });
+
+      request.onsuccess = () => resolve();
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async getDraft(chatId) {
+    const db = await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(["drafts"], "readonly");
+      const store = transaction.objectStore("drafts");
+      const request = store.get(chatId);
+
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async removeDraft(chatId) {
+    const db = await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(["drafts"], "readwrite");
+      const store = transaction.objectStore("drafts");
+      const request = store.delete(chatId);
+
+      request.onsuccess = () => resolve();
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async getAllDrafts() {
+    const db = await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(["drafts"], "readonly");
+      const store = transaction.objectStore("drafts");
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = (e) => reject(e.target.error);
     });
   }
 };

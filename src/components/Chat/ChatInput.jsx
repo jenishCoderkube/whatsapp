@@ -23,8 +23,8 @@ import {
   updateMessageStatus,
   updateMessage,
 } from "../../redux/slices/messageSlice";
-import { updateLastMessage } from "../../redux/slices/chatSlice";
-import { setEditingMessage } from "../../redux/slices/uiSlice";
+import { updateLastMessage, setDraft, deleteDraft } from "../../redux/slices/chatSlice";
+import { setEditingMessage, setReplyingMessage } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { storageService } from "../../services/storageService";
 import { realtimeService } from "../../services/realtimeService";
@@ -405,6 +405,127 @@ export function ChatInput() {
     };
   }, [showAttachments, showEmojiPicker, editingMessage, dispatch]);
 
+  const isRestoringRef = useRef(false);
+  const prevChatIdRef = useRef(activeChatId);
+
+  // Restore and Save drafts when switching activeChatId
+  useEffect(() => {
+    const prevChatId = prevChatIdRef.current;
+    
+    // Save draft for previous activeChatId if switching
+    if (prevChatId && prevChatId !== activeChatId) {
+      const textToSave = messageText;
+      const filesToSave = selectedFiles.map(f => ({
+        id: f.id,
+        file: f.file,
+        type: f.type,
+        sizeString: f.sizeString
+      }));
+      const replyToToSave = replyingMessage;
+
+      if (textToSave.trim() || filesToSave.length > 0) {
+        const draftObj = {
+          text: textToSave,
+          replyTo: replyToToSave,
+          files: filesToSave
+        };
+        indexedDBService.saveDraft(prevChatId, draftObj);
+        dispatch(setDraft({ chatId: prevChatId, draft: draftObj }));
+      } else {
+        indexedDBService.removeDraft(prevChatId);
+        dispatch(deleteDraft(prevChatId));
+      }
+    }
+
+    prevChatIdRef.current = activeChatId;
+
+    // Restore draft for the new activeChatId
+    if (activeChatId) {
+      isRestoringRef.current = true;
+      const loadAndRestore = async () => {
+        try {
+          const d = await indexedDBService.getDraft(activeChatId);
+          if (d) {
+            setMessageText(d.text || "");
+            if (d.replyTo) {
+              dispatch(setReplyingMessage(d.replyTo));
+            } else {
+              dispatch(setReplyingMessage(null));
+            }
+            if (d.files && d.files.length > 0) {
+              const restored = d.files.map(f => {
+                let previewUrl = null;
+                if (f.file.type === "image" || f.file.type === "video") {
+                  previewUrl = URL.createObjectURL(f.file);
+                }
+                return {
+                  id: f.id,
+                  file: f.file,
+                  type: f.type,
+                  previewUrl,
+                  sizeString: f.sizeString,
+                  isUploading: false,
+                };
+              });
+              setSelectedFiles(restored);
+            } else {
+              setSelectedFiles([]);
+            }
+          } else {
+            setMessageText("");
+            dispatch(setReplyingMessage(null));
+            setSelectedFiles([]);
+          }
+        } catch (e) {
+          console.warn("Failed to restore draft:", e);
+        } finally {
+          setTimeout(() => {
+            isRestoringRef.current = false;
+          }, 50);
+        }
+      };
+      loadAndRestore();
+    } else {
+      setMessageText("");
+      dispatch(setReplyingMessage(null));
+      setSelectedFiles([]);
+      isRestoringRef.current = false;
+    }
+  }, [activeChatId, dispatch]);
+
+  // Debounced auto-save draft for the current activeChatId
+  useEffect(() => {
+    if (!activeChatId || isRestoringRef.current) return;
+
+    const timer = setTimeout(() => {
+      if (isRestoringRef.current) return;
+      
+      const textToSave = messageText;
+      const filesToSave = selectedFiles.map(f => ({
+        id: f.id,
+        file: f.file,
+        type: f.type,
+        sizeString: f.sizeString
+      }));
+      const replyToToSave = replyingMessage;
+
+      if (textToSave.trim() || filesToSave.length > 0) {
+        const draftObj = {
+          text: textToSave,
+          replyTo: replyToToSave,
+          files: filesToSave
+        };
+        indexedDBService.saveDraft(activeChatId, draftObj);
+        dispatch(setDraft({ chatId: activeChatId, draft: draftObj }));
+      } else {
+        indexedDBService.removeDraft(activeChatId);
+        dispatch(deleteDraft(activeChatId));
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [messageText, selectedFiles, replyingMessage, activeChatId, dispatch]);
+
   // Load message text when entering edit mode
   useEffect(() => {
     if (editingMessage) {
@@ -653,6 +774,10 @@ export function ChatInput() {
     setSelectedFiles([]);
     setShowAttachments(false);
     setShowEmojiPicker(false);
+    
+    // Clear draft immediately upon sending
+    indexedDBService.removeDraft(activeChatId);
+    dispatch(deleteDraft(activeChatId));
     realtimeService.broadcastTypingEvent(
       activeChatId,
       user.id,

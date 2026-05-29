@@ -21,10 +21,10 @@ export function ForwardModal({ messageToForward, onClose }) {
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [isSending, setIsSending] = useState(false);
 
-  // Filter out archived or left chats for forwarding compatibility
+  // Filter out archived, left, or self-chats for forwarding compatibility
   const activeChats = useMemo(() => {
-    return chats.filter((c) => !c.isArchived && !c.isLeft);
-  }, [chats]);
+    return chats.filter((c) => !c.isArchived && !c.isLeft && c.peerId !== currentUser?.id);
+  }, [chats, currentUser]);
 
   const filteredChats = useMemo(() => {
     if (!searchQuery.trim()) return activeChats;
@@ -53,54 +53,82 @@ export function ForwardModal({ messageToForward, onClose }) {
         hour12: true,
       });
 
+      // Flatten list of messages to forward (handles single message, array of messages, and image groups)
+      const messagesList = [];
+      if (Array.isArray(messageToForward)) {
+        messageToForward.forEach((m) => {
+          if (m.type === "image_group" && m.messages) {
+            messagesList.push(...m.messages);
+          } else {
+            messagesList.push(m);
+          }
+        });
+      } else if (messageToForward && messageToForward.type === "image_group" && messageToForward.messages) {
+        messagesList.push(...messageToForward.messages);
+      } else if (messageToForward) {
+        messagesList.push(messageToForward);
+      }
+
       // Forward to each target conversation sequentially
       for (const targetChatId of selectedChatIds) {
-        // Clone message payload and inject isForwarded = true
-        const confirmedRow = await messageService.sendMessage({
-          conversationId: targetChatId,
-          senderId: currentUser.id,
-          text: messageToForward.text || "",
-          type: messageToForward.type || "text",
-          mediaUrl: messageToForward.mediaUrl,
-          fileName: messageToForward.fileName,
-          fileSize: messageToForward.fileSize,
-          duration: messageToForward.duration,
-          timestampString: timeString,
-          isForwarded: true,
-        });
+        for (const msg of messagesList) {
+          const mText = msg.text || msg.caption || msg.rawText || "";
+          const mType = msg.type || "text";
+          const mMediaUrl = msg.mediaUrl || msg.media_url || null;
+          const mFileName = msg.fileName || msg.file_name || null;
+          const mFileSize = msg.fileSize || msg.file_size || null;
+          const mDuration = msg.duration || null;
 
-        // If the forwarded target is the currently active chat, inject it into the Redux message stack natively
-        if (targetChatId === activeChatId) {
+          const confirmedRow = await messageService.sendMessage({
+            conversationId: targetChatId,
+            senderId: currentUser.id,
+            text: mText,
+            type: mType,
+            mediaUrl: mMediaUrl,
+            fileName: mFileName,
+            fileSize: mFileSize,
+            duration: mDuration,
+            timestampString: timeString,
+            isForwarded: true,
+          });
+
+          // If the forwarded target is the currently active chat, inject it into the Redux message stack natively
+          if (targetChatId === activeChatId) {
+            dispatch(
+              addMessage({
+                chatId: activeChatId,
+                message: {
+                  ...confirmedRow,
+                  isOutgoing: true,
+                },
+              })
+            );
+          }
+
+          // Update the last message preview in the sidebar for that chat
+          let previewText = mText;
+          if (mType === "image") {
+            previewText = mText ? `↪️ 📷 ${mText}` : `↪️ 📷 ${t("chat.photo") || "Photo"}`;
+          } else if (mType === "video") {
+            previewText = mText ? `↪️ 🎥 ${mText}` : `↪️ 🎥 ${t("chat.video") || "Video"}`;
+          } else if (mType === "voice") {
+            previewText = `↪️ 🎤 ${t("chat.voice_message") || "Voice Message"}`;
+          } else if (mType === "file") {
+            previewText = mFileName ? `↪️ 📎 ${mFileName}` : `↪️ 📎 ${t("chat.document") || "Document"}`;
+          } else {
+            previewText = `↪️ ${mText}`;
+          }
+
           dispatch(
-            addMessage({
-              chatId: activeChatId,
-              message: {
-                ...confirmedRow,
-                isOutgoing: true,
-              },
+            updateLastMessage({
+              chatId: targetChatId,
+              text: previewText,
+              timestamp: timeString,
+              isOutgoing: true,
+              status: "sent",
             })
           );
         }
-
-        // Update the last message preview in the sidebar for that chat
-        dispatch(
-          updateLastMessage({
-            chatId: targetChatId,
-            text:
-              messageToForward.type === "image"
-                ? "↪️ 📷 Photo"
-                : messageToForward.type === "video"
-                ? "↪️ 🎥 Video"
-                : messageToForward.type === "voice"
-                ? "↪️ 🎤 Voice Message"
-                : messageToForward.type === "file"
-                ? "↪️ 📎 Document"
-                : `↪️ ${messageToForward.text}`,
-            timestamp: timeString,
-            isOutgoing: true,
-            status: "sent",
-          })
-        );
       }
 
       onClose(true);
@@ -117,10 +145,10 @@ export function ForwardModal({ messageToForward, onClose }) {
         className="bg-wa-modal border border-wa-border rounded-xl shadow-2xl overflow-hidden w-full max-w-md h-[500px] flex flex-col relative animate-scale-up"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 bg-wa-header border-b border-wa-border">
           <h3 className="text-sm sm:text-base font-semibold text-wa-text">
-            {t("chat.forward_message_to") || "Forward message to"}
+            {t("chat.forward_message_to")}
           </h3>
           <button 
             onClick={() => onClose(false)} 
@@ -136,7 +164,7 @@ export function ForwardModal({ messageToForward, onClose }) {
             <Search className="h-4.5 w-4.5 text-wa-muted shrink-0" />
             <input
               type="text"
-              placeholder={t("chat.search_chats") || "Search chats"}
+              placeholder={t("chat.search_chats")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent border-none text-xs sm:text-sm text-wa-text focus:outline-none w-full placeholder:text-wa-muted"
@@ -157,7 +185,7 @@ export function ForwardModal({ messageToForward, onClose }) {
           {filteredChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-wa-muted">
               <span className="text-xs sm:text-sm font-medium">
-                {t("chat.no_results_found") || "No results found"}
+                {t("chat.no_results_found")}
               </span>
             </div>
           ) : (
@@ -183,8 +211,8 @@ export function ForwardModal({ messageToForward, onClose }) {
                       <p className="text-xs sm:text-sm font-medium text-wa-text truncate">{chat.name}</p>
                       <p className="text-[10px] sm:text-[11px] text-wa-muted truncate">
                         {chat.isGroup 
-                          ? (t("chat.group_chat") || "Group Chat") 
-                          : chat.phoneNumber || (t("chat.whatsapp_contact") || "WhatsApp Contact")}
+                          ? t("chat.group_chat") 
+                          : chat.phoneNumber || t("chat.whatsapp_contact")}
                       </p>
                     </div>
                   </div>
@@ -212,7 +240,7 @@ export function ForwardModal({ messageToForward, onClose }) {
             onClick={handleForwardSubmit}
             disabled={isSending}
             className="absolute bottom-6 right-6 h-12 w-12 rounded-full bg-wa-primary text-white hover:bg-wa-primary-hover shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 shrink-0 z-50 animate-scale-up"
-            title={t("chat.forward_message_count", { count: selectedChatIds.length }) || `Forward message to ${selectedChatIds.length} chat${selectedChatIds.length > 1 ? "s" : ""}`}
+            title={t("chat.forward_message_count", { count: selectedChatIds.length })}
           >
             {isSending ? (
               <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
