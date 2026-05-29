@@ -34,7 +34,7 @@ export const locationService = {
       const sentMsg = await messageService.sendMessage({
         conversationId,
         senderId: userId,
-        text: "📍 Current Location",
+        text: "Current Location",
         type: "location",
         mediaUrl: `${latitude},${longitude}`, // Static coordinates snapshot
         fileSize: 0,
@@ -97,7 +97,7 @@ export const locationService = {
       const sentMsg = await messageService.sendMessage({
         conversationId,
         senderId: userId,
-        text: "📍 Shared live location",
+        text: "Shared live location",
         type: "live_location",
         mediaUrl: `${latitude},${longitude}`, // Initial coordinates
         fileName: expiresAt, // Expiration ISO string

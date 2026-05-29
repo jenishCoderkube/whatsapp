@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, CheckCheck, Ban, Pin, ChevronDown, Clock } from "lucide-react";
+import { Check, CheckCheck, Ban, Pin, ChevronDown, Clock, Camera, Video, Paperclip, Mic, Palette, Play, MapPin, CornerUpRight } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
+import { useTranslation } from "../../hooks/useTranslation";
 import { setActiveChat, togglePinChat, toggleArchiveChat, removeChat } from "../../redux/slices/chatSlice";
 import { setMobileScreen } from "../../redux/slices/uiSlice";
 import { chatService } from "../../services/chatService";
@@ -12,6 +13,7 @@ import { cn } from "../../utils/cn";
 import { formatSidebarDate } from "../../utils/dateUtils";
 
 export const ChatCard = React.memo(({ chat }) => {
+  const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const [menuOpen, setMenuOpen] = useState(false);
   const activeChatId = useAppSelector((state) => state.chat.activeChatId);
@@ -74,16 +76,25 @@ export const ChatCard = React.memo(({ chat }) => {
     // Render Draft preview if exists
     if (draft && (draft.text || (draft.files && draft.files.length > 0))) {
       let previewText = draft.text || "";
+      let icon = null;
       if (!previewText && draft.files && draft.files.length > 0) {
         const firstFile = draft.files[0];
-        if (firstFile.type === "image") previewText = "📷 Photo";
-        else if (firstFile.type === "video") previewText = "🎥 Video";
-        else previewText = "📎 Document";
+        if (firstFile.type === "image") {
+          icon = <Camera className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+          previewText = "Photo";
+        } else if (firstFile.type === "video") {
+          icon = <Video className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+          previewText = "Video";
+        } else {
+          icon = <Paperclip className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+          previewText = "Document";
+        }
       }
       return (
-        <span className="truncate">
+        <span className="truncate flex items-center">
           <span className="text-red-500 dark:text-red-400 font-normal mr-1">Draft:</span>
-          <span className="text-wa-muted">{previewText}</span>
+          {icon}
+          <span className="text-wa-muted truncate">{previewText}</span>
         </span>
       );
     }
@@ -95,45 +106,65 @@ export const ChatCard = React.memo(({ chat }) => {
       return (
         <span className="italic text-wa-muted/70 inline-flex items-center gap-1">
           <Ban className="h-3.5 w-3.5 inline shrink-0" />
-          This message was deleted
+          {t("chat.message_deleted") || "This message was deleted"}
         </span>
       );
     }
 
     const isForwarded = chat.lastMessage?.isForwarded || latestLoadedMsg?.isForwarded;
+    
+    // Resolve icon and label
+    let icon = null;
     let displayString = baseText;
 
-    // Dynamic type icon labeling support matching standard WhatsApp lists
-    if (baseText === "📷 Photo" || type === "image") displayString = "📷 Photo";
-    else if (baseText === "🎥 Video" || type === "video") displayString = "🎥 Video";
-    else if (baseText === "📎 Document" || type === "file") displayString = "📎 Document";
-    else if (baseText === "🎤 Voice Message" || type === "voice") displayString = "🎤 Voice Message";
-    else if (baseText === "🎨 Sticker" || type === "sticker") displayString = "🎨 Sticker";
-    else if (baseText === "🎬 GIF" || type === "gif") displayString = "🎬 GIF";
-    else if (type === "live_location" || baseText?.includes("live location")) displayString = "📍 Live Location";
-    else if (type === "location" || baseText?.includes("Current Location")) displayString = "📍 Location";
-
-    if (isForwarded && displayString && !displayString.startsWith("↪️")) {
-      displayString = `↪️ ${displayString}`;
+    if (type === "image" || baseText === "📷 Photo" || baseText === "Photo" || baseText === t("chat.photo")) {
+      icon = <Camera className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.photo") || "Photo";
+    } else if (type === "video" || baseText === "🎥 Video" || baseText === "Video" || baseText === t("chat.video")) {
+      icon = <Video className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.video") || "Video";
+    } else if (type === "file" || baseText === "📎 Document" || baseText === "Document" || baseText === t("chat.document")) {
+      icon = <Paperclip className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.document") || "Document";
+    } else if (type === "voice" || baseText === "🎤 Voice Message" || baseText === "Voice Message" || baseText === t("chat.voice_message")) {
+      icon = <Mic className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.voice_message") || "Voice Message";
+    } else if (type === "sticker" || baseText === "🎨 Sticker" || baseText === "Sticker" || baseText === t("chat.sticker")) {
+      icon = <Palette className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.sticker") || "Sticker";
+    } else if (type === "gif" || baseText === "🎬 GIF" || baseText === "GIF" || baseText === t("chat.gif")) {
+      icon = <Play className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.gif") || "GIF";
+    } else if (type === "live_location" || baseText?.toLowerCase().includes("live location") || baseText === t("chat.live_location")) {
+      icon = <MapPin className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.live_location") || "Live Location";
+    } else if (type === "location" || baseText?.toLowerCase().includes("location") || baseText === t("chat.location")) {
+      icon = <MapPin className="h-3.5 w-3.5 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />;
+      displayString = t("chat.location") || "Location";
     }
 
-    if (!displayString) return "No messages yet";
+    if (!displayString && !icon) return "No messages yet";
 
-    // Format mentions in the preview text
+    // Mentions formatting logic
     const mentionRegex = /@([^@\s\n]+(?:\s+[^@\s\n]+)?)/g;
     const parts = displayString.split(mentionRegex);
-    if (parts.length === 1) return displayString;
-
-    const currentUserName = currentUser?.name;
-    return parts.map((part, i) => {
+    const content = parts.length === 1 ? displayString : parts.map((part, i) => {
       if (i % 2 === 0) return part;
-      const isMe = currentUserName && part.toLowerCase().includes(currentUserName.toLowerCase());
+      const isMe = currentUser?.name && part.toLowerCase().includes(currentUser.name.toLowerCase());
       return (
         <span key={i} className={cn("font-medium", isMe ? "text-wa-unread" : "text-wa-primary")}>
           @{part}
         </span>
       );
     });
+
+    return (
+      <span className="truncate flex items-center">
+        {isForwarded && <CornerUpRight className="h-3 w-3 inline mr-1 shrink-0 align-text-bottom text-wa-muted" />}
+        {icon}
+        <span className="truncate">{content}</span>
+      </span>
+    );
   };
 
   const cardDropdownItems = [
@@ -198,8 +229,8 @@ export const ChatCard = React.memo(({ chat }) => {
           </span>
         </div>
 
-        <div className="flex items-center justify-between relative">
-          <p className="text-xs sm:text-sm text-wa-muted truncate flex-1 pr-8 leading-snug">
+        <div className="flex items-center justify-between relative min-w-0">
+          <p className="text-xs sm:text-sm text-wa-muted truncate flex-1 pr-8 leading-snug flex items-center min-w-0">
             {renderStatus()}
             {renderPreviewText()}
           </p>

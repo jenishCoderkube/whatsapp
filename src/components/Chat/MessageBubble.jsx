@@ -37,6 +37,12 @@ import {
   Video,
   ArrowRight,
   ChevronDown,
+  Camera,
+  Mic,
+  Paperclip,
+  Palette,
+  MapPin,
+  CornerUpRight,
 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
@@ -44,7 +50,8 @@ import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
 import { supabase } from "../../lib/supabaseClient";
 import { setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
-import { updateMessage, updateMessageStatus, replaceOptimisticMessage } from "../../redux/slices/messageSlice";
+import { updateMessage, updateMessageStatus, replaceOptimisticMessage, deleteMessage } from "../../redux/slices/messageSlice";
+import { updateLastMessage } from "../../redux/slices/chatSlice";
 import {
   setStatusViewOpen,
   setStatuses,
@@ -104,6 +111,8 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const currentUserId = currentUser?.id;
   const theme = useAppSelector((state) => state.ui.theme);
   const storeStatuses = useAppSelector((state) => state.status.statuses);
+  const convId = message.conversation_id || message.conversationId;
+  const messagesForChat = useAppSelector((state) => state.message.messages[convId] || []);
 
   const [showFullReactionPicker, setShowFullReactionPicker] = useState(false);
   const [pickerDirection, setPickerDirection] = useState("up");
@@ -214,8 +223,10 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const isDeleted = type === "deleted" || text === "This message was deleted";
 
   const EDIT_TIME_LIMIT_MS = 15 * 60 * 1000;
+  const DELETE_EVERYONE_TIME_LIMIT_MS = 60 * 60 * 1000; // 1 hour
   const messageAge = createdAt ? (Date.now() - new Date(createdAt).getTime()) : 0;
   const canEdit = isMsgOutgoing && !isDeleted && messageAge < EDIT_TIME_LIMIT_MS && (type === "text" || type === "image" || type === "video" || type === "file");
+  const canDeleteForEveryone = isMsgOutgoing && !isDeleted && messageAge < DELETE_EVERYONE_TIME_LIMIT_MS;
 
   const handleOpenMenu = (e) => {
     e.stopPropagation();
@@ -256,6 +267,46 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       }
       setIsDeletedForMe(true);
       setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+
+      // Check if this was the latest message
+      const wasLatest = messagesForChat.length > 0 && messagesForChat[messagesForChat.length - 1].id === id;
+      dispatch(deleteMessage({ chatId: convId, messageId: id }));
+
+      if (wasLatest) {
+        const remaining = messagesForChat.filter(m => m.id !== id && !stored.includes(m.id));
+        if (remaining.length > 0) {
+          const newLatest = remaining[remaining.length - 1];
+          let previewText = newLatest.text;
+          if (newLatest.type === "image") previewText = "Photo";
+          if (newLatest.type === "video") previewText = "Video";
+          if (newLatest.type === "file") previewText = "Document";
+          if (newLatest.type === "voice") previewText = "Voice Message";
+          if (newLatest.type === "sticker") previewText = "Sticker";
+          if (newLatest.type === "gif") previewText = "GIF";
+
+          dispatch(
+            updateLastMessage({
+              chatId: convId,
+              text: previewText,
+              timestamp: newLatest.timestamp || new Date(newLatest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+              isOutgoing: newLatest.senderId === currentUserId || newLatest.isOutgoing,
+              status: newLatest.status,
+              isForwarded: newLatest.isForwarded,
+            })
+          );
+        } else {
+          dispatch(
+            updateLastMessage({
+              chatId: convId,
+              text: "",
+              timestamp: "",
+              isOutgoing: false,
+              status: null,
+            })
+          );
+        }
+      }
+
       import("../../services/indexedDBService").then(({ indexedDBService }) => {
         indexedDBService.removePendingMessage(id).catch(console.error);
       });
@@ -264,12 +315,20 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
   const handleDeleteForEveryone = async (e) => {
     e.stopPropagation();
-    if (!isMsgOutgoing) return;
+    if (!isMsgOutgoing || isDeleted) return;
+    const currentAge = createdAt ? (Date.now() - new Date(createdAt).getTime()) : 0;
+    if (currentAge > 60 * 60 * 1000) {
+      alert("Delete for everyone time limit (1 hour) has expired.");
+      setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+      return;
+    }
     try {
       const targetConvId = message.conversation_id || message.conversationId;
       await messageService.deleteMessageForEveryone(id, targetConvId);
       setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
-    } catch (err) {}
+    } catch (err) {
+      alert(err.message || "Failed to delete message for everyone");
+    }
   };
 
   const handleReplyAction = (e) => {
@@ -837,16 +896,61 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     message.replyTo.senderName
                   )}
                 </span>
-                <span className="text-wa-muted truncate max-w-[160px] sm:max-w-xs pr-5">
+                <span className="text-wa-muted truncate max-w-[160px] sm:max-w-xs pr-5 flex items-center gap-1">
                   {message.replyTo.text || (
-                    message.replyTo.type === "image" ? `📷 ${t("chat.photo") || "Photo"}` :
-                    message.replyTo.type === "video" ? `🎥 ${t("chat.video") || "Video"}` :
-                    message.replyTo.type === "voice" ? `🎤 ${t("chat.voice_note") || "Voice Note"}` :
-                    message.replyTo.type === "file" ? `📎 ${t("chat.document") || "Document"}` :
-                    message.replyTo.type === "sticker" ? `🎨 ${t("chat.sticker") || "Sticker"}` :
-                    message.replyTo.type === "gif" ? `🎬 ${t("chat.gif") || "GIF"}` :
-                    message.replyTo.type === "live_location" ? `📍 ${t("chat.live_location") || "Live Location"}` :
-                    message.replyTo.type === "location" ? `📍 ${t("chat.location") || "Location"}` : (t("chat.attachment") || "Attachment")
+                    <>
+                      {message.replyTo.type === "image" && (
+                        <>
+                          <Camera className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.photo") || "Photo"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "video" && (
+                        <>
+                          <Video className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.video") || "Video"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "voice" && (
+                        <>
+                          <Mic className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.voice_note") || "Voice Note"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "file" && (
+                        <>
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.document") || "Document"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "sticker" && (
+                        <>
+                          <Palette className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.sticker") || "Sticker"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "gif" && (
+                        <>
+                          <Play className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.gif") || "GIF"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "live_location" && (
+                        <>
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.live_location") || "Live Location"}</span>
+                        </>
+                      )}
+                      {message.replyTo.type === "location" && (
+                        <>
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-wa-muted" />
+                          <span>{t("chat.location") || "Location"}</span>
+                        </>
+                      )}
+                      {!["image", "video", "voice", "file", "sticker", "gif", "live_location", "location"].includes(message.replyTo.type) && (
+                        <span>{t("chat.attachment") || "Attachment"}</span>
+                      )}
+                    </>
                   )}
                 </span>
               </div>
@@ -1037,7 +1141,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                         <span>{t("chat.info") || "Message info"}</span>
                       </button>
                     )}
-                    {isMsgOutgoing && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>{t("chat.delete_for_everyone") || "Delete for everyone"}</span></button>}
+                    {canDeleteForEveryone && <button onClick={handleDeleteForEveryone} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-red-500 transition-colors font-medium flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-red-500" /><span>{t("chat.delete_for_everyone") || "Delete for everyone"}</span></button>}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1225,29 +1329,41 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
             {previewMediaUrl && (
               <img src={previewMediaUrl} alt="Thumbnail" className="w-12 h-12 object-cover rounded-md" />
             )}
-            <span className="text-xs text-wa-muted font-medium">📷 {t("chat.photo") || "Photo"}</span>
+            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+              <Camera className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span>{t("chat.photo") || "Photo"}</span>
+            </span>
           </div>
         );
       case "video":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <div className="relative w-12 h-12 bg-black rounded-md flex items-center justify-center">
+            <div className="relative w-12 h-12 bg-black rounded-md flex items-center justify-center shrink-0">
               <Play className="h-4 w-4 text-white fill-white" />
             </div>
-            <span className="text-xs text-wa-muted font-medium">🎥 {t("chat.video") || "Video"}</span>
+            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+              <Video className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span>{t("chat.video") || "Video"}</span>
+            </span>
           </div>
         );
       case "voice":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium">🎤 {t("chat.voice_message") || "Voice Message"}</span>
+            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+              <Mic className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span>{t("chat.voice_message") || "Voice Message"}</span>
+            </span>
           </div>
         );
       case "file":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <FileText className="h-6 w-6 text-wa-primary" />
-            <span className="text-xs text-wa-muted font-medium truncate max-w-[200px]">{currentMsg.file_name || currentMsg.fileName || (t("chat.document") || "Document")}</span>
+            <FileText className="h-6 w-6 text-wa-primary shrink-0" />
+            <span className="text-xs text-wa-muted font-medium truncate max-w-[200px] flex items-center gap-1.5">
+              <Paperclip className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span className="truncate">{currentMsg.file_name || currentMsg.fileName || (t("chat.document") || "Document")}</span>
+            </span>
           </div>
         );
       case "sticker":
@@ -1256,7 +1372,10 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
             {previewMediaUrl ? (
               <img src={previewMediaUrl} alt="Sticker" className="w-16 h-16 object-contain pointer-events-none" />
             ) : (
-              <span className="text-xs text-wa-muted font-medium">🎨 {t("chat.sticker") || "Sticker"}</span>
+              <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+                <Palette className="h-4 w-4 shrink-0 text-wa-muted" />
+                <span>{t("chat.sticker") || "Sticker"}</span>
+              </span>
             )}
           </div>
         );
@@ -1266,7 +1385,10 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
             {previewMediaUrl ? (
               <img src={previewMediaUrl} alt="GIF" className="w-full h-24 object-cover" />
             ) : (
-              <span className="text-xs text-wa-muted font-medium">🎬 {t("chat.gif") || "GIF"}</span>
+              <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+                <Play className="h-4 w-4 shrink-0 text-wa-muted" />
+                <span>{t("chat.gif") || "GIF"}</span>
+              </span>
             )}
             <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
               GIF
@@ -1276,19 +1398,28 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
       case "live_location":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium">📍 {t("chat.live_location") || "Live Location"}</span>
+            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span>{t("chat.live_location") || "Live Location"}</span>
+            </span>
           </div>
         );
       case "location":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium">📍 {t("chat.location") || "Location"}</span>
+            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span>{t("chat.location") || "Location"}</span>
+            </span>
           </div>
         );
       case "voice_call":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium">📞 {t("chat.call") || "Call"}</span>
+            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
+              <Phone className="h-4 w-4 shrink-0 text-wa-muted" />
+              <span>{t("chat.call") || "Call"}</span>
+            </span>
           </div>
         );
       default:

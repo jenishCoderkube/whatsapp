@@ -202,10 +202,12 @@ export const messageService = {
 
       // Update background parent preview text strips asynchronously
       let previewText = text;
-      if (type === "image") previewText = "📷 Photo";
-      if (type === "file") previewText = "📎 Document";
-      if (type === "voice") previewText = "🎤 Voice Message";
-      if (type === "video") previewText = "🎥 Video";
+      if (type === "image") previewText = "Photo";
+      if (type === "file") previewText = "Document";
+      if (type === "voice") previewText = "Voice Message";
+      if (type === "video") previewText = "Video";
+      if (type === "sticker") previewText = "Sticker";
+      if (type === "gif") previewText = "GIF";
 
       await supabase
         .from("conversations")
@@ -475,26 +477,59 @@ export const messageService = {
         );
       if (!messageId || !isUuid) return;
 
+      // 1. Fetch message to check time limit and conversation ID
+      const { data: currentMsg, error: getError } = await supabase
+        .from("messages")
+        .select("created_at, sender_id, type, conversation_id")
+        .eq("id", messageId)
+        .single();
+      if (getError || !currentMsg) return;
+
+      // Validate 1-hour limit on the backend (3,600,000 milliseconds)
+      const msgTime = new Date(currentMsg.created_at).getTime();
+      if (Date.now() - msgTime > 3600000) {
+        throw new Error("Time limit (1 hour) exceeded for Delete for Everyone");
+      }
+
+      const actualConvId = conversationId || currentMsg.conversation_id;
       const deletedPlaceholderText = "This message was deleted";
-      await supabase
+
+      // 2. Perform the update of the message row
+      const { error: updateError } = await supabase
         .from("messages")
         .update({
           text: deletedPlaceholderText,
           type: "deleted",
         })
         .eq("id", messageId);
+      if (updateError) throw updateError;
 
-      if (conversationId) {
-        await supabase
-          .from("conversations")
-          .update({
-            last_message_text: deletedPlaceholderText,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", conversationId);
+      // 3. Update conversation last message ONLY if this was the latest message in that conversation
+      if (actualConvId) {
+        // Fetch the latest remaining message in this conversation ordered by created_at desc
+        const { data: latestMsgs, error: latestError } = await supabase
+          .from("messages")
+          .select("id")
+          .eq("conversation_id", actualConvId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!latestError && latestMsgs && latestMsgs.length > 0) {
+          // If the message we just updated is the latest message in the DB
+          if (latestMsgs[0].id === messageId) {
+            await supabase
+              .from("conversations")
+              .update({
+                last_message_text: deletedPlaceholderText,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", actualConvId);
+          }
+        }
       }
     } catch (e) {
       console.warn("Delete for everyone exception:", e);
+      throw e;
     }
   },
 
@@ -876,10 +911,12 @@ export const messageService = {
 
       if (latestMsg && latestMsg.id === messageId) {
         let previewText = newText;
-        if (currentMsg.type === "image") previewText = "📷 Photo";
-        if (currentMsg.type === "file") previewText = "📎 Document";
-        if (currentMsg.type === "voice") previewText = "🎤 Voice Message";
-        if (currentMsg.type === "video") previewText = "🎥 Video";
+        if (currentMsg.type === "image") previewText = "Photo";
+        if (currentMsg.type === "file") previewText = "Document";
+        if (currentMsg.type === "voice") previewText = "Voice Message";
+        if (currentMsg.type === "video") previewText = "Video";
+        if (currentMsg.type === "sticker") previewText = "Sticker";
+        if (currentMsg.type === "gif") previewText = "GIF";
 
         await supabase
           .from("conversations")
