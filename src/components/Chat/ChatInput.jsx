@@ -455,7 +455,7 @@ export function ChatInput() {
             if (d.files && d.files.length > 0) {
               const restored = d.files.map(f => {
                 let previewUrl = null;
-                if (f.file.type === "image" || f.file.type === "video") {
+                if (f.type === "image" || f.type === "video") {
                   previewUrl = URL.createObjectURL(f.file);
                 }
                 return {
@@ -1049,9 +1049,25 @@ export function ChatInput() {
         insertMention(mentionSuggestions[activeSuggestionIdx]);
         return;
       }
-      if (e.key === "Escape") {
-        e.preventDefault();
+    }
+
+    if (e.key === "Escape") {
+      let handled = false;
+      if (showMentionSuggestions) {
         setShowMentionSuggestions(false);
+        handled = true;
+      }
+      if (showEmojiPicker) {
+        setShowEmojiPicker(false);
+        handled = true;
+      }
+      if (showAttachments) {
+        setShowAttachments(false);
+        handled = true;
+      }
+      if (handled) {
+        e.preventDefault();
+        e.stopPropagation();
         return;
       }
     }

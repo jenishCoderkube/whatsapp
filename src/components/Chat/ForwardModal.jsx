@@ -21,6 +21,16 @@ export function ForwardModal({ messageToForward, onClose }) {
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [isSending, setIsSending] = useState(false);
 
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   // Filter out archived, left, or self-chats for forwarding compatibility
   const activeChats = useMemo(() => {
     return chats.filter((c) => !c.isArchived && !c.isLeft && c.peerId !== currentUser?.id);

@@ -12,7 +12,7 @@ import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage, updateSenderProfile } from "../../redux/slices/messageSlice";
 import { updateLastMessage, incrementUnread, setChats, updatePeerProfile } from "../../redux/slices/chatSlice";
-import { setActiveSearchPanelOpen, setMobileScreen, setWallpaperModal } from "../../redux/slices/uiSlice";
+import { setActiveSearchPanelOpen, setMobileScreen, setWallpaperModal, setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { chatService } from "../../services/chatService";
 import { realtimeService } from "../../services/realtimeService";
@@ -101,6 +101,38 @@ export default function ChatPage() {
     const intervalId = setInterval(checkTimeout, 5000);
     return () => clearInterval(intervalId);
   }, [isAuthenticated, isAppLocked, isAppLockEnabled, lastUnlockedTime, autoLockTimeout, dispatch]);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // Don't run shortcuts if the app is locked
+      if (isAppLocked) return;
+
+      // Ctrl/Cmd + F to open chat search
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        if (activeChatId) {
+          e.preventDefault();
+          dispatch(setActiveSearchPanelOpen(true));
+        }
+      }
+
+      // Esc to close panels, replying, editing message
+      if (e.key === "Escape") {
+        if (activeSearchPanelOpen) {
+          dispatch(setActiveSearchPanelOpen(false));
+        }
+        dispatch(setReplyingMessage(null));
+        dispatch(setEditingMessage(null));
+        dispatch(setWallpaperModal({ open: false }));
+        setForwardingMsg(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [isAppLocked, activeChatId, activeSearchPanelOpen, dispatch]);
 
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [hasMore, setHasMore] = useState(true);

@@ -60,6 +60,7 @@ import { MediaGrid } from "./MediaGrid";
 import { MediaViewer } from "./MediaViewer";
 
 import { ExpandableText } from "./ExpandableText";
+import { VoiceNotePlayer } from "./VoiceNotePlayer";
 
 const FONT_STYLES = [
   { name: "sans", family: "system-ui, -apple-system, sans-serif" },
@@ -179,63 +180,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   });
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackProgress, setPlaybackProgress] = useState(0);
-  const audioRef = useRef(null);
-  const playbackIntervalRef = useRef(null);
   const [showHistoryTooltip, setShowHistoryTooltip] = useState(false);
-
-  const toggleVoicePlay = (e) => {
-    e.stopPropagation();
-    if (!mediaUrl) return;
-
-    if (!audioRef.current) {
-      const audio = new Audio(mediaUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        setIsPlaying(false);
-        setPlaybackProgress(0);
-        if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-      };
-
-      audio.onerror = () => {
-        setIsPlaying(false);
-        setPlaybackProgress(0);
-        if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-      };
-    }
-
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-    } else {
-      audioRef.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-          if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-          playbackIntervalRef.current = setInterval(() => {
-            if (audioRef.current && audioRef.current.duration) {
-              const pct = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-              setPlaybackProgress(pct);
-            }
-          }, 100);
-        })
-        .catch((err) => console.warn("Audio playback initialization failed:", err));
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-      }
-    };
-  }, []);
 
   useEffect(() => {
     try {
@@ -629,20 +574,11 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         );
       case "voice":
         return (
-          <div className="flex items-center gap-3 py-1 min-w-[200px] sm:min-w-[240px] select-none">
-            <button onClick={toggleVoicePlay} className="p-2 rounded-full bg-wa-primary text-white hover:opacity-90 shrink-0 transition-colors">
-              {isPlaying ? <Pause className="h-4 w-4 fill-white" /> : <Play className="h-4 w-4 fill-white" />}
-            </button>
-            <div className="flex-1 min-w-0">
-              <div className="h-1.5 w-full bg-wa-border rounded-full overflow-hidden relative">
-                <div className="absolute left-0 top-0 bottom-0 bg-wa-primary rounded-full transition-all duration-100" style={{ width: `${playbackProgress || 0}%` }} />
-              </div>
-              <div className="flex justify-between text-[10px] text-wa-muted mt-1 font-mono">
-                <span>{duration || "0:15"}</span>
-                <span>{t("chat.voice_note") || "Voice Note"}</span>
-              </div>
-            </div>
-          </div>
+          <VoiceNotePlayer
+            id={id}
+            mediaUrl={mediaUrl}
+            durationMetadata={duration}
+          />
         );
       case "file":
         return (
@@ -1208,7 +1144,7 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
             {currentMsg.mediaUrl && (
               <img src={currentMsg.mediaUrl} alt="Thumbnail" className="w-12 h-12 object-cover rounded-md" />
             )}
-            <span className="text-xs text-wa-muted font-medium">📷 Photo</span>
+            <span className="text-xs text-wa-muted font-medium">📷 {t("chat.photo") || "Photo"}</span>
           </div>
         );
       case "video":
@@ -1217,20 +1153,20 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
             <div className="relative w-12 h-12 bg-black rounded-md flex items-center justify-center">
               <Play className="h-4 w-4 text-white fill-white" />
             </div>
-            <span className="text-xs text-wa-muted font-medium">🎥 Video</span>
+            <span className="text-xs text-wa-muted font-medium">🎥 {t("chat.video") || "Video"}</span>
           </div>
         );
       case "voice":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium">🎤 Voice Message</span>
+            <span className="text-xs text-wa-muted font-medium">🎤 {t("chat.voice_message") || "Voice Message"}</span>
           </div>
         );
       case "file":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
             <FileText className="h-6 w-6 text-wa-primary" />
-            <span className="text-xs text-wa-muted font-medium truncate max-w-[200px]">{currentMsg.file_name || currentMsg.fileName || "Document"}</span>
+            <span className="text-xs text-wa-muted font-medium truncate max-w-[200px]">{currentMsg.file_name || currentMsg.fileName || (t("chat.document") || "Document")}</span>
           </div>
         );
       default:
