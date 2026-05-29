@@ -108,6 +108,8 @@ export const ChatCard = React.memo(({ chat }) => {
     else if (baseText === "🎥 Video" || type === "video") displayString = "🎥 Video";
     else if (baseText === "📎 Document" || type === "file") displayString = "📎 Document";
     else if (baseText === "🎤 Voice Message" || type === "voice") displayString = "🎤 Voice Message";
+    else if (baseText === "🎨 Sticker" || type === "sticker") displayString = "🎨 Sticker";
+    else if (baseText === "🎬 GIF" || type === "gif") displayString = "🎬 GIF";
     else if (type === "live_location" || baseText?.includes("live location")) displayString = "📍 Live Location";
     else if (type === "location" || baseText?.includes("Current Location")) displayString = "📍 Location";
 

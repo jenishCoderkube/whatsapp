@@ -307,6 +307,34 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     setIsInfoModalOpen(true);
   };
 
+  const handleToggleFavoriteSticker = (e) => {
+    if (e) e.stopPropagation();
+    if (type !== "sticker" || !mediaUrl) return;
+    try {
+      const storedFavs = JSON.parse(localStorage.getItem("wa_favorite_stickers") || "[]");
+      let newFavs;
+      if (storedFavs.includes(mediaUrl)) {
+        newFavs = storedFavs.filter(x => x !== mediaUrl);
+      } else {
+        newFavs = [mediaUrl, ...storedFavs];
+      }
+      localStorage.setItem("wa_favorite_stickers", JSON.stringify(newFavs));
+    } catch (err) {
+      console.warn("Failed to toggle favorite sticker", err);
+    }
+    setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const isFavoriteSticker = () => {
+    if (type !== "sticker" || !mediaUrl) return false;
+    try {
+      const storedFavs = JSON.parse(localStorage.getItem("wa_favorite_stickers") || "[]");
+      return storedFavs.includes(mediaUrl);
+    } catch (err) {
+      return false;
+    }
+  };
+
   const handleOpenReactions = (e) => {
     e.stopPropagation();
     setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
@@ -464,8 +492,9 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     }
   };
 
-  const renderStatusTicks = () => {
+  const renderStatusTicks = (overrideColorClass) => {
     if (!isMsgOutgoing || isDeleted) return null;
+    const mutedColor = overrideColorClass || "text-wa-muted";
     if (status === "failed") {
       return (
         <span className="text-red-500 text-[10px] ml-1 font-medium inline-flex items-center gap-1 select-none">
@@ -483,7 +512,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     }
     if (status === "pending") {
       return (
-        <Clock className="h-3 w-3 text-wa-muted inline-block ml-1 shrink-0" />
+        <Clock className={cn("h-3 w-3 inline-block ml-1 shrink-0", mutedColor)} />
       );
     }
     if (status === "read") {
@@ -493,11 +522,11 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     }
     if (status === "delivered") {
       return (
-        <CheckCheck className="h-3.5 w-3.5 text-wa-muted inline-block ml-1 shrink-0" />
+        <CheckCheck className={cn("h-3.5 w-3.5 inline-block ml-1 shrink-0", mutedColor)} />
       );
     }
     return (
-      <Check className="h-3.5 w-3.5 text-wa-muted inline-block ml-1 shrink-0" />
+      <Check className={cn("h-3.5 w-3.5 inline-block ml-1 shrink-0", mutedColor)} />
     );
   };
 
@@ -562,6 +591,45 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         return (
           <div className="relative rounded-md overflow-hidden mb-1 max-w-[150px] min-[375px]:max-w-[180px] sm:max-w-[240px] md:max-w-xs">
             <video src={mediaUrl} controls controlsList="nodownload" className="w-full max-h-32 min-[375px]:max-h-36 sm:max-h-48 md:max-h-56 object-cover rounded bg-black" />
+            {text && (
+              <ExpandableText
+                text={text}
+                groupMembers={groupMembers}
+                onMentionClick={handleMentionClick}
+                isCaption={true}
+              />
+            )}
+          </div>
+        );
+      case "sticker":
+        return (
+          <div className="relative w-[140px] h-[140px] sm:w-[170px] sm:h-[170px] flex items-center justify-center select-none group/sticker">
+            <img
+              src={mediaUrl}
+              alt="Sticker"
+              className="w-full h-full object-contain pointer-events-none"
+              loading="lazy"
+            />
+            {/* Timestamp & status ticks overlaid like WhatsApp */}
+            <div className="absolute bottom-1 right-1 bg-black/45 backdrop-blur-xs text-white/95 px-1.5 py-0.5 rounded-md text-[9px] flex items-center gap-1 opacity-70 group-hover/sticker:opacity-100 transition-opacity duration-200 pointer-events-none select-none shadow-xs">
+              <span>{displayTime}</span>
+              {renderStatusTicks("text-white/80")}
+            </div>
+          </div>
+        );
+      case "gif":
+        return (
+          <div className="relative rounded-md overflow-hidden mb-1 max-w-[240px] select-none bg-black/5 flex items-center justify-center">
+            <img
+              src={mediaUrl}
+              alt="GIF"
+              className="w-full max-h-56 object-cover rounded"
+              loading="lazy"
+            />
+            {/* WhatsApp GIF Badge */}
+            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center justify-center tracking-wider shadow-xs pointer-events-none select-none border border-white/10 uppercase">
+              GIF
+            </div>
             {text && (
               <ExpandableText
                 text={text}
@@ -721,13 +789,15 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
         <div className={cn(
           "relative rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs transition-colors duration-200 shrink min-w-0 max-w-full group",
-          isMsgOutgoing ? "bg-wa-bubble-out text-wa-text rounded-tr-none" : "bg-wa-bubble-in text-wa-text rounded-tl-none",
+          type === "sticker" ? "bg-transparent shadow-none p-0" : (isMsgOutgoing ? "bg-wa-bubble-out text-wa-text rounded-tr-none" : "bg-wa-bubble-in text-wa-text rounded-tl-none"),
           reactionEmojis.length > 0 && "mb-3",
         )}>
-          <span className={cn(
-            "absolute top-0 w-0 h-0 border-solid border-t-[10px] transition-colors duration-200",
-            isMsgOutgoing ? "right-[-8px] border-r-[8px] border-t-wa-bubble-out border-r-transparent" : "left-[-8px] border-l-[8px] border-t-wa-bubble-in border-l-transparent",
-          )} />
+          {type !== "sticker" && (
+            <span className={cn(
+              "absolute top-0 w-0 h-0 border-solid border-t-[10px] transition-colors duration-200",
+              isMsgOutgoing ? "right-[-8px] border-r-[8px] border-t-wa-bubble-out border-r-transparent" : "left-[-8px] border-l-[8px] border-t-wa-bubble-in border-l-transparent",
+            )} />
+          )}
 
           {isGroup && !isMsgOutgoing && !isDeleted && (
             <div className="text-xs font-semibold text-wa-primary mb-0.5 truncate max-w-xs">{message.senderName || (t("chat.group_member") || "Group Member")}</div>
@@ -773,6 +843,8 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     message.replyTo.type === "video" ? `🎥 ${t("chat.video") || "Video"}` :
                     message.replyTo.type === "voice" ? `🎤 ${t("chat.voice_note") || "Voice Note"}` :
                     message.replyTo.type === "file" ? `📎 ${t("chat.document") || "Document"}` :
+                    message.replyTo.type === "sticker" ? `🎨 ${t("chat.sticker") || "Sticker"}` :
+                    message.replyTo.type === "gif" ? `🎬 ${t("chat.gif") || "GIF"}` :
                     message.replyTo.type === "live_location" ? `📍 ${t("chat.live_location") || "Live Location"}` :
                     message.replyTo.type === "location" ? `📍 ${t("chat.location") || "Location"}` : (t("chat.attachment") || "Attachment")
                   )}
@@ -818,36 +890,38 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
           {renderMediaContent()}
 
-          <div className="flex items-center justify-end gap-1 mt-0.5 float-right clear-both ml-3 -mb-0.5 select-none">
-            <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans inline-flex items-center">
-              {message.editedAt && (
-                <span 
-                  className="relative mr-1.5 text-[9px] italic opacity-85 cursor-help select-none font-semibold hover:underline text-wa-muted/95"
-                  onMouseEnter={() => setShowHistoryTooltip(true)}
-                  onMouseLeave={() => setShowHistoryTooltip(false)}
-                >
-                  {t("chat.edited") || "edited"}
-                  {showHistoryTooltip && message.editHistory && message.editHistory.length > 0 && (
-                    <span className="absolute bottom-full right-0 mb-2.5 bg-wa-modal border border-wa-border p-2.5 rounded-lg shadow-2xl text-[10px] min-w-[180px] z-[99] text-left normal-case not-italic text-wa-text select-text pointer-events-auto leading-relaxed animate-scale-up">
-                      <span className="font-semibold block border-b border-wa-border pb-1.5 mb-1.5 text-wa-primary text-[11px]">{t("chat.edit_history") || "Edit History"}</span>
-                      <span className="block max-h-36 overflow-y-auto space-y-1.5">
-                        {message.editHistory.map((hist, idx) => (
-                          <span key={idx} className="block border-b border-wa-border/30 pb-1.5 last:border-0 last:pb-0">
-                            <span className="text-wa-muted font-mono block text-[9px]">
-                              {new Date(hist.editedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+          {type !== "sticker" && (
+            <div className="flex items-center justify-end gap-1 mt-0.5 float-right clear-both ml-3 -mb-0.5 select-none">
+              <span className="text-[10px] sm:text-[11px] text-wa-muted font-sans inline-flex items-center">
+                {message.editedAt && (
+                  <span 
+                    className="relative mr-1.5 text-[9px] italic opacity-85 cursor-help select-none font-semibold hover:underline text-wa-muted/95"
+                    onMouseEnter={() => setShowHistoryTooltip(true)}
+                    onMouseLeave={() => setShowHistoryTooltip(false)}
+                  >
+                    {t("chat.edited") || "edited"}
+                    {showHistoryTooltip && message.editHistory && message.editHistory.length > 0 && (
+                      <span className="absolute bottom-full right-0 mb-2.5 bg-wa-modal border border-wa-border p-2.5 rounded-lg shadow-2xl text-[10px] min-w-[180px] z-[99] text-left normal-case not-italic text-wa-text select-text pointer-events-auto leading-relaxed animate-scale-up">
+                        <span className="font-semibold block border-b border-wa-border pb-1.5 mb-1.5 text-wa-primary text-[11px]">{t("chat.edit_history") || "Edit History"}</span>
+                        <span className="block max-h-36 overflow-y-auto space-y-1.5">
+                          {message.editHistory.map((hist, idx) => (
+                            <span key={idx} className="block border-b border-wa-border/30 pb-1.5 last:border-0 last:pb-0">
+                              <span className="text-wa-muted font-mono block text-[9px]">
+                                {new Date(hist.editedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              </span>
+                              <span className="block mt-0.5 break-words text-wa-text">"{hist.text}"</span>
                             </span>
-                            <span className="block mt-0.5 break-words text-wa-text">"{hist.text}"</span>
-                          </span>
-                        ))}
+                          ))}
+                        </span>
                       </span>
-                    </span>
-                  )}
-                </span>
-              )}
-              <span>{displayTime}</span>
-            </span>
-            {renderStatusTicks()}
-          </div>
+                    )}
+                  </span>
+                )}
+                <span>{displayTime}</span>
+              </span>
+              {renderStatusTicks()}
+            </div>
+          )}
 
           {/* Reaction bar inside bubble has been removed to avoid duplicate rows */}
 
@@ -943,6 +1017,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                           <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
                         </svg>
                         <span>{t("chat.edit") || "Edit"}</span>
+                      </button>
+                    )}
+                    {type === "sticker" && (
+                      <button onClick={handleToggleFavoriteSticker} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2">
+                        <span className="text-sm shrink-0">⭐</span>
+                        <span>{isFavoriteSticker() ? (t("chat.remove_favorite") || "Remove from Favorites") : (t("chat.add_favorite") || "Add to Favorites")}</span>
                       </button>
                     )}
                     <div className="border-t border-wa-border my-1" />
@@ -1137,12 +1217,13 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
 
   // Render message preview
   const renderMsgPreview = () => {
+    const previewMediaUrl = currentMsg.mediaUrl || currentMsg.media_url;
     switch (currentMsg.type) {
       case "image":
         return (
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            {currentMsg.mediaUrl && (
-              <img src={currentMsg.mediaUrl} alt="Thumbnail" className="w-12 h-12 object-cover rounded-md" />
+            {previewMediaUrl && (
+              <img src={previewMediaUrl} alt="Thumbnail" className="w-12 h-12 object-cover rounded-md" />
             )}
             <span className="text-xs text-wa-muted font-medium">📷 {t("chat.photo") || "Photo"}</span>
           </div>
@@ -1167,6 +1248,47 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
           <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
             <FileText className="h-6 w-6 text-wa-primary" />
             <span className="text-xs text-wa-muted font-medium truncate max-w-[200px]">{currentMsg.file_name || currentMsg.fileName || (t("chat.document") || "Document")}</span>
+          </div>
+        );
+      case "sticker":
+        return (
+          <div className="flex items-center justify-center p-2 rounded-lg border border-wa-border bg-transparent max-w-sm">
+            {previewMediaUrl ? (
+              <img src={previewMediaUrl} alt="Sticker" className="w-16 h-16 object-contain pointer-events-none" />
+            ) : (
+              <span className="text-xs text-wa-muted font-medium">🎨 {t("chat.sticker") || "Sticker"}</span>
+            )}
+          </div>
+        );
+      case "gif":
+        return (
+          <div className="relative rounded-lg overflow-hidden border border-wa-border max-w-[120px] bg-black/5 flex items-center justify-center">
+            {previewMediaUrl ? (
+              <img src={previewMediaUrl} alt="GIF" className="w-full h-24 object-cover" />
+            ) : (
+              <span className="text-xs text-wa-muted font-medium">🎬 {t("chat.gif") || "GIF"}</span>
+            )}
+            <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
+              GIF
+            </div>
+          </div>
+        );
+      case "live_location":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            <span className="text-xs text-wa-muted font-medium">📍 {t("chat.live_location") || "Live Location"}</span>
+          </div>
+        );
+      case "location":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            <span className="text-xs text-wa-muted font-medium">📍 {t("chat.location") || "Location"}</span>
+          </div>
+        );
+      case "voice_call":
+        return (
+          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
+            <span className="text-xs text-wa-muted font-medium">📞 {t("chat.call") || "Call"}</span>
           </div>
         );
       default:

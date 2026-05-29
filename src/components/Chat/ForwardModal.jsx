@@ -125,6 +125,10 @@ export function ForwardModal({ messageToForward, onClose }) {
             previewText = `↪️ 🎤 ${t("chat.voice_message") || "Voice Message"}`;
           } else if (mType === "file") {
             previewText = mFileName ? `↪️ 📎 ${mFileName}` : `↪️ 📎 ${t("chat.document") || "Document"}`;
+          } else if (mType === "sticker") {
+            previewText = `↪️ 🎨 ${t("chat.sticker") || "Sticker"}`;
+          } else if (mType === "gif") {
+            previewText = `↪️ 🎬 ${t("chat.gif") || "GIF"}`;
           } else {
             previewText = `↪️ ${mText}`;
           }

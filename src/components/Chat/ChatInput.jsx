@@ -50,6 +50,294 @@ const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   loading: EmojiPickerLoading,
 });
 
+const stickerPacks = {
+  animals: [
+    { id: "cat_hello", url: "https://media.giphy.com/media/C45B95c0l6lC0tD0Ld/giphy.gif", name: "Cat Hello" },
+    { id: "dog_dance", url: "https://media.giphy.com/media/1zR6CTJa4LIW1bT2IB/giphy.gif", name: "Dog Dance" },
+    { id: "panda_love", url: "https://media.giphy.com/media/KzDqCGEHsYu3hO3Msp/giphy.gif", name: "Panda Love" },
+    { id: "bunny_wave", url: "https://media.giphy.com/media/Zdg7gcrPmev6K1n1vV/giphy.gif", name: "Bunny Wave" }
+  ],
+  expressions: [
+    { id: "cool_shiba", url: "https://media.giphy.com/media/Svc9t699Kls0U8wJpx/giphy.gif", name: "Cool Shiba" },
+    { id: "happy_blob", url: "https://media.giphy.com/media/TdfmKup2Fk4YxO1m9T/giphy.gif", name: "Happy Blob" },
+    { id: "sad_pepe", url: "https://media.giphy.com/media/L95W4WdxnEKEz278wx/giphy.gif", name: "Sad Pepe" },
+    { id: "angry_duck", url: "https://media.giphy.com/media/5t9wFB8dB09GnV1NRn/giphy.gif", name: "Angry Duck" }
+  ],
+  memes: [
+    { id: "crying_cat", url: "https://media.giphy.com/media/d2lcHJTG5TGIg/giphy.gif", name: "Crying Cat" },
+    { id: "spongebob_hearts", url: "https://media.giphy.com/media/yFQ0ywscgobJK/giphy.gif", name: "SpongeBob Hearts" },
+    { id: "doge_spin", url: "https://media.giphy.com/media/HCTfY92mXJADm/giphy.gif", name: "Doge Spin" },
+    { id: "thumbs_up_seal", url: "https://media.giphy.com/media/26tPplGWjC0CrVWsE/giphy.gif", name: "Thumbs Up Seal" }
+  ]
+};
+
+const fetchGifs = async (query = "") => {
+  try {
+    const apiKey = "dc6zaTOxFJmzC"; // public Giphy API key
+    const url = query
+      ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=16`
+      : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=16`;
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json && json.data) {
+      return json.data.map(item => ({
+        id: item.id,
+        url: item.images.fixed_height.url,
+        title: item.title
+      }));
+    }
+  } catch (e) {
+    console.warn("Failed to fetch gifs from Giphy", e);
+  }
+  return [
+    { id: "celebrate", url: "https://media.giphy.com/media/26tPplGWjC0CrVWsE/giphy.gif", title: "Celebrate" },
+    { id: "wave", url: "https://media.giphy.com/media/3o7TKoWXm3okO1kgdW/giphy.gif", title: "Wave Hello" },
+    { id: "laugh", url: "https://media.giphy.com/media/l8aCBaBuz5R6M/giphy.gif", title: "Laughing Dog" },
+    { id: "mindblown", url: "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif", title: "Mind Blown" },
+    { id: "popcorn", url: "https://media.giphy.com/media/hVTouqNm67IIfICKcH/giphy.gif", title: "Eating Popcorn" },
+    { id: "happy", url: "https://media.giphy.com/media/l3q2zVr6cu95nF6O4/giphy.gif", title: "Happy Dance" }
+  ];
+};
+
+function GifPickerPanel({ onSelect }) {
+  const [query, setQuery] = useState("");
+  const [gifs, setGifs] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      const results = await fetchGifs(query);
+      if (active) {
+        setGifs(results);
+        setLoading(false);
+      }
+    };
+    const debounce = setTimeout(load, 300);
+    return () => {
+      active = false;
+      clearTimeout(debounce);
+    };
+  }, [query]);
+
+  return (
+    <div className="flex flex-col h-full bg-wa-modal text-wa-text p-2">
+      <div className="px-2 pb-2 shrink-0">
+        <input
+          type="text"
+          placeholder="Search GIFs via Giphy..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full bg-wa-input text-wa-text border border-wa-border rounded-lg px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:border-wa-primary"
+        />
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-2 gap-1.5 p-1 select-none custom-scrollbar">
+        {loading ? (
+          <div className="col-span-2 text-center text-xs text-wa-muted py-8">Loading GIFs...</div>
+        ) : gifs.length === 0 ? (
+          <div className="col-span-2 text-center text-xs text-wa-muted py-8">No GIFs found</div>
+        ) : (
+          gifs.map((gif) => (
+            <button
+              key={gif.id}
+              onClick={() => onSelect(gif.url)}
+              className="relative aspect-video w-full rounded-md overflow-hidden hover:opacity-85 active:scale-95 transition-all bg-black/5"
+            >
+              <img
+                src={gif.url}
+                alt={gif.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StickerPickerPanel({ onSelect }) {
+  const [activeTab, setActiveTab] = useState("all"); 
+  const [activePack, setActivePack] = useState("animals"); 
+  const [recents, setRecents] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+
+  useEffect(() => {
+    try {
+      const storedRecents = JSON.parse(localStorage.getItem("wa_recent_stickers") || "[]");
+      const storedFavs = JSON.parse(localStorage.getItem("wa_favorite_stickers") || "[]");
+      setRecents(storedRecents);
+      setFavorites(storedFavs);
+    } catch (e) {
+      console.warn("Failed to load local sticker states", e);
+    }
+  }, []);
+
+  const handleSelectSticker = (url) => {
+    try {
+      const storedRecents = JSON.parse(localStorage.getItem("wa_recent_stickers") || "[]");
+      const filtered = storedRecents.filter(x => x !== url);
+      const newRecents = [url, ...filtered].slice(0, 24); 
+      localStorage.setItem("wa_recent_stickers", JSON.stringify(newRecents));
+      setRecents(newRecents);
+    } catch (e) {}
+    onSelect(url);
+  };
+
+  const toggleFavorite = (e, url) => {
+    e.stopPropagation();
+    try {
+      const storedFavs = JSON.parse(localStorage.getItem("wa_favorite_stickers") || "[]");
+      let newFavs;
+      if (storedFavs.includes(url)) {
+        newFavs = storedFavs.filter(x => x !== url);
+      } else {
+        newFavs = [url, ...storedFavs];
+      }
+      localStorage.setItem("wa_favorite_stickers", JSON.stringify(newFavs));
+      setFavorites(newFavs);
+    } catch (err) {}
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-wa-modal text-wa-text p-2">
+      <div className="flex gap-1.5 px-2 pb-2 text-[10px] sm:text-[11px] font-bold border-b border-wa-border shrink-0 select-none">
+        <button
+          onClick={() => setActiveTab("all")}
+          className={cn(
+            "px-2.5 py-1 rounded-full border border-wa-border transition-colors",
+            activeTab === "all" ? "bg-wa-primary text-white border-wa-primary" : "bg-transparent text-wa-muted hover:text-wa-text"
+          )}
+        >
+          All Packs
+        </button>
+        <button
+          onClick={() => setActiveTab("recent")}
+          className={cn(
+            "px-2.5 py-1 rounded-full border border-wa-border transition-colors flex items-center gap-1",
+            activeTab === "recent" ? "bg-wa-primary text-white border-wa-primary" : "bg-transparent text-wa-muted hover:text-wa-text"
+          )}
+        >
+          🕒 Recent
+        </button>
+        <button
+          onClick={() => setActiveTab("favorites")}
+          className={cn(
+            "px-2.5 py-1 rounded-full border border-wa-border transition-colors flex items-center gap-1",
+            activeTab === "favorites" ? "bg-wa-primary text-white border-wa-primary" : "bg-transparent text-wa-muted hover:text-wa-text"
+          )}
+        >
+          ⭐ Favorites
+        </button>
+      </div>
+
+      {activeTab === "all" && (
+        <div className="flex gap-2 px-2 py-1.5 text-[9px] sm:text-[10px] uppercase tracking-wider shrink-0 select-none font-semibold">
+          {Object.keys(stickerPacks).map((packName) => (
+            <button
+              key={packName}
+              onClick={() => setActivePack(packName)}
+              className={cn(
+                "hover:text-wa-primary transition-colors",
+                activePack === packName ? "text-wa-primary underline underline-offset-4 decoration-2" : "text-wa-muted"
+              )}
+            >
+              {packName}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-4 gap-2.5 p-2 select-none custom-scrollbar mt-1">
+        {activeTab === "all" && (
+          stickerPacks[activePack].map((sticker) => {
+            const isStarred = favorites.includes(sticker.url);
+            return (
+              <div
+                key={sticker.id}
+                onClick={() => handleSelectSticker(sticker.url)}
+                className="group/item relative aspect-square w-full rounded-lg hover:bg-wa-hover flex items-center justify-center p-1.5 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+              >
+                <img
+                  src={sticker.url}
+                  alt={sticker.name}
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                />
+                <button
+                  onClick={(e) => toggleFavorite(e, sticker.url)}
+                  className="absolute top-0.5 right-0.5 p-0.5 bg-black/40 text-white rounded-full opacity-0 group-hover/item:opacity-100 transition-opacity hover:scale-110"
+                >
+                  <span className="text-[9px] block leading-none">{isStarred ? "⭐" : "☆"}</span>
+                </button>
+              </div>
+            );
+          })
+        )}
+
+        {activeTab === "recent" && (
+          recents.length === 0 ? (
+            <div className="col-span-4 text-center text-xs text-wa-muted py-8 select-none">No recent stickers.</div>
+          ) : (
+            recents.map((url, idx) => {
+              const isStarred = favorites.includes(url);
+              return (
+                <div
+                  key={idx}
+                  onClick={() => handleSelectSticker(url)}
+                  className="group/item relative aspect-square w-full rounded-lg hover:bg-wa-hover flex items-center justify-center p-1.5 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                >
+                  <img
+                    src={url}
+                    alt="Recent Sticker"
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                  />
+                  <button
+                    onClick={(e) => toggleFavorite(e, url)}
+                    className="absolute top-0.5 right-0.5 p-0.5 bg-black/40 text-white rounded-full opacity-0 group-hover/item:opacity-100 transition-opacity hover:scale-110"
+                  >
+                    <span className="text-[9px] block leading-none">{isStarred ? "⭐" : "☆"}</span>
+                  </button>
+                </div>
+              );
+            })
+          )
+        )}
+
+        {activeTab === "favorites" && (
+          favorites.length === 0 ? (
+            <div className="col-span-4 text-center text-xs text-wa-muted py-8 select-none">No favorite stickers.</div>
+          ) : (
+            favorites.map((url, idx) => (
+              <div
+                key={idx}
+                onClick={() => handleSelectSticker(url)}
+                className="group/item relative aspect-square w-full rounded-lg hover:bg-wa-hover flex items-center justify-center p-1.5 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+              >
+                <img
+                  src={url}
+                  alt="Favorite Sticker"
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                />
+                <button
+                  onClick={(e) => toggleFavorite(e, url)}
+                  className="absolute top-0.5 right-0.5 p-0.5 bg-black/40 text-white rounded-full opacity-0 group-hover/item:opacity-100 transition-opacity hover:scale-110"
+                >
+                  <span className="text-[9px] block leading-none">⭐</span>
+                </button>
+              </div>
+            ))
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 const popularEmojis = [
   "😀",
   "😃",
@@ -228,6 +516,7 @@ export function ChatInput() {
   const [messageText, setMessageText] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [pickerTab, setPickerTab] = useState("emoji"); // "emoji", "gif", "sticker"
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [toastError, setToastError] = useState("");
@@ -728,6 +1017,168 @@ export function ChatInput() {
 
     if (e.dataTransfer.files?.length > 0) {
       processFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleSendSticker = async (url) => {
+    if (!activeChatId || !user?.id) return;
+    setShowEmojiPicker(false);
+
+    const tempId = "msg-temp-sticker-" + Date.now();
+    const timeString = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const activeReplyPayload = replyingMessage ? {
+      id: replyingMessage.id,
+      text: replyingMessage.text,
+      senderName: replyingMessage.senderName,
+      type: replyingMessage.type,
+      mediaUrl: replyingMessage.mediaUrl,
+    } : null;
+
+    if (replyingMessage) {
+      dispatch(setReplyingMessage(null));
+    }
+
+    const optimisticMsg = {
+      id: tempId,
+      text: "",
+      timestamp: timeString,
+      isOutgoing: true,
+      status: "sent",
+      type: "sticker",
+      mediaUrl: url,
+      senderId: user?.id,
+      replyTo: activeReplyPayload,
+      createdAt: new Date().toISOString(),
+    };
+
+    dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
+    dispatch(
+      updateLastMessage({
+        chatId: activeChatId,
+        text: "🎨 " + (t("chat.sticker") || "Sticker"),
+        timestamp: timeString,
+        isOutgoing: true,
+        status: "sent",
+      }),
+    );
+
+    try {
+      const confirmedRow = await messageService.sendMessage({
+        conversationId: activeChatId,
+        senderId: user?.id,
+        text: "",
+        type: "sticker",
+        mediaUrl: url,
+        timestampString: timeString,
+        clientId: tempId,
+        replyTo: activeReplyPayload,
+      });
+
+      dispatch(
+        replaceOptimisticMessage({
+          chatId: activeChatId,
+          tempId,
+          confirmedMessage: {
+            ...confirmedRow,
+            isOutgoing: true,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("Sticker send error:", err);
+      dispatch(
+        updateMessageStatus({
+          chatId: activeChatId,
+          messageId: tempId,
+          status: "failed",
+        }),
+      );
+    }
+  };
+
+  const handleSendGif = async (url) => {
+    if (!activeChatId || !user?.id) return;
+    setShowEmojiPicker(false);
+
+    const tempId = "msg-temp-gif-" + Date.now();
+    const timeString = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const activeReplyPayload = replyingMessage ? {
+      id: replyingMessage.id,
+      text: replyingMessage.text,
+      senderName: replyingMessage.senderName,
+      type: replyingMessage.type,
+      mediaUrl: replyingMessage.mediaUrl,
+    } : null;
+
+    if (replyingMessage) {
+      dispatch(setReplyingMessage(null));
+    }
+
+    const optimisticMsg = {
+      id: tempId,
+      text: "",
+      timestamp: timeString,
+      isOutgoing: true,
+      status: "sent",
+      type: "gif",
+      mediaUrl: url,
+      senderId: user?.id,
+      replyTo: activeReplyPayload,
+      createdAt: new Date().toISOString(),
+    };
+
+    dispatch(addMessage({ chatId: activeChatId, message: optimisticMsg }));
+    dispatch(
+      updateLastMessage({
+        chatId: activeChatId,
+        text: "🎬 " + (t("chat.gif") || "GIF"),
+        timestamp: timeString,
+        isOutgoing: true,
+        status: "sent",
+      }),
+    );
+
+    try {
+      const confirmedRow = await messageService.sendMessage({
+        conversationId: activeChatId,
+        senderId: user?.id,
+        text: "",
+        type: "gif",
+        mediaUrl: url,
+        timestampString: timeString,
+        clientId: tempId,
+        replyTo: activeReplyPayload,
+      });
+
+      dispatch(
+        replaceOptimisticMessage({
+          chatId: activeChatId,
+          tempId,
+          confirmedMessage: {
+            ...confirmedRow,
+            isOutgoing: true,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("GIF send error:", err);
+      dispatch(
+        updateMessageStatus({
+          chatId: activeChatId,
+          messageId: tempId,
+          status: "failed",
+        }),
+      );
     }
   };
 
@@ -1365,6 +1816,10 @@ export function ChatInput() {
                 <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
                   <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
                 </svg>
+              ) : replyingMessage.type === "sticker" ? (
+                <span className="text-sm">🎨</span>
+              ) : replyingMessage.type === "gif" ? (
+                <span className="text-sm">🎬</span>
               ) : replyingMessage.type === "voice" ? (
                 <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
                   <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
@@ -1389,6 +1844,8 @@ export function ChatInput() {
                   replyingMessage.type === "video" ? t("chat.video") :
                   replyingMessage.type === "voice" ? t("chat.voice_message") :
                   replyingMessage.type === "file" ? t("chat.document") :
+                  replyingMessage.type === "sticker" ? t("chat.sticker") :
+                  replyingMessage.type === "gif" ? t("chat.gif") :
                   replyingMessage.type === "live_location" ? t("chat.live_location") :
                   replyingMessage.type === "location" ? t("chat.location") : t("chat.attachment")
                 )}
@@ -1397,7 +1854,7 @@ export function ChatInput() {
           </div>
           
           <div className="flex items-center gap-2.5 shrink-0">
-            {replyingMessage.mediaUrl && (replyingMessage.type === "image" || replyingMessage.type === "video") && (
+            {replyingMessage.mediaUrl && (replyingMessage.type === "image" || replyingMessage.type === "video" || replyingMessage.type === "sticker" || replyingMessage.type === "gif") && (
               <img 
                 src={replyingMessage.mediaUrl} 
                 alt="thumbnail" 
@@ -1463,18 +1920,60 @@ export function ChatInput() {
                 </button>
 
                 {showEmojiPicker && (
-                  <div className="absolute bottom-12 left-0 z-50 shadow-2xl rounded-2xl border border-wa-border bg-wa-modal overflow-hidden animate-fade-in select-none">
-                    <EmojiPicker
-                      theme={theme === "dark" ? "dark" : "light"}
-                      onEmojiClick={(emojiData) => {
-                        setMessageText((prev) => prev + emojiData.emoji);
-                        setTimeout(() => textareaRef.current?.focus(), 0);
-                      }}
-                      width={320}
-                      height={380}
-                      skinTonesDisabled
-                      previewConfig={{ showPreview: false }}
-                    />
+                  <div className="absolute bottom-12 left-0 z-50 shadow-2xl rounded-2xl border border-wa-border bg-wa-modal overflow-hidden animate-fade-in select-none w-[320px] h-[430px] flex flex-col">
+                    {/* Picker Tabs */}
+                    <div className="flex bg-wa-header border-b border-wa-border shrink-0 select-none text-xs font-semibold">
+                      <button
+                        onClick={() => setPickerTab("emoji")}
+                        className={cn(
+                          "flex-1 py-2.5 text-center border-b-2 transition-all cursor-pointer",
+                          pickerTab === "emoji" ? "border-wa-primary text-wa-primary bg-wa-sidebar/50" : "border-transparent text-wa-muted hover:text-wa-text"
+                        )}
+                      >
+                        😊 {t("chat.emojis") || "Emojis"}
+                      </button>
+                      <button
+                        onClick={() => setPickerTab("gif")}
+                        className={cn(
+                          "flex-1 py-2.5 text-center border-b-2 transition-all cursor-pointer",
+                          pickerTab === "gif" ? "border-wa-primary text-wa-primary bg-wa-sidebar/50" : "border-transparent text-wa-muted hover:text-wa-text"
+                        )}
+                      >
+                        🎬 {t("chat.gifs") || "GIFs"}
+                      </button>
+                      <button
+                        onClick={() => setPickerTab("sticker")}
+                        className={cn(
+                          "flex-1 py-2.5 text-center border-b-2 transition-all cursor-pointer",
+                          pickerTab === "sticker" ? "border-wa-primary text-wa-primary bg-wa-sidebar/50" : "border-transparent text-wa-muted hover:text-wa-text"
+                        )}
+                      >
+                        🎨 {t("chat.stickers") || "Stickers"}
+                      </button>
+                    </div>
+
+                    {/* Content Area */}
+                    <div className="flex-1 min-h-0 bg-wa-modal">
+                      {pickerTab === "emoji" && (
+                        <EmojiPicker
+                          theme={theme === "dark" ? "dark" : "light"}
+                          onEmojiClick={(emojiData) => {
+                            setMessageText((prev) => prev + emojiData.emoji);
+                            setTimeout(() => textareaRef.current?.focus(), 0);
+                          }}
+                          width="100%"
+                          height="100%"
+                          skinTonesDisabled
+                          previewConfig={{ showPreview: false }}
+                        />
+                      )}
+                      {pickerTab === "gif" && (
+                        <GifPickerPanel onSelect={handleSendGif} />
+                      )}
+                      {pickerTab === "sticker" && (
+                        <StickerPickerPanel onSelect={handleSendSticker} />
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
