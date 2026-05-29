@@ -118,19 +118,17 @@ export function ForwardModal({ messageToForward, onClose }) {
           // Update the last message preview in the sidebar for that chat
           let previewText = mText;
           if (mType === "image") {
-            previewText = mText ? `↪️ 📷 ${mText}` : `↪️ 📷 ${t("chat.photo") || "Photo"}`;
+            previewText = mText || "Photo";
           } else if (mType === "video") {
-            previewText = mText ? `↪️ 🎥 ${mText}` : `↪️ 🎥 ${t("chat.video") || "Video"}`;
+            previewText = mText || "Video";
           } else if (mType === "voice") {
-            previewText = `↪️ 🎤 ${t("chat.voice_message") || "Voice Message"}`;
+            previewText = "Voice Message";
           } else if (mType === "file") {
-            previewText = mFileName ? `↪️ 📎 ${mFileName}` : `↪️ 📎 ${t("chat.document") || "Document"}`;
+            previewText = mFileName || "Document";
           } else if (mType === "sticker") {
-            previewText = `↪️ 🎨 ${t("chat.sticker") || "Sticker"}`;
+            previewText = "Sticker";
           } else if (mType === "gif") {
-            previewText = `↪️ 🎬 ${t("chat.gif") || "GIF"}`;
-          } else {
-            previewText = `↪️ ${mText}`;
+            previewText = "GIF";
           }
 
           dispatch(
@@ -140,6 +138,7 @@ export function ForwardModal({ messageToForward, onClose }) {
               timestamp: timeString,
               isOutgoing: true,
               status: "sent",
+              isForwarded: true,
             })
           );
         }

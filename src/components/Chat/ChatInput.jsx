@@ -14,6 +14,12 @@ import {
   AlertCircle,
   Trash2,
   MapPin,
+  Camera,
+  Video,
+  Palette,
+  Play,
+  MessageSquare,
+  Phone,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
@@ -610,7 +616,7 @@ export function ChatInput() {
     dispatch(
       updateLastMessage({
         chatId: activeChatId,
-        text: "🎤 " + t("chat.voice_message"),
+        text: "Voice Message",
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1060,7 +1066,7 @@ export function ChatInput() {
     dispatch(
       updateLastMessage({
         chatId: activeChatId,
-        text: "🎨 " + (t("chat.sticker") || "Sticker"),
+        text: "Sticker",
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1141,7 +1147,7 @@ export function ChatInput() {
     dispatch(
       updateLastMessage({
         chatId: activeChatId,
-        text: "🎬 " + (t("chat.gif") || "GIF"),
+        text: "GIF",
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1305,10 +1311,10 @@ export function ChatInput() {
           chatId: activeChatId,
           text:
             fileObj.type === "image"
-              ? "📷 " + t("chat.photo")
+              ? "Photo"
               : fileObj.type === "video"
-                ? "🎥 " + t("chat.video")
-                : "📎 " + t("chat.document"),
+                ? "Video"
+                : "Document",
           timestamp: timeString,
           isOutgoing: true,
           status: "pending",
@@ -1541,7 +1547,7 @@ export function ChatInput() {
       const timeString = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
       const optimisticMsg = {
         id: tempId,
-        text: "📍 " + t("chat.shared_live_location"),
+        text: "Shared live location",
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1557,7 +1563,7 @@ export function ChatInput() {
       dispatch(
         updateLastMessage({
           chatId: activeChatId,
-          text: "📍 " + t("chat.shared_live_location"),
+          text: "Shared live location",
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
@@ -1594,7 +1600,7 @@ export function ChatInput() {
       const timeString = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
       const optimisticMsg = {
         id: tempId,
-        text: "📍 " + t("chat.current_location"),
+        text: "Current Location",
         timestamp: timeString,
         isOutgoing: true,
         status: "sent",
@@ -1608,7 +1614,7 @@ export function ChatInput() {
       dispatch(
         updateLastMessage({
           chatId: activeChatId,
-          text: "📍 " + t("chat.current_location"),
+          text: "Current Location",
           timestamp: timeString,
           isOutgoing: true,
           status: "sent",
@@ -1809,29 +1815,21 @@ export function ChatInput() {
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="flex items-center justify-center h-8 w-8 rounded bg-wa-primary/10 text-wa-primary shrink-0">
               {replyingMessage.type === "image" ? (
-                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/>
-                </svg>
+                <Camera className="h-4 w-4 shrink-0 text-wa-primary" />
               ) : replyingMessage.type === "video" ? (
-                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-                </svg>
+                <Video className="h-4 w-4 shrink-0 text-wa-primary" />
               ) : replyingMessage.type === "sticker" ? (
-                <span className="text-sm">🎨</span>
+                <Palette className="h-4 w-4 shrink-0 text-wa-primary" />
               ) : replyingMessage.type === "gif" ? (
-                <span className="text-sm">🎬</span>
+                <Play className="h-4 w-4 shrink-0 text-wa-primary" />
               ) : replyingMessage.type === "voice" ? (
-                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
-                </svg>
+                <Mic className="h-4 w-4 shrink-0 text-wa-primary" />
               ) : replyingMessage.type === "file" ? (
-                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-                </svg>
+                <FileText className="h-4 w-4 shrink-0 text-wa-primary" />
+              ) : replyingMessage.type === "live_location" || replyingMessage.type === "location" ? (
+                <MapPin className="h-4 w-4 shrink-0 text-wa-primary" />
               ) : (
-                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
-                </svg>
+                <MessageSquare className="h-4 w-4 shrink-0 text-wa-primary" />
               )}
             </div>
             <div className="flex flex-col min-w-0">
@@ -1926,29 +1924,32 @@ export function ChatInput() {
                       <button
                         onClick={() => setPickerTab("emoji")}
                         className={cn(
-                          "flex-1 py-2.5 text-center border-b-2 transition-all cursor-pointer",
+                          "flex-1 py-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer",
                           pickerTab === "emoji" ? "border-wa-primary text-wa-primary bg-wa-sidebar/50" : "border-transparent text-wa-muted hover:text-wa-text"
                         )}
                       >
-                        😊 {t("chat.emojis") || "Emojis"}
+                        <Smile className="h-4 w-4 shrink-0" />
+                        <span>{t("chat.emojis") || "Emojis"}</span>
                       </button>
                       <button
                         onClick={() => setPickerTab("gif")}
                         className={cn(
-                          "flex-1 py-2.5 text-center border-b-2 transition-all cursor-pointer",
+                          "flex-1 py-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer",
                           pickerTab === "gif" ? "border-wa-primary text-wa-primary bg-wa-sidebar/50" : "border-transparent text-wa-muted hover:text-wa-text"
                         )}
                       >
-                        🎬 {t("chat.gifs") || "GIFs"}
+                        <Play className="h-4 w-4 shrink-0" />
+                        <span>{t("chat.gifs") || "GIFs"}</span>
                       </button>
                       <button
                         onClick={() => setPickerTab("sticker")}
                         className={cn(
-                          "flex-1 py-2.5 text-center border-b-2 transition-all cursor-pointer",
+                          "flex-1 py-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer",
                           pickerTab === "sticker" ? "border-wa-primary text-wa-primary bg-wa-sidebar/50" : "border-transparent text-wa-muted hover:text-wa-text"
                         )}
                       >
-                        🎨 {t("chat.stickers") || "Stickers"}
+                        <Palette className="h-4 w-4 shrink-0" />
+                        <span>{t("chat.stickers") || "Stickers"}</span>
                       </button>
                     </div>
 

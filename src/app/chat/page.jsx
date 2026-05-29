@@ -11,7 +11,7 @@ import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage, updateSenderProfile } from "../../redux/slices/messageSlice";
-import { updateLastMessage, incrementUnread, setChats, updatePeerProfile } from "../../redux/slices/chatSlice";
+import { updateLastMessage, incrementUnread, setChats, updatePeerProfile, setActiveChat } from "../../redux/slices/chatSlice";
 import { setActiveSearchPanelOpen, setMobileScreen, setWallpaperModal, setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { chatService } from "../../services/chatService";
@@ -451,35 +451,42 @@ export default function ChatPage() {
         );
 
         const messagesForChat = messagesDictRef.current[targetChatId] || [];
-        const remainingMessages = messagesForChat.filter(m => m.id !== incomingMsg.id);
+        const wasLatest = messagesForChat.length > 0 && messagesForChat[messagesForChat.length - 1].id === incomingMsg.id;
 
-        if (remainingMessages.length > 0) {
-          const newLatest = remainingMessages[remainingMessages.length - 1];
-          let previewText = newLatest.text;
-          if (newLatest.type === "image") previewText = `📷 ${t("chat.photo")}`;
-          if (newLatest.type === "video") previewText = `🎥 ${t("chat.video")}`;
-          if (newLatest.type === "file") previewText = `📎 ${t("chat.document")}`;
-          if (newLatest.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
+        if (wasLatest) {
+          const remainingMessages = messagesForChat.filter(m => m.id !== incomingMsg.id);
 
-          dispatch(
-            updateLastMessage({
-              chatId: targetChatId,
-              text: previewText,
-              timestamp: newLatest.timestamp || new Date(newLatest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
-              isOutgoing: newLatest.senderId === user.id || newLatest.isOutgoing,
-              status: newLatest.status,
-            })
-          );
-        } else {
-          dispatch(
-            updateLastMessage({
-              chatId: targetChatId,
-              text: "",
-              timestamp: "",
-              isOutgoing: false,
-              status: null,
-            })
-          );
+          if (remainingMessages.length > 0) {
+            const newLatest = remainingMessages[remainingMessages.length - 1];
+            let previewText = newLatest.text;
+            if (newLatest.type === "image") previewText = t("chat.photo") || "Photo";
+            if (newLatest.type === "video") previewText = t("chat.video") || "Video";
+            if (newLatest.type === "file") previewText = t("chat.document") || "Document";
+            if (newLatest.type === "voice") previewText = t("chat.voice_message") || "Voice Message";
+            if (newLatest.type === "sticker") previewText = t("chat.sticker") || "Sticker";
+            if (newLatest.type === "gif") previewText = t("chat.gif") || "GIF";
+
+            dispatch(
+              updateLastMessage({
+                chatId: targetChatId,
+                text: previewText,
+                timestamp: newLatest.timestamp || new Date(newLatest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+                isOutgoing: newLatest.senderId === user.id || newLatest.isOutgoing,
+                status: newLatest.status,
+                isForwarded: newLatest.isForwarded,
+              })
+            );
+          } else {
+            dispatch(
+              updateLastMessage({
+                chatId: targetChatId,
+                text: "",
+                timestamp: "",
+                isOutgoing: false,
+                status: null,
+              })
+            );
+          }
         }
         return;
       }
@@ -553,10 +560,12 @@ export default function ChatPage() {
         }
 
         let previewText = incomingMsg.text;
-        if (incomingMsg.type === "image") previewText = `📷 ${t("chat.photo")}`;
-        if (incomingMsg.type === "video") previewText = `🎥 ${t("chat.video")}`;
-        if (incomingMsg.type === "file") previewText = `📎 ${t("chat.document")}`;
-        if (incomingMsg.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
+        if (incomingMsg.type === "image") previewText = "Photo";
+        if (incomingMsg.type === "video") previewText = "Video";
+        if (incomingMsg.type === "file") previewText = "Document";
+        if (incomingMsg.type === "voice") previewText = "Voice Message";
+        if (incomingMsg.type === "sticker") previewText = "Sticker";
+        if (incomingMsg.type === "gif") previewText = "GIF";
 
         const dispatchUpdate = (profile = null) => {
           dispatch(
@@ -568,6 +577,7 @@ export default function ChatPage() {
               status: incomingMsg.status,
               avatar: profile?.avatar,
               name: profile?.name,
+              isForwarded: incomingMsg.isForwarded,
             })
           );
         };
@@ -626,16 +636,17 @@ export default function ChatPage() {
         
         // Sync sidebar preview ONLY if this is actually the latest message in that conversation
         const messagesForChat = messagesDictRef.current[targetChatId] || [];
-        const isLatest = messagesForChat.length === 0 || 
-                         incomingMsg.id === messagesForChat[messagesForChat.length - 1].id ||
-                         new Date(incomingMsg.createdAt) >= new Date(messagesForChat[messagesForChat.length - 1].createdAt);
+        const isLatest = messagesForChat.length > 0 && 
+                         incomingMsg.id === messagesForChat[messagesForChat.length - 1].id;
 
         if (isLatest) {
           let previewText = incomingMsg.text;
-          if (incomingMsg.type === "image") previewText = `📷 ${t("chat.photo")}`;
-          if (incomingMsg.type === "video") previewText = `🎥 ${t("chat.video")}`;
-          if (incomingMsg.type === "file") previewText = `📎 ${t("chat.document")}`;
-          if (incomingMsg.type === "voice") previewText = `🎤 ${t("chat.voice_message")}`;
+          if (incomingMsg.type === "image") previewText = "Photo";
+          if (incomingMsg.type === "video") previewText = "Video";
+          if (incomingMsg.type === "file") previewText = "Document";
+          if (incomingMsg.type === "voice") previewText = "Voice Message";
+          if (incomingMsg.type === "sticker") previewText = "Sticker";
+          if (incomingMsg.type === "gif") previewText = "GIF";
 
           dispatch(
             updateLastMessage({
@@ -644,6 +655,7 @@ export default function ChatPage() {
               timestamp: incomingMsg.timestamp,
               isOutgoing: isMine,
               status: incomingMsg.status,
+              isForwarded: incomingMsg.isForwarded,
             })
           );
         }

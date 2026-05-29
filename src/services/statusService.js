@@ -444,9 +444,9 @@ export const statusService = {
         if (status.type === "text") {
           statusPreviewText = `"${status.textContent}"`;
         } else if (status.type === "image") {
-          statusPreviewText = "📷 Photo status";
+          statusPreviewText = "Photo status";
         } else if (status.type === "video") {
-          statusPreviewText = "🎥 Video status";
+          statusPreviewText = "Video status";
         }
 
         const messageText = `Reacted ${emoji} to your status: ${statusPreviewText}`;
