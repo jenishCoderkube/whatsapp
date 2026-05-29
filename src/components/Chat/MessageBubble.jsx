@@ -55,6 +55,8 @@ import { cn } from "../../utils/cn";
 import { formatMessageTime } from "../../utils/dateUtils";
 import LiveLocationBubble from "./LiveLocationBubble";
 import StaticLocationBubble from "./StaticLocationBubble";
+import { MediaGrid } from "./MediaGrid";
+import { MediaViewer } from "./MediaViewer";
 
 import { ExpandableText } from "./ExpandableText";
 
@@ -166,7 +168,8 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         String(currentUserId).toLowerCase()
       : !!message.isOutgoing;
 
-  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
   const [isDeletedForMe, setIsDeletedForMe] = useState(false);
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [dropdownConfig, setDropdownConfig] = useState({
@@ -564,22 +567,19 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
     switch (type) {
       case "image":
+      case "image_group": {
+        const isGroupedImage = type === "image_group";
+        const imageList = isGroupedImage ? (message.messages || []) : [message];
         return (
-          <div className="relative rounded-md overflow-hidden mb-1 max-w-[150px] min-[375px]:max-w-[180px] sm:max-w-[240px] md:max-w-xs select-none">
-            <div
-              onClick={() => setImageModalOpen(true)}
-              className="relative group cursor-pointer block overflow-hidden rounded bg-black/10"
-            >
-              <img
-                src={mediaUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"}
-                alt="Attachment"
-                className="w-full h-auto object-cover max-h-32 min-[375px]:max-h-36 sm:max-h-48 md:max-h-56 transition-transform duration-300 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Maximize2 className="h-6 w-6 text-white drop-shadow-md" />
-              </div>
-            </div>
-            {text && (
+          <div className="relative rounded-md mb-1 max-w-[320px] select-none">
+            <MediaGrid
+              messages={imageList}
+              onImageClick={(idx) => {
+                setViewerIndex(idx);
+                setViewerOpen(true);
+              }}
+            />
+            {!isGroupedImage && text && (
               <ExpandableText
                 text={text}
                 groupMembers={groupMembers}
@@ -587,19 +587,24 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                 isCaption={true}
               />
             )}
-            <Modal isOpen={imageModalOpen} onClose={() => setImageModalOpen(false)} title={fileName || (t("chat.photo_preview") || "Photo Preview")} className="max-w-4xl">
-              <div className="flex flex-col items-center justify-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
-                <img src={mediaUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"} alt="Fullscreen" className="max-h-[70vh] max-w-full object-contain rounded" />
-                <div className="flex items-center justify-between w-full mt-4 pt-3 border-t border-wa-border">
-                  <span className="text-xs text-wa-muted truncate max-w-xs">{fileName || (t("chat.shared_image") || "shared_image.png")}</span>
-                  <button onClick={handleDownload} className="flex items-center gap-2 px-3 py-1.5 rounded bg-wa-primary text-white text-xs font-medium hover:bg-wa-primary-hover">
-                    <Download className="h-3.5 w-3.5" /> {t("chat.download_original") || "Download Original"}
-                  </button>
-                </div>
-              </div>
-            </Modal>
+            {isGroupedImage && imageList.map(msg => msg.text).filter(Boolean).map((cap, capIdx) => (
+              <ExpandableText
+                key={capIdx}
+                text={cap}
+                groupMembers={groupMembers}
+                onMentionClick={handleMentionClick}
+                isCaption={true}
+              />
+            ))}
+            <MediaViewer
+              isOpen={viewerOpen}
+              onClose={() => setViewerOpen(false)}
+              mediaList={imageList}
+              initialIndex={viewerIndex}
+            />
           </div>
         );
+      }
       case "video":
         return (
           <div className="relative rounded-md overflow-hidden mb-1 max-w-[150px] min-[375px]:max-w-[180px] sm:max-w-[240px] md:max-w-xs">
@@ -1053,14 +1058,36 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     </motion.div>
   );
 }, (prevProps, nextProps) => {
-  return prevProps.message.id === nextProps.message.id && 
-         prevProps.message.status === nextProps.message.status &&
-         prevProps.message.text === nextProps.message.text &&
-         prevProps.message.noPreview === nextProps.message.noPreview &&
-         prevProps.message.editedAt === nextProps.message.editedAt &&
-         prevProps.message.senderAvatar === nextProps.message.senderAvatar &&
-         prevProps.message.senderName === nextProps.message.senderName &&
-         JSON.stringify(prevProps.message.reactions) === JSON.stringify(nextProps.message.reactions) &&
+  const msgA = prevProps.message;
+  const msgB = nextProps.message;
+  
+  const basicMatch = msgA.id === msgB.id && 
+         msgA.status === msgB.status &&
+         msgA.text === msgB.text &&
+         msgA.noPreview === msgB.noPreview &&
+         msgA.editedAt === msgB.editedAt &&
+         msgA.senderAvatar === msgB.senderAvatar &&
+         msgA.senderName === msgB.senderName &&
+         JSON.stringify(msgA.reactions) === JSON.stringify(msgB.reactions) &&
          prevProps.isGroup === nextProps.isGroup &&
          prevProps.groupMembers?.length === nextProps.groupMembers?.length;
+
+  if (!basicMatch) return false;
+
+  // For image groups, compare nested messages list length and each nested message
+  if (msgA.type === "image_group") {
+    const listA = msgA.messages || [];
+    const listB = msgB.messages || [];
+    if (listA.length !== listB.length) return false;
+    for (let i = 0; i < listA.length; i++) {
+      if (listA[i].id !== listB[i].id || 
+          listA[i].status !== listB[i].status || 
+          listA[i].mediaUrl !== listB[i].mediaUrl ||
+          listA[i].text !== listB[i].text) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 });

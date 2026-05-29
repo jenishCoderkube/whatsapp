@@ -203,10 +203,15 @@ export default function ChatPage() {
   const groupedItems = useMemo(() => {
     const items = [];
     let lastDate = null;
+    let currentImageGroup = null;
 
     activeMessages.forEach((msg) => {
       const msgDate = new Date(msg.createdAt || Date.now()).toDateString();
       if (msgDate !== lastDate) {
+        if (currentImageGroup) {
+          items.push(currentImageGroup);
+          currentImageGroup = null;
+        }
         items.push({
           type: "date_separator",
           date: msg.createdAt || Date.now(),
@@ -214,8 +219,47 @@ export default function ChatPage() {
         });
         lastDate = msgDate;
       }
-      items.push(msg);
+
+      // Group consecutive image messages of the same sender sent within 1 minute of each other
+      const isImg = msg.type === "image" && msg.mediaUrl && msg.status !== "failed" && msg.status !== "pending_delete" && msg.text !== "This message was deleted";
+      
+      if (isImg) {
+        const msgTime = new Date(msg.createdAt || Date.now()).getTime();
+        const canGroup = currentImageGroup &&
+                         currentImageGroup.senderId === msg.senderId &&
+                         (msgTime - new Date(currentImageGroup.createdAt || Date.now()).getTime()) < 60000;
+
+        if (canGroup) {
+          currentImageGroup.messages.push(msg);
+        } else {
+          if (currentImageGroup) {
+            items.push(currentImageGroup);
+          }
+          currentImageGroup = {
+            type: "image_group",
+            id: `img-group-${msg.uiId || msg.id}`,
+            senderId: msg.senderId,
+            senderName: msg.senderName,
+            senderAvatar: msg.senderAvatar,
+            isOutgoing: msg.isOutgoing,
+            createdAt: msg.createdAt,
+            timestamp: msg.timestamp,
+            status: msg.status,
+            messages: [msg]
+          };
+        }
+      } else {
+        if (currentImageGroup) {
+          items.push(currentImageGroup);
+          currentImageGroup = null;
+        }
+        items.push(msg);
+      }
     });
+
+    if (currentImageGroup) {
+      items.push(currentImageGroup);
+    }
     return items;
   }, [activeMessages]);
 
