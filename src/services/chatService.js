@@ -601,5 +601,85 @@ export const chatService = {
       console.error("updateDisappearingDuration failed:", err);
       throw err;
     }
+  },
+
+  /**
+   * Permanently delete a conversation from the user's sidebar.
+   * Deletes the user's membership in the conversation from Supabase,
+   * removes any associated drafts from IndexedDB, and purges all
+   * related localStorage keys (cached chats, pins, archives, and wallpapers).
+   */
+  async deleteChat(chatId, userId) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chatId);
+      if (!chatId || !isUuid || !userId) {
+        throw new Error("INVALID_ARGUMENTS");
+      }
+
+      // 1. Delete membership from Supabase to prevent API responses from returning this chat
+      // We append .select() to ensure the row was actually deleted (if RLS blocks it, data will be empty)
+      const { data, error } = await supabase
+        .from("conversation_members")
+        .delete()
+        .eq("conversation_id", chatId)
+        .eq("user_id", userId)
+        .select();
+
+      if (error) throw error;
+
+      // If RLS blocked the deletion, data will be empty []
+      if (!data || data.length === 0) {
+        console.warn("Delete conversation_members returned 0 rows. RLS policy might be missing on the server.");
+        throw new Error("RLS_DELETE_BLOCKED");
+      }
+
+      // 2. Clear IndexedDB drafts for this chat
+      try {
+        const { indexedDBService } = await import("./indexedDBService");
+        await indexedDBService.removeDraft(chatId);
+      } catch (e) {
+        console.warn("Failed to remove IndexedDB draft on chat delete:", e);
+      }
+
+      // 3. Purge all related local storage caches
+      if (typeof window !== "undefined") {
+        try {
+          // Remove from cached chats list
+          const cacheKey = `wa_cached_chats_${userId}`;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const chatsList = JSON.parse(cached);
+            const filtered = chatsList.filter((c) => c.id !== chatId);
+            localStorage.setItem(cacheKey, JSON.stringify(filtered));
+          }
+
+          // Remove from pinned chats list
+          const pinnedCached = localStorage.getItem("wa_pinned_chats");
+          if (pinnedCached) {
+            const pinnedList = JSON.parse(pinnedCached);
+            const filtered = pinnedList.filter((id) => id !== chatId);
+            localStorage.setItem("wa_pinned_chats", JSON.stringify(filtered));
+          }
+
+          // Remove from archived chats list
+          const archivedCached = localStorage.getItem("wa_archived_chats");
+          if (archivedCached) {
+            const archivedList = JSON.parse(archivedCached);
+            const filtered = archivedList.filter((id) => id !== chatId);
+            localStorage.setItem("wa_archived_chats", JSON.stringify(filtered));
+          }
+
+          // Remove wallpaper preference for this specific chat
+          localStorage.removeItem(`wa_wallpaper_user_${userId}_chat_${chatId}`);
+        } catch (e) {
+          console.warn("Failed to clean up localStorage keys on chat delete:", e);
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error("deleteChat service exception:", err);
+      throw err;
+    }
   }
 };

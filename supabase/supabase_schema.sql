@@ -94,6 +94,11 @@ CREATE POLICY "Members can update their metadata stats"
     ON public.conversation_members FOR UPDATE 
     USING (user_id = auth.uid() OR auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Members can delete their memberships" ON public.conversation_members;
+CREATE POLICY "Members can delete their memberships" 
+    ON public.conversation_members FOR DELETE 
+    USING (user_id = auth.uid());
+
 
 -- ============================================================================
 -- 5. CONVERSATION POLICIES (Defined after conversation_members exists)

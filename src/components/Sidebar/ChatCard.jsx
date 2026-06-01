@@ -6,7 +6,7 @@ import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
-import { setActiveChat, togglePinChat, toggleArchiveChat, removeChat } from "../../redux/slices/chatSlice";
+import { setActiveChat, togglePinChat, toggleArchiveChat, removeChat, deleteDraft } from "../../redux/slices/chatSlice";
 import { setMobileScreen } from "../../redux/slices/uiSlice";
 import { chatService } from "../../services/chatService";
 import { cn } from "../../utils/cn";
@@ -190,7 +190,22 @@ export const ChatCard = React.memo(({ chat }) => {
       onClick: (e) => {
         e.stopPropagation();
         if (window.confirm("Are you sure you want to delete this chat?")) {
-          dispatch(removeChat(chat.id));
+          chatService.deleteChat(chat.id, currentUserId)
+            .then(() => {
+              if (isActive) {
+                dispatch(setMobileScreen("list"));
+              }
+              dispatch(removeChat(chat.id));
+              dispatch(deleteDraft(chat.id));
+            })
+            .catch((err) => {
+              console.error("Failed to delete chat database membership:", err);
+              if (err.message === "RLS_DELETE_BLOCKED") {
+                alert("Failed to delete chat from database: Row Level Security (RLS) policy for DELETE is missing on conversation_members. Please execute the policy update in your Supabase SQL Editor:\n\nALTER TABLE public.conversation_members ENABLE ROW LEVEL SECURITY;\n\nCREATE POLICY \"Members can delete their memberships\" ON public.conversation_members FOR DELETE USING (user_id = auth.uid());");
+              } else {
+                alert("Failed to delete chat. Please check your network connection and try again.");
+              }
+            });
         }
       }
     }

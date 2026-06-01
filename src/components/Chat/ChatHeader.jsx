@@ -31,6 +31,7 @@ import {
   clearUnread,
   setActiveChat,
   removeChat,
+  deleteDraft,
   updateChatAvatar,
   updateChatDisappearingDuration,
 } from "../../redux/slices/chatSlice";
@@ -382,6 +383,32 @@ export function ChatHeader() {
     }
   };
 
+  const handleDeleteChat = async () => {
+    const confirmMsg = activeChat.isGroup
+      ? t("chat.delete_group_confirm") || "Are you sure you want to delete this group? You will lose all message history."
+      : t("chat.delete_chat_confirm") || "Are you sure you want to delete this chat? You will lose all message history.";
+
+    if (window.confirm(confirmMsg)) {
+      try {
+        const chatId = activeChat.id;
+        await chatService.deleteChat(chatId, currentUserId);
+
+        dispatch(setMobileScreen("list"));
+        dispatch(setActiveChat(null));
+        dispatch(removeChat(chatId));
+        dispatch(deleteDraft(chatId));
+        setInfoModal(false);
+      } catch (err) {
+        console.error("Failed to delete chat:", err);
+        if (err.message === "RLS_DELETE_BLOCKED") {
+          alert("Failed to delete chat from database: Row Level Security (RLS) policy for DELETE is missing on conversation_members. Please execute the policy update in your Supabase SQL Editor:\n\nALTER TABLE public.conversation_members ENABLE ROW LEVEL SECURITY;\n\nCREATE POLICY \"Members can delete their memberships\" ON public.conversation_members FOR DELETE USING (user_id = auth.uid());");
+        } else {
+          alert("Failed to delete chat. Please check your network connection and try again.");
+        }
+      }
+    }
+  };
+
   // Check if any remote peer is dynamically typing inside this view channel
   const isPeerTyping = Object.keys(typingMap).some(
     (uid) => uid !== currentUserId,
@@ -443,9 +470,35 @@ export function ChatHeader() {
     { label: t("chat.contact_info") || "Contact Info", onClick: () => setInfoModal(true) },
     { label: t("chat.chat_wallpaper") || "Chat Wallpaper", onClick: () => dispatch(setWallpaperModal({ open: true, targetChatId: activeChatId })) },
     { label: t("chat.select_messages") || "Select Messages", onClick: () => {} },
-    { label: t("chat.close_chat") || "Close Chat", onClick: () => dispatch(setMobileScreen("list")) },
+    { label: t("chat.close_chat") || "Close Chat", onClick: () => {
+      dispatch(setMobileScreen("list"));
+      dispatch(setActiveChat(null));
+      dispatch(clearUnread(activeChat.id));
+    } },
     { label: t("chat.clear_messages") || "Clear messages", danger: true, onClick: () => {} },
   ];
+
+  if (activeChat.isGroup) {
+    if (!activeChat.isLeft) {
+      headerOptions.push({
+        label: t("chat.exit_group") || "Exit Group",
+        danger: true,
+        onClick: handleLeaveGroup,
+      });
+    } else {
+      headerOptions.push({
+        label: t("chat.delete_group") || "Delete Group",
+        danger: true,
+        onClick: handleDeleteChat,
+      });
+    }
+  } else {
+    headerOptions.push({
+      label: t("chat.delete_chat") || "Delete Chat",
+      danger: true,
+      onClick: handleDeleteChat,
+    });
+  }
 
   return (
     <header className="flex items-center justify-between px-4 py-2 bg-wa-header border-b border-wa-border select-none z-[60] shrink-0 transition-colors duration-200">

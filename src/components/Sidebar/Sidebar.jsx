@@ -315,22 +315,23 @@ export function Sidebar({ className }) {
         chatService
           .getUserChats(user.id)
           .then((fetchedChats) => {
-            if (fetchedChats && fetchedChats.length > 0) {
-              dispatch(setChats(fetchedChats));
+            const chatsList = fetchedChats || [];
+            dispatch(setChats(chatsList));
 
-              // Cache the fresh chats in localStorage
-              if (typeof window !== "undefined") {
-                try {
-                  localStorage.setItem(
-                    `wa_cached_chats_${user.id}`,
-                    JSON.stringify(fetchedChats),
-                  );
-                } catch (e) {
-                  console.warn("Failed to cache chats:", e);
-                }
+            // Cache the fresh chats in localStorage
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem(
+                  `wa_cached_chats_${user.id}`,
+                  JSON.stringify(chatsList),
+                );
+              } catch (e) {
+                console.warn("Failed to cache chats:", e);
               }
+            }
 
-              // Batch acknowledge delivery for all active sidebar conversations at once
+            // Batch acknowledge delivery for all active sidebar conversations at once
+            if (chatsList.length > 0) {
               messageService.syncAllPendingDeliveries(user.id).catch((err) => {
                 console.warn("Failed syncing pending deliveries:", err);
               });
