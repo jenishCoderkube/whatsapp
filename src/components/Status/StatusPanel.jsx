@@ -13,6 +13,7 @@ import {
   markStatusAsSeenLocal,
   updateStatusReactionLocal,
   setPrivacySettings,
+  muteUser,
 } from "../../redux/slices/statusSlice";
 import { statusService } from "../../services/statusService";
 
@@ -25,7 +26,6 @@ import { StatusEmptyState } from "./StatusEmptyState";
 import { StatusPrivacyModal } from "./StatusPrivacyModal";
 import { cn } from "../../utils/cn";
 import { useTranslation } from "../../hooks/useTranslation";
-
 import { AnimatePresence } from "framer-motion";
 
 export function StatusPanel() {
@@ -35,8 +35,8 @@ export function StatusPanel() {
   
   // Status Slice States
   const statusViewOpen = useAppSelector((state) => state.status.statusViewOpen);
-  const statuses = useAppSelector((state) => state.status.statuses);
-  const myStatuses = useAppSelector((state) => state.status.myStatuses);
+  const statuses = useAppSelector((state) => state.status.statuses) || [];
+  const myStatuses = useAppSelector((state) => state.status.myStatuses) || [];
   const activeUserId = useAppSelector((state) => state.status.activeUserId);
   const activeStatusIndex = useAppSelector((state) => state.status.activeStatusIndex);
   const uploading = useAppSelector((state) => state.status.uploading);
@@ -47,9 +47,8 @@ export function StatusPanel() {
   // Local Composition States
   const [composingType, setComposingType] = useState(null); // 'text' | 'media' | null
   
-  // Media Upload States
-  const [selectedMedia, setSelectedMedia] = useState(null); // File object
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState(null);
+  // Media Batch Upload State
+  const [selectedMediaFiles, setSelectedMediaFiles] = useState([]); // Array of File objects
   
   // Modal & Viewer UI States
   const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
@@ -176,30 +175,28 @@ export function StatusPanel() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeUserId, activeStatusIndex]);
 
-  // Media File selection
-  const handleMediaSelect = (file) => {
-    if (file.size > 20 * 1024 * 1024) {
-      alert(t("status.media_size_error"));
+  // Media Files selection (from Sidebar)
+  const handleMediaSelect = (files) => {
+    const fileArray = Array.isArray(files) ? files : [files];
+    const validFiles = fileArray.filter((file) => file.size <= 25 * 1024 * 1024);
+    
+    if (validFiles.length === 0) {
+      alert("Selected media file is too large (max 25MB).");
       return;
     }
 
-    setSelectedMedia(file);
-    setMediaPreviewUrl(URL.createObjectURL(file));
+    setSelectedMediaFiles(validFiles);
     setComposingType("media");
   };
 
-  // Close compositions
+  // Close compositions and clean up states
   const handleCancelComposition = () => {
     setComposingType(null);
-    setSelectedMedia(null);
-    if (mediaPreviewUrl) {
-      URL.revokeObjectURL(mediaPreviewUrl);
-      setMediaPreviewUrl(null);
-    }
+    setSelectedMediaFiles([]);
   };
 
-  // Upload text status
-  const handleTextStatusSubmit = async ({ textContent, bgColor, textStyle }) => {
+  // Upload text status (with support for rich metadata stickers)
+  const handleTextStatusSubmit = async ({ textContent, bgColor, textStyle, metadata }) => {
     if (!user?.id) return;
     dispatch(setUploading(true));
     dispatch(setUploadProgress(40));
@@ -213,6 +210,7 @@ export function StatusPanel() {
         textStyle,
         privacy,
         privacyList,
+        metadata,
       });
 
       dispatch(setUploadProgress(100));
@@ -230,22 +228,31 @@ export function StatusPanel() {
     }
   };
 
-  // Upload media status
-  const handleMediaStatusSubmit = async (caption) => {
-    if (!user?.id || !selectedMedia) return;
+  // Upload media statuses sequentially (Drafts array)
+  const handleMediaStatusSubmit = async (drafts) => {
+    if (!user?.id || !drafts || drafts.length === 0) return;
     dispatch(setUploading(true));
-    dispatch(setUploadProgress(30));
+    dispatch(setUploadProgress(5));
 
     try {
-      const fileType = selectedMedia.type.startsWith("video/") ? "video" : "image";
-      await statusService.uploadStatus({
-        userId: user.id,
-        type: fileType,
-        mediaFile: selectedMedia,
-        caption,
-        privacy,
-        privacyList,
-      });
+      for (let i = 0; i < drafts.length; i++) {
+        const draft = drafts[i];
+        const fileType = draft.file.type.startsWith("video/") ? "video" : "image";
+        
+        await statusService.uploadStatus({
+          userId: user.id,
+          type: fileType,
+          mediaFile: draft.file,
+          caption: draft.caption,
+          privacy,
+          privacyList,
+          metadata: draft.metadata,
+        });
+
+        // Update incremental progress
+        const pct = Math.round(((i + 1) / drafts.length) * 100);
+        dispatch(setUploadProgress(pct));
+      }
 
       dispatch(setUploadProgress(100));
       setTimeout(() => {
@@ -255,7 +262,7 @@ export function StatusPanel() {
         reloadLists();
       }, 500);
     } catch (e) {
-      console.error("Upload media status failed:", e);
+      console.error("Upload media statuses failed:", e);
       alert(t("status.upload_failed", { error: e.message }));
       dispatch(setUploading(false));
       dispatch(setUploadProgress(null));
@@ -425,6 +432,54 @@ export function StatusPanel() {
     }, 1500);
   };
 
+  const handleVoteOnPoll = async (optionId) => {
+    if (!user?.id || !activeStatus) return;
+    try {
+      await statusService.voteOnStatusPoll(activeStatus, user.id, optionId);
+      reloadLists();
+    } catch (e) {
+      console.error("Failed to vote on status poll:", e);
+    }
+  };
+
+  const handleAnswerQuestion = async (answerText) => {
+    if (!user?.id || !activeStatus) return;
+    try {
+      await statusService.answerStatusQuestion(activeStatus, user.id, answerText);
+      reloadLists();
+    } catch (e) {
+      console.error("Failed to submit question answer:", e);
+    }
+  };
+
+  const handleMuteUserStatus = (userId) => {
+    dispatch(muteUser(userId));
+    dispatch(setActiveUser(null)); // Close status viewer
+    alert("User's status updates have been muted.");
+  };
+
+  const handleSeek = (pct) => {
+    if (!activeStatus) return;
+    if (activeStatus.type === "video" && videoRef.current) {
+      const duration = videoRef.current.duration || 15;
+      videoRef.current.currentTime = (pct / 100) * duration;
+      setViewerProgress(pct);
+    } else {
+      const elapsed = (pct / 100) * playDuration;
+      pausedTimeRef.current = elapsed;
+      startTimeRef.current = Date.now() - elapsed;
+      setViewerProgress(pct);
+    }
+  };
+
+  const handleJumpToStatus = (idx) => {
+    if (!activeGroup) return;
+    dispatch(setActiveStatusIndex(idx));
+    setViewerProgress(0);
+    pausedTimeRef.current = 0;
+    startTimeRef.current = Date.now();
+  };
+
   if (!statusViewOpen) return null;
 
   const showViewer = !!activeUserId || !!composingType;
@@ -454,55 +509,61 @@ export function StatusPanel() {
           "flex-1 h-full bg-wa-bg flex flex-col items-center justify-center relative overflow-hidden",
           !showViewer ? "hidden md:flex" : "flex"
         )}>
-          <AnimatePresence mode="wait">
-            {composingType === "text" && (
-              <StatusComposerText
-                onCancel={handleCancelComposition}
-                onSubmit={handleTextStatusSubmit}
-                uploading={uploading}
-                uploadProgress={uploadProgress}
-              />
-            )}
+          <div id="status-canvas-container" className="absolute inset-0 flex items-center justify-center">
+            <AnimatePresence mode="wait">
+              {composingType === "text" && (
+                <StatusComposerText
+                  onCancel={handleCancelComposition}
+                  onSubmit={handleTextStatusSubmit}
+                  uploading={uploading}
+                  uploadProgress={uploadProgress}
+                />
+              )}
 
-            {composingType === "media" && (
-              <StatusComposerMedia
-                mediaFile={selectedMedia}
-                previewUrl={mediaPreviewUrl}
-                onCancel={handleCancelComposition}
-                onSubmit={handleMediaStatusSubmit}
-                uploading={uploading}
-                uploadProgress={uploadProgress}
-              />
-            )}
+              {composingType === "media" && (
+                <StatusComposerMedia
+                  mediaFiles={selectedMediaFiles}
+                  onCancel={handleCancelComposition}
+                  onSubmit={handleMediaStatusSubmit}
+                  uploading={uploading}
+                  uploadProgress={uploadProgress}
+                />
+              )}
 
-            {activeUserId && activeStatus && (
-              <StatusViewer
-                activeUserId={activeUserId}
-                activeGroup={activeGroup}
-                activeStatusIndex={activeStatusIndex}
-                activeStatus={activeStatus}
-                currentUser={user}
-                viewerProgress={viewerProgress}
-                isPaused={isPaused}
-                isMuted={isMuted}
-                replyText={replyText}
-                onSetReplyText={setReplyText}
-                onSetIsPaused={setIsPaused}
-                onSetIsMuted={setIsMuted}
-                onClose={() => dispatch(setActiveUser(null))}
-                onNext={handleNextStatus}
-                onPrev={handlePrevStatus}
-                onDelete={handleDeleteStatus}
-                onSendReply={handleSendReply}
-                onSendReaction={handleSendReaction}
-                videoRef={videoRef}
-              />
-            )}
+              {activeUserId && activeStatus && (
+                <StatusViewer
+                  activeUserId={activeUserId}
+                  activeGroup={activeGroup}
+                  activeStatusIndex={activeStatusIndex}
+                  activeStatus={activeStatus}
+                  currentUser={user}
+                  viewerProgress={viewerProgress}
+                  isPaused={isPaused}
+                  isMuted={isMuted}
+                  replyText={replyText}
+                  onSetReplyText={setReplyText}
+                  onSetIsPaused={setIsPaused}
+                  onSetIsMuted={setIsMuted}
+                  onClose={() => dispatch(setActiveUser(null))}
+                  onNext={handleNextStatus}
+                  onPrev={handlePrevStatus}
+                  onDelete={handleDeleteStatus}
+                  onSendReply={handleSendReply}
+                  onSendReaction={handleSendReaction}
+                  videoRef={videoRef}
+                  onVoteOnPoll={handleVoteOnPoll}
+                  onAnswerQuestion={handleAnswerQuestion}
+                  onMuteUser={handleMuteUserStatus}
+                  onSeek={handleSeek}
+                  onJumpToStatus={handleJumpToStatus}
+                />
+              )}
 
-            {!activeUserId && !composingType && (
-              <StatusEmptyState />
-            )}
-          </AnimatePresence>
+              {!activeUserId && !composingType && (
+                <StatusEmptyState />
+              )}
+            </AnimatePresence>
+          </div>
         </main>
 
       </div>

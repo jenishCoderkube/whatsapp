@@ -9,12 +9,44 @@ let useLocalFallback = false;
 
 export const statusService = {
   /**
+   * Helper to encode metadata into status text content or caption.
+   */
+  encodeMetadata(content = "", metadata = {}) {
+    if (!metadata || Object.keys(metadata).length === 0) return content;
+    return `|||METADATA:${JSON.stringify(metadata)}|||${content}`;
+  },
+
+  /**
+   * Helper to decode metadata from status text content or caption.
+   */
+  decodeMetadata(rawContent = "") {
+    if (!rawContent) return { content: "", metadata: {} };
+    if (
+      typeof rawContent === "string" &&
+      rawContent.startsWith("|||METADATA:")
+    ) {
+      const index = rawContent.indexOf("|||", 12);
+      if (index !== -1) {
+        try {
+          const jsonStr = rawContent.substring(12, index);
+          const content = rawContent.substring(index + 3);
+          const metadata = JSON.parse(jsonStr);
+          return { content, metadata };
+        } catch (e) {
+          console.warn("Failed parsing metadata:", e);
+        }
+      }
+    }
+    return { content: rawContent, metadata: {} };
+  },
+
+  /**
    * Get all user IDs that have an existing conversation with the current user.
    */
   async getUserContactIds(currentUserId) {
     try {
       if (!currentUserId) return [];
-      
+
       const { data: userConvs, error: convsError } = await supabase
         .from("conversation_members")
         .select("conversation_id")
@@ -23,7 +55,7 @@ export const statusService = {
       if (convsError || !userConvs || userConvs.length === 0) return [];
 
       const conversationIds = userConvs.map((c) => c.conversation_id);
-      
+
       const { data: peers, error: peersError } = await supabase
         .from("conversation_members")
         .select("user_id")
@@ -31,7 +63,7 @@ export const statusService = {
         .neq("user_id", currentUserId);
 
       if (peersError || !peers) return [];
-      
+
       return [...new Set(peers.map((p) => p.user_id))];
     } catch (e) {
       console.warn("Failed to fetch user contact IDs:", e);
@@ -47,13 +79,17 @@ export const statusService = {
       const { error } = await supabase.from("statuses").select("id").limit(1);
       if (error && error.code === "PGRST205") {
         useLocalFallback = true;
-        console.warn("Statuses table not found in Supabase. Using localStorage fallback.");
+        console.warn(
+          "Statuses table not found in Supabase. Using localStorage fallback.",
+        );
       } else {
         useLocalFallback = false;
       }
     } catch (e) {
       useLocalFallback = true;
-      console.warn("Unable to connect to Supabase statuses table. Using localStorage fallback.");
+      console.warn(
+        "Unable to connect to Supabase statuses table. Using localStorage fallback.",
+      );
     }
     return useLocalFallback;
   },
@@ -71,6 +107,7 @@ export const statusService = {
     textStyle = "sans",
     privacy = "contacts",
     privacyList = [],
+    metadata = {},
   }) {
     await this.checkTableExists();
 
@@ -82,14 +119,25 @@ export const statusService = {
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h from now
 
+    // Encode metadata into the content strings
+    const finalCaption = mediaFile
+      ? this.encodeMetadata(caption, metadata)
+      : "";
+    const finalTxt = !mediaFile
+      ? this.encodeMetadata(textContent, metadata)
+      : "";
+
+    let createdStatus = null;
+
     if (useLocalFallback) {
-      const newStatus = {
-        id: "local-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9),
+      createdStatus = {
+        id:
+          "local-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9),
         user_id: userId,
         type,
         media_url: mediaUrl,
-        caption,
-        text_content: textContent,
+        caption: finalCaption,
+        text_content: finalTxt,
         bg_color: bgColor,
         text_style: textStyle,
         privacy,
@@ -99,20 +147,21 @@ export const statusService = {
         views: [],
       };
 
-      const localStatuses = JSON.parse(localStorage.getItem("wa_local_statuses") || "[]");
-      localStatuses.unshift(newStatus);
+      const localStatuses = JSON.parse(
+        localStorage.getItem("wa_local_statuses") || "[]",
+      );
+      localStatuses.unshift(createdStatus);
       localStorage.setItem("wa_local_statuses", JSON.stringify(localStatuses));
 
       // Trigger local updates
       this.triggerLocalSyncEvent();
-      return newStatus;
     } else {
       const insertPayload = {
         user_id: userId,
         type,
         media_url: mediaUrl,
-        caption,
-        text_content: textContent,
+        caption: finalCaption,
+        text_content: finalTxt,
         bg_color: bgColor,
         text_style: textStyle,
         privacy,
@@ -127,7 +176,82 @@ export const statusService = {
         .single();
 
       if (error) throw error;
-      return data;
+      createdStatus = data;
+    }
+
+    // Trigger mention notifications via DMs
+    if (createdStatus && metadata.mentions && metadata.mentions.length > 0) {
+      // Normalize createdStatus payload for notifyMentions
+      const normalizedStatus = {
+        id: createdStatus.id,
+        type: createdStatus.type,
+        mediaUrl: createdStatus.media_url,
+        textContent: createdStatus.text_content,
+        bgColor: createdStatus.bg_color,
+        textStyle: createdStatus.text_style,
+        caption: createdStatus.caption,
+      };
+      const mentionedIds = metadata.mentions.map((m) => m.id);
+      this.notifyMentions(normalizedStatus, userId, mentionedIds);
+    }
+
+    return createdStatus;
+  },
+
+  /**
+   * Send DM notification when users are mentioned in a status update.
+   */
+  async notifyMentions(status, currentUserId, mentionedIds) {
+    if (!mentionedIds || mentionedIds.length === 0) return;
+
+    for (const peerId of mentionedIds) {
+      if (peerId === currentUserId) continue;
+      try {
+        const peerProfile = await profileService.getProfileById(peerId);
+        if (peerProfile) {
+          const chatObj = await chatService.createOrOpenOneToOneChat(
+            currentUserId,
+            peerProfile,
+          );
+
+          let previewText = "status update";
+          if (status.type === "text") {
+            const { content } = this.decodeMetadata(status.textContent);
+            previewText = `"${content}"`;
+          } else {
+            const { content } = this.decodeMetadata(status.caption);
+            previewText = content ? `"${content}"` : "Photo status";
+          }
+
+          const messageText = `Mentioned you in a status update: ${previewText}`;
+
+          const replyToMetadata = {
+            messageId: "status-" + status.id,
+            text: messageText,
+            senderName: "Status Update",
+            mediaUrl: status.mediaUrl,
+            type: status.type,
+            isStatus: true,
+            statusId: status.id,
+            statusType: status.type,
+            statusMediaUrl: status.mediaUrl,
+            statusTextContent: status.textContent,
+            statusBgColor: status.bgColor,
+            statusTextStyle: status.textStyle,
+            statusCaption: status.caption,
+          };
+
+          await messageService.sendMessage({
+            conversationId: chatObj.id,
+            senderId: currentUserId,
+            text: messageText,
+            type: "text",
+            replyTo: replyToMetadata,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to notify mentioned user:", peerId, e);
+      }
     }
   },
 
@@ -141,61 +265,102 @@ export const statusService = {
     const contactIds = await this.getUserContactIds(currentUserId);
 
     if (useLocalFallback) {
-      const localStatuses = JSON.parse(localStorage.getItem("wa_local_statuses") || "[]");
-      const localViews = JSON.parse(localStorage.getItem("wa_local_status_views") || "[]");
-      
+      const localStatuses = JSON.parse(
+        localStorage.getItem("wa_local_statuses") || "[]",
+      );
+      const localViews = JSON.parse(
+        localStorage.getItem("wa_local_status_views") || "[]",
+      );
+
       // Filter out expired statuses
-      const activeStatuses = localStatuses.filter((s) => new Date(s.expires_at) > new Date());
+      const activeStatuses = localStatuses.filter(
+        (s) => new Date(s.expires_at) > new Date(),
+      );
       localStorage.setItem("wa_local_statuses", JSON.stringify(activeStatuses));
 
       const visibleStatuses = activeStatuses.filter((status) => {
         const statusUserId = status.user_id;
         if (statusUserId === currentUserId) return true;
-        
+
         const privacy = status.privacy || "contacts";
         const privacyList = status.privacy_list || [];
-        
+
         if (privacy === "everyone") return true;
         if (privacy === "contacts") return contactIds.includes(statusUserId);
         if (privacy === "selected") return privacyList.includes(currentUserId);
-        if (privacy === "hide") return contactIds.includes(statusUserId) && !privacyList.includes(currentUserId);
-        
+        if (privacy === "hide")
+          return (
+            contactIds.includes(statusUserId) &&
+            !privacyList.includes(currentUserId)
+          );
+
         return false;
       });
 
       // Get user profiles
-      // Fetch all unique profiles from database so that statuses display valid user info
       const uniqueUserIds = [...new Set(visibleStatuses.map((s) => s.user_id))];
       const profilesMap = {};
-      
+
       for (const uid of uniqueUserIds) {
         if (uid === currentUserId) {
-          const { data: currentProfile } = await supabase.from("profiles").select("*").eq("id", uid).single();
-          profilesMap[uid] = currentProfile || { id: uid, name: "Me", avatar: "" };
+          const { data: currentProfile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", uid)
+            .single();
+          profilesMap[uid] = currentProfile || {
+            id: uid,
+            name: "Me",
+            avatar: "",
+          };
         } else {
           const profile = await profileService.getProfileById(uid);
-          profilesMap[uid] = profile || { id: uid, name: "Contact", avatar: "" };
+          profilesMap[uid] = profile || {
+            id: uid,
+            name: "Contact",
+            avatar: "",
+          };
         }
       }
 
       // Group statuses by user
       const groups = {};
-      
+
       visibleStatuses.forEach((status) => {
         const uid = status.user_id;
-        const profile = profilesMap[uid] || { id: uid, name: "Contact", avatar: "" };
-        
-        // Find views for this status
+        const profile = profilesMap[uid] || {
+          id: uid,
+          name: "Contact",
+          avatar: "",
+        };
+
+        // Find views for this status, parsing votes or answers
         const viewsForStatus = localViews
           .filter((v) => v.status_id === status.id)
-          .map((v) => ({
-            viewerId: v.viewer_id,
-            name: v.name,
-            avatar: v.avatar,
-            reaction: v.reaction,
-            replyText: v.reply_text,
-            createdAt: v.created_at,
-          }));
+          .map((v) => {
+            let voteOptionId = null;
+            let questionAnswer = null;
+            let cleanReplyText = v.reply_text;
+
+            if (v.reply_text && v.reply_text.startsWith("|||VOTE:")) {
+              voteOptionId = v.reply_text.substring(8);
+              cleanReplyText = null;
+            } else if (v.reply_text && v.reply_text.startsWith("|||ANSWER:")) {
+              questionAnswer = v.reply_text.substring(10);
+              cleanReplyText = null;
+            }
+
+            return {
+              viewerId: v.viewer_id,
+              name: v.name,
+              avatar: v.avatar,
+              reaction: v.reaction,
+              replyText: cleanReplyText,
+              voteOptionId,
+              questionAnswer,
+              createdAt: v.created_at,
+            };
+          });
 
         const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
 
@@ -230,8 +395,10 @@ export const statusService = {
       // Format groups
       Object.keys(groups).forEach((uid) => {
         // Sort statuses inside the group chronologically (earliest first)
-        groups[uid].statuses.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        
+        groups[uid].statuses.sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        );
+
         if (uid !== currentUserId) {
           groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
         } else {
@@ -254,28 +421,32 @@ export const statusService = {
       const visibleStatuses = statusesData.filter((status) => {
         const statusUserId = status.user_id;
         if (statusUserId === currentUserId) return true;
-        
+
         const privacy = status.privacy || "contacts";
         const privacyList = status.privacy_list || [];
-        
+
         if (privacy === "everyone") return true;
         if (privacy === "contacts") return contactIds.includes(statusUserId);
         if (privacy === "selected") return privacyList.includes(currentUserId);
-        if (privacy === "hide") return contactIds.includes(statusUserId) && !privacyList.includes(currentUserId);
-        
+        if (privacy === "hide")
+          return (
+            contactIds.includes(statusUserId) &&
+            !privacyList.includes(currentUserId)
+          );
+
         return false;
       });
 
       // 2. Fetch views for these active statuses
       const statusIds = visibleStatuses.map((s) => s.id);
       let viewsData = [];
-      
+
       if (statusIds.length > 0) {
         const { data: fetchedViews, error: viewsError } = await supabase
           .from("status_views")
           .select("*, profiles:viewer_id(name, avatar)")
           .in("status_id", statusIds);
-        
+
         if (!viewsError && fetchedViews) {
           viewsData = fetchedViews;
         }
@@ -287,12 +458,30 @@ export const statusService = {
         if (!viewsByStatus[view.status_id]) {
           viewsByStatus[view.status_id] = [];
         }
+
+        let voteOptionId = null;
+        let questionAnswer = null;
+        let cleanReplyText = view.reply_text;
+
+        if (view.reply_text && view.reply_text.startsWith("|||VOTE:")) {
+          voteOptionId = view.reply_text.substring(8);
+          cleanReplyText = null;
+        } else if (
+          view.reply_text &&
+          view.reply_text.startsWith("|||ANSWER:")
+        ) {
+          questionAnswer = view.reply_text.substring(10);
+          cleanReplyText = null;
+        }
+
         viewsByStatus[view.status_id].push({
           viewerId: view.viewer_id,
           name: view.profiles?.name || "Viewer",
           avatar: view.profiles?.avatar,
           reaction: view.reaction,
-          replyText: view.reply_text,
+          replyText: cleanReplyText,
+          voteOptionId,
+          questionAnswer,
           createdAt: view.created_at,
         });
       });
@@ -302,7 +491,11 @@ export const statusService = {
 
       visibleStatuses.forEach((status) => {
         const uid = status.user_id;
-        const profile = status.profiles || { id: uid, name: "Contact", avatar: "" };
+        const profile = status.profiles || {
+          id: uid,
+          name: "Contact",
+          avatar: "",
+        };
         const viewsForStatus = viewsByStatus[status.id] || [];
         const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
 
@@ -337,8 +530,10 @@ export const statusService = {
       // Re-evaluate groups
       Object.keys(groups).forEach((uid) => {
         // Sort chronologically
-        groups[uid].statuses.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        
+        groups[uid].statuses.sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        );
+
         if (uid !== currentUserId) {
           groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
         } else {
@@ -357,10 +552,12 @@ export const statusService = {
     await this.checkTableExists();
 
     if (useLocalFallback) {
-      const localViews = JSON.parse(localStorage.getItem("wa_local_status_views") || "[]");
-      
+      const localViews = JSON.parse(
+        localStorage.getItem("wa_local_status_views") || "[]",
+      );
+
       const alreadyViewed = localViews.some(
-        (v) => v.status_id === statusId && v.viewer_id === viewerId
+        (v) => v.status_id === statusId && v.viewer_id === viewerId,
       );
 
       if (!alreadyViewed) {
@@ -372,7 +569,11 @@ export const statusService = {
           .single();
 
         const newView = {
-          id: "view-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9),
+          id:
+            "view-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).substr(2, 9),
           status_id: statusId,
           viewer_id: viewerId,
           name: viewerProfile?.name || "Viewer",
@@ -383,7 +584,10 @@ export const statusService = {
         };
 
         localViews.push(newView);
-        localStorage.setItem("wa_local_status_views", JSON.stringify(localViews));
+        localStorage.setItem(
+          "wa_local_status_views",
+          JSON.stringify(localViews),
+        );
         this.triggerLocalSyncEvent();
       }
       return true;
@@ -397,11 +601,261 @@ export const statusService = {
         .select()
         .single();
 
-      if (error && error.code !== "23505") { // Ignore unique constraint violation
+      if (error && error.code !== "23505") {
+        // Ignore unique constraint violation
         console.warn("Error inserting status view:", error);
       }
       return data;
     }
+  },
+
+  /**
+   * Vote on a status poll. Saves optionId into the status view reply_text.
+   */
+  async voteOnStatusPoll(status, viewerId, optionId) {
+    await this.checkTableExists();
+    const statusId = status.id;
+    const votePayload = `|||VOTE:${optionId}`;
+
+    if (useLocalFallback) {
+      const localViews = JSON.parse(
+        localStorage.getItem("wa_local_status_views") || "[]",
+      );
+      let found = false;
+      const updatedViews = localViews.map((v) => {
+        if (v.status_id === statusId && v.viewer_id === viewerId) {
+          found = true;
+          return { ...v, reply_text: votePayload };
+        }
+        return v;
+      });
+
+      if (!found) {
+        const { data: viewerProfile } = await supabase
+          .from("profiles")
+          .select("name, avatar")
+          .eq("id", viewerId)
+          .single();
+
+        updatedViews.push({
+          id:
+            "view-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).substr(2, 9),
+          status_id: statusId,
+          viewer_id: viewerId,
+          name: viewerProfile?.name || "Viewer",
+          avatar: viewerProfile?.avatar || "",
+          reaction: null,
+          reply_text: votePayload,
+          created_at: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem(
+        "wa_local_status_views",
+        JSON.stringify(updatedViews),
+      );
+      this.triggerLocalSyncEvent();
+      return true;
+    } else {
+      const { data: existing } = await supabase
+        .from("status_views")
+        .select("id")
+        .eq("status_id", statusId)
+        .eq("viewer_id", viewerId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from("status_views")
+          .update({ reply_text: votePayload })
+          .eq("status_id", statusId)
+          .eq("viewer_id", viewerId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("status_views").insert({
+          status_id: statusId,
+          viewer_id: viewerId,
+          reply_text: votePayload,
+        });
+        if (error) throw error;
+      }
+      return true;
+    }
+  },
+
+  /**
+   * Submit an answer to a question card sticker.
+   */
+  async answerStatusQuestion(status, viewerId, answerText) {
+    await this.checkTableExists();
+    const statusId = status.id;
+    const answerPayload = `|||ANSWER:${answerText}`;
+
+    if (useLocalFallback) {
+      const localViews = JSON.parse(
+        localStorage.getItem("wa_local_status_views") || "[]",
+      );
+      let found = false;
+      const updatedViews = localViews.map((v) => {
+        if (v.status_id === statusId && v.viewer_id === viewerId) {
+          found = true;
+          return { ...v, reply_text: answerPayload };
+        }
+        return v;
+      });
+
+      if (!found) {
+        const { data: viewerProfile } = await supabase
+          .from("profiles")
+          .select("name, avatar")
+          .eq("id", viewerId)
+          .single();
+
+        updatedViews.push({
+          id:
+            "view-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).substr(2, 9),
+          status_id: statusId,
+          viewer_id: viewerId,
+          name: viewerProfile?.name || "Viewer",
+          avatar: viewerProfile?.avatar || "",
+          reaction: null,
+          reply_text: answerPayload,
+          created_at: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem(
+        "wa_local_status_views",
+        JSON.stringify(updatedViews),
+      );
+      this.triggerLocalSyncEvent();
+    } else {
+      const { data: existing } = await supabase
+        .from("status_views")
+        .select("id")
+        .eq("status_id", statusId)
+        .eq("viewer_id", viewerId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("status_views")
+          .update({ reply_text: answerPayload })
+          .eq("status_id", statusId)
+          .eq("viewer_id", viewerId);
+      } else {
+        await supabase.from("status_views").insert({
+          status_id: statusId,
+          viewer_id: viewerId,
+          reply_text: answerPayload,
+        });
+      }
+    }
+
+    // Also send DM notification to creator with the question and reply
+    try {
+      const ownerId = status.userId;
+      const ownerProfile = await profileService.getProfileById(ownerId);
+      if (ownerProfile) {
+        const chatObj = await chatService.createOrOpenOneToOneChat(
+          viewerId,
+          ownerProfile,
+        );
+        const rawContent =
+          status.type === "text" ? status.textContent : status.caption;
+        const { metadata } = this.decodeMetadata(rawContent);
+        const questionPrompt = metadata.question?.prompt || "Question";
+        const messageText = `Answered your status question "${questionPrompt}": "${answerText}"`;
+
+        const replyToMetadata = {
+          messageId: "status-" + statusId,
+          text: messageText,
+          senderName: ownerProfile.name,
+          mediaUrl: status.mediaUrl,
+          type: status.type,
+          isStatus: true,
+          statusId: status.id,
+          statusType: status.type,
+          statusMediaUrl: status.mediaUrl,
+          statusTextContent: status.textContent,
+          statusBgColor: status.bgColor,
+          statusTextStyle: status.textStyle,
+          statusCaption: status.caption,
+        };
+
+        await messageService.sendMessage({
+          conversationId: chatObj.id,
+          senderId: viewerId,
+          text: messageText,
+          type: "text",
+          replyTo: replyToMetadata,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to send status question answer DM:", e);
+    }
+  },
+
+  /**
+   * Edit a status text content or media caption. Preserves existing metadata.
+   */
+  async editStatus(statusId, newText, type) {
+    await this.checkTableExists();
+
+    let existingMetadata = {};
+    if (useLocalFallback) {
+      const localStatuses = JSON.parse(
+        localStorage.getItem("wa_local_statuses") || "[]",
+      );
+      const found = localStatuses.find((s) => s.id === statusId);
+      if (found) {
+        const rawContent = type === "text" ? found.text_content : found.caption;
+        const decoded = this.decodeMetadata(rawContent);
+        existingMetadata = decoded.metadata;
+
+        const finalTxt = this.encodeMetadata(newText, existingMetadata);
+        if (type === "text") {
+          found.text_content = finalTxt;
+        } else {
+          found.caption = finalTxt;
+        }
+        localStorage.setItem(
+          "wa_local_statuses",
+          JSON.stringify(localStatuses),
+        );
+        this.triggerLocalSyncEvent();
+        return true;
+      }
+    } else {
+      const { data: found, error: fetchErr } = await supabase
+        .from("statuses")
+        .select("text_content, caption")
+        .eq("id", statusId)
+        .single();
+
+      if (!fetchErr && found) {
+        const rawContent = type === "text" ? found.text_content : found.caption;
+        const decoded = this.decodeMetadata(rawContent);
+        existingMetadata = decoded.metadata;
+
+        const finalTxt = this.encodeMetadata(newText, existingMetadata);
+        const updatePayload =
+          type === "text" ? { text_content: finalTxt } : { caption: finalTxt };
+
+        const { error } = await supabase
+          .from("statuses")
+          .update(updatePayload)
+          .eq("id", statusId);
+
+        if (error) throw error;
+        return true;
+      }
+    }
+    return false;
   },
 
   /**
@@ -415,34 +869,83 @@ export const statusService = {
 
     // 1. Update reaction in status_views
     if (useLocalFallback) {
-      const localViews = JSON.parse(localStorage.getItem("wa_local_status_views") || "[]");
+      const localViews = JSON.parse(
+        localStorage.getItem("wa_local_status_views") || "[]",
+      );
+      let found = false;
       const updatedViews = localViews.map((v) => {
         if (v.status_id === statusId && v.viewer_id === currentUserId) {
+          found = true;
           return { ...v, reaction: emoji };
         }
         return v;
       });
-      localStorage.setItem("wa_local_status_views", JSON.stringify(updatedViews));
+
+      if (!found) {
+        const { data: viewerProfile } = await supabase
+          .from("profiles")
+          .select("name, avatar")
+          .eq("id", currentUserId)
+          .single();
+
+        updatedViews.push({
+          id:
+            "view-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).substr(2, 9),
+          status_id: statusId,
+          viewer_id: currentUserId,
+          name: viewerProfile?.name || "Viewer",
+          avatar: viewerProfile?.avatar || "",
+          reaction: emoji,
+          reply_text: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem(
+        "wa_local_status_views",
+        JSON.stringify(updatedViews),
+      );
       this.triggerLocalSyncEvent();
     } else {
-      const { error } = await supabase
+      const { data: existing } = await supabase
         .from("status_views")
-        .update({ reaction: emoji })
+        .select("id")
         .eq("status_id", statusId)
-        .eq("viewer_id", currentUserId);
+        .eq("viewer_id", currentUserId)
+        .maybeSingle();
 
-      if (error) console.warn("Failed to save status reaction:", error);
+      if (existing) {
+        const { error } = await supabase
+          .from("status_views")
+          .update({ reaction: emoji })
+          .eq("status_id", statusId)
+          .eq("viewer_id", currentUserId);
+        if (error) console.warn("Failed to save status reaction:", error);
+      } else {
+        const { error } = await supabase.from("status_views").insert({
+          status_id: statusId,
+          viewer_id: currentUserId,
+          reaction: emoji,
+        });
+        if (error) console.warn("Failed to save status reaction:", error);
+      }
     }
 
     // 2. Send Direct Message to the user as a status interaction
     try {
       const ownerProfile = await profileService.getProfileById(ownerId);
       if (ownerProfile) {
-        const chatObj = await chatService.createOrOpenOneToOneChat(currentUserId, ownerProfile);
-        
+        const chatObj = await chatService.createOrOpenOneToOneChat(
+          currentUserId,
+          ownerProfile,
+        );
+
         let statusPreviewText = "status update";
         if (status.type === "text") {
-          statusPreviewText = `"${status.textContent}"`;
+          const { content } = this.decodeMetadata(status.textContent);
+          statusPreviewText = `"${content}"`;
         } else if (status.type === "image") {
           statusPreviewText = "Photo status";
         } else if (status.type === "video") {
@@ -465,9 +968,9 @@ export const statusService = {
           statusBgColor: status.bgColor,
           statusTextStyle: status.textStyle,
           statusCaption: status.caption,
-          emojiReaction: emoji
+          emojiReaction: emoji,
         };
-        
+
         await messageService.sendMessage({
           conversationId: chatObj.id,
           senderId: currentUserId,
@@ -492,44 +995,97 @@ export const statusService = {
 
     // 1. Update reply text in status_views
     if (useLocalFallback) {
-      const localViews = JSON.parse(localStorage.getItem("wa_local_status_views") || "[]");
+      const localViews = JSON.parse(
+        localStorage.getItem("wa_local_status_views") || "[]",
+      );
+      let found = false;
       const updatedViews = localViews.map((v) => {
         if (v.status_id === statusId && v.viewer_id === currentUserId) {
+          found = true;
           return { ...v, reply_text: replyText };
         }
         return v;
       });
-      localStorage.setItem("wa_local_status_views", JSON.stringify(updatedViews));
+
+      if (!found) {
+        const { data: viewerProfile } = await supabase
+          .from("profiles")
+          .select("name, avatar")
+          .eq("id", currentUserId)
+          .single();
+
+        updatedViews.push({
+          id:
+            "view-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).substr(2, 9),
+          status_id: statusId,
+          viewer_id: currentUserId,
+          name: viewerProfile?.name || "Viewer",
+          avatar: viewerProfile?.avatar || "",
+          reaction: null,
+          reply_text: replyText,
+          created_at: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem(
+        "wa_local_status_views",
+        JSON.stringify(updatedViews),
+      );
       this.triggerLocalSyncEvent();
     } else {
-      const { error } = await supabase
+      const { data: existing } = await supabase
         .from("status_views")
-        .update({ reply_text: replyText })
+        .select("id")
         .eq("status_id", statusId)
-        .eq("viewer_id", currentUserId);
+        .eq("viewer_id", currentUserId)
+        .maybeSingle();
 
-      if (error) console.warn("Failed to save status reply text:", error);
+      if (existing) {
+        const { error } = await supabase
+          .from("status_views")
+          .update({ reply_text: replyText })
+          .eq("status_id", statusId)
+          .eq("viewer_id", currentUserId);
+        if (error) console.warn("Failed to save status reply text:", error);
+      } else {
+        const { error } = await supabase.from("status_views").insert({
+          status_id: statusId,
+          viewer_id: currentUserId,
+          reply_text: replyText,
+        });
+        if (error) console.warn("Failed to save status reply text:", error);
+      }
     }
 
     // 2. Send Direct Message to the user containing the reply text and status metadata context
     try {
       const ownerProfile = await profileService.getProfileById(ownerId);
       if (ownerProfile) {
-        const chatObj = await chatService.createOrOpenOneToOneChat(currentUserId, ownerProfile);
-        
+        const chatObj = await chatService.createOrOpenOneToOneChat(
+          currentUserId,
+          ownerProfile,
+        );
+
         let statusDescription = "Status";
         let statusMediaUrl = status.mediaUrl;
-        
+
         if (status.type === "text") {
-          statusDescription = `Status: "${status.textContent}"`;
+          const { content } = this.decodeMetadata(status.textContent);
+          statusDescription = `Status: "${content}"`;
         } else if (status.type === "image") {
-          statusDescription = status.caption ? `Photo Status: "${status.caption}"` : "Photo Status";
+          const { content } = this.decodeMetadata(status.caption);
+          statusDescription = content
+            ? `Photo Status: "${content}"`
+            : "Photo Status";
         } else if (status.type === "video") {
-          statusDescription = status.caption ? `Video Status: "${status.caption}"` : "Video Status";
+          const { content } = this.decodeMetadata(status.caption);
+          statusDescription = content
+            ? `Video Status: "${content}"`
+            : "Video Status";
         }
 
-        // WhatsApp Web sends a quoted message containing the status preview when replying
-        // Let's model this using replyTo metadata context
         const replyToMetadata = {
           messageId: "status-" + statusId,
           text: statusDescription,
@@ -566,7 +1122,9 @@ export const statusService = {
     await this.checkTableExists();
 
     if (useLocalFallback) {
-      const localStatuses = JSON.parse(localStorage.getItem("wa_local_statuses") || "[]");
+      const localStatuses = JSON.parse(
+        localStorage.getItem("wa_local_statuses") || "[]",
+      );
       const filtered = localStatuses.filter((s) => s.id !== statusId);
       localStorage.setItem("wa_local_statuses", JSON.stringify(filtered));
       this.triggerLocalSyncEvent();
@@ -596,12 +1154,12 @@ export const statusService = {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "statuses" },
-        () => onUpdate()
+        () => onUpdate(),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "status_views" },
-        () => onUpdate()
+        () => onUpdate(),
       )
       .subscribe();
 

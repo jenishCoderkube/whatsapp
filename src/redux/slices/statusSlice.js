@@ -1,5 +1,16 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+const getInitialMutedUsers = () => {
+  if (typeof window !== "undefined") {
+    try {
+      return JSON.parse(localStorage.getItem("wa_muted_status_users") || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
+
 const initialState = {
   statuses: [], // List of status groups [{ userId, name, avatar, statuses: [...], hasUnseen: boolean }]
   myStatuses: [], // List of status items uploaded by current user
@@ -11,6 +22,7 @@ const initialState = {
   uploadProgress: null,
   privacy: "contacts", // 'everyone' | 'contacts' | 'selected' | 'hide'
   privacyList: [], // List of UUIDs for selective privacy
+  mutedUsers: getInitialMutedUsers(), // Array of user IDs whose statuses are muted
 };
 
 const statusSlice = createSlice({
@@ -56,6 +68,22 @@ const statusSlice = createSlice({
     },
     setLoading(state, action) {
       state.loading = action.payload;
+    },
+    muteUser(state, action) {
+      const userId = action.payload;
+      if (!state.mutedUsers.includes(userId)) {
+        state.mutedUsers.push(userId);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("wa_muted_status_users", JSON.stringify(state.mutedUsers));
+        }
+      }
+    },
+    unmuteUser(state, action) {
+      const userId = action.payload;
+      state.mutedUsers = state.mutedUsers.filter((id) => id !== userId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("wa_muted_status_users", JSON.stringify(state.mutedUsers));
+      }
     },
     markStatusAsSeenLocal(state, action) {
       const { statusId, currentUserId } = action.payload;
@@ -148,6 +176,8 @@ export const {
   setUploadProgress,
   setPrivacySettings,
   setLoading,
+  muteUser,
+  unmuteUser,
   markStatusAsSeenLocal,
   updateStatusReactionLocal,
 } = statusSlice.actions;

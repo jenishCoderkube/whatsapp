@@ -4,7 +4,7 @@ import React from "react";
 import { Avatar } from "../ui/Avatar";
 import { cn } from "../../utils/cn";
 
-export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", className, uid }) {
+export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", className, uid, isMuted = false }) {
   const sizes = {
     md: { box: 48, center: 24, radius: 21, strokeWidth: 2, avatarSize: "h-9 w-9 text-xs" },
     lg: { box: 56, center: 28, radius: 25, strokeWidth: 2.5, avatarSize: "h-11 w-11 text-sm" },
@@ -46,8 +46,12 @@ export function StatusAvatar({ src, fallback = "?", statuses = [], size = "lg", 
         viewBox={`0 0 ${box} ${box}`}
       >
         {statuses.map((status, index) => {
-          // Determine color based on seen state
-          const strokeColor = status.isSeen ? "stroke-wa-muted/40" : "stroke-wa-primary";
+          // Determine color based on seen and muted state
+          const strokeColor = isMuted 
+            ? "stroke-wa-muted/20" 
+            : status.isSeen 
+              ? "stroke-wa-muted/40" 
+              : "stroke-wa-primary";
           
           // Dash calculations
           const dashArray = `${arcLength} ${circumference - arcLength}`;
