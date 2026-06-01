@@ -148,5 +148,19 @@ export const indexedDBService = {
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = (e) => reject(e.target.error);
     });
+  },
+
+  async clearAllData() {
+    const db = await this.initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(["pending_messages", "pending_files", "drafts"], "readwrite");
+      
+      transaction.objectStore("pending_messages").clear();
+      transaction.objectStore("pending_files").clear();
+      transaction.objectStore("drafts").clear();
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = (e) => reject(e.target.error);
+    });
   }
 };

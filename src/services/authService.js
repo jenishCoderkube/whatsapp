@@ -142,49 +142,66 @@ export const authService = {
         // Clean up linked device from metadata before signing out
         try {
           const currentDeviceId = localStorage.getItem("wa_device_id");
-          if (currentDeviceId) {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              let linkedDevices = user.user_metadata?.linked_devices || [];
-              linkedDevices = linkedDevices.filter(d => d.id !== currentDeviceId);
-              await supabase.auth.updateUser({
-                data: { linked_devices: linkedDevices }
-              });
+          if (currentDeviceId && session.user) {
+            const user = session.user;
+            let linkedDevices = user.user_metadata?.linked_devices || [];
+            linkedDevices = linkedDevices.filter(d => d.id !== currentDeviceId);
 
-              // Broadcast updated list to other sessions
-              const channel = supabase.channel(`auth-session:${userId}`);
-              await new Promise((resolve) => {
-                channel.subscribe(async (status) => {
-                  if (status === "SUBSCRIBED") {
-                    await channel.send({
-                      type: "broadcast",
-                      event: "session-list-updated",
-                      payload: { devices: linkedDevices }
+            // Wrap metadata updates and broadcasts in a Promise.race to avoid rate limit blocks
+            await Promise.race([
+              (async () => {
+                try {
+                  await supabase.auth.updateUser({
+                    data: { linked_devices: linkedDevices }
+                  });
+
+                  // Broadcast updated list to other sessions
+                  const channel = supabase.channel(`auth-session:${userId}`);
+                  await new Promise((resolve) => {
+                    channel.subscribe(async (status) => {
+                      if (status === "SUBSCRIBED") {
+                        await channel.send({
+                          type: "broadcast",
+                          event: "session-list-updated",
+                          payload: { devices: linkedDevices }
+                        });
+                        setTimeout(resolve, 300);
+                      } else {
+                        resolve();
+                      }
                     });
-                    setTimeout(resolve, 300);
-                  } else {
-                    resolve();
-                  }
-                });
-              });
-            }
+                  });
+                } catch (updateErr) {
+                  console.warn("Linked devices metadata update failed:", updateErr);
+                }
+              })(),
+              new Promise((resolve) => setTimeout(resolve, 1500)) // 1.5 second timeout fallback
+            ]);
           }
         } catch (metadataErr) {
           console.warn("Failed to remove device from linked_devices during logout:", metadataErr);
         }
 
-        await supabase
-          .from("profiles")
-          .update({ online: false, last_seen: new Date().toISOString() })
-          .eq("id", userId);
+        try {
+          await supabase
+            .from("profiles")
+            .update({ online: false, last_seen: new Date().toISOString() })
+            .eq("id", userId);
+        } catch (dbErr) {
+          console.warn("Failed to update profile online status:", dbErr);
+        }
       }
-
-      await supabase.auth.signOut();
-      return { success: true };
     } catch (error) {
-      console.error("Signout error:", error);
-      return { success: false };
+      console.error("Signout preparation error:", error);
+    } finally {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.error("Supabase signOut error:", e);
+      }
+      await this.clearLocalSessionData();
     }
+    return { success: true };
   },
 
   /**
@@ -200,47 +217,109 @@ export const authService = {
         const userId = session.user.id;
 
         // 1. Clear the metadata
-        await supabase.auth.updateUser({
-          data: { linked_devices: [] }
-        });
+        try {
+          await supabase.auth.updateUser({
+            data: { linked_devices: [] }
+          });
+        } catch (err) {
+          console.warn("Failed to clear linked devices metadata:", err);
+        }
 
         // 2. Update online status in database profiles
-        await supabase
-          .from("profiles")
-          .update({ online: false, last_seen: new Date().toISOString() })
-          .eq("id", userId);
+        try {
+          await supabase
+            .from("profiles")
+            .update({ online: false, last_seen: new Date().toISOString() })
+            .eq("id", userId);
+        } catch (err) {
+          console.warn("Failed to update profile status:", err);
+        }
 
         // 3. Broadcast the realtime logout event with self: false and a 800ms socket flush delay
-        const channel = supabase.channel(`auth-session:${userId}`, {
-          config: { broadcast: { self: false } }
-        });
-        
-        await new Promise((resolve) => {
-          channel.subscribe(async (status) => {
-            if (status === "SUBSCRIBED") {
-              await channel.send({
-                type: "broadcast",
-                event: "logout-all",
-                payload: { userId },
-              });
-              // Wait 800ms to guarantee WebSocket packet is fully flushed before connection teardown
-              setTimeout(resolve, 800);
-            } else {
-              resolve();
-            }
+        try {
+          const channel = supabase.channel(`auth-session:${userId}`, {
+            config: { broadcast: { self: false } }
           });
-        });
-
-        // 4. Perform native global signOut to invalidate all tokens server-side
-        await supabase.auth.signOut({ scope: "global" });
-      } else {
-        await supabase.auth.signOut({ scope: "global" });
+          
+          await new Promise((resolve) => {
+            channel.subscribe(async (status) => {
+              if (status === "SUBSCRIBED") {
+                await channel.send({
+                  type: "broadcast",
+                  event: "logout-all",
+                  payload: { userId },
+                });
+                // Wait 800ms to guarantee WebSocket packet is fully flushed before connection teardown
+                setTimeout(resolve, 800);
+              } else {
+                resolve();
+              }
+            });
+          });
+        } catch (err) {
+          console.warn("Failed to broadcast logout-all event:", err);
+        }
       }
-
-      return { success: true };
     } catch (error) {
-      console.error("Global signout error:", error);
-      return { success: false };
+      console.error("Global signout preparation error:", error);
+    } finally {
+      try {
+        await supabase.auth.signOut({ scope: "global" });
+      } catch (e) {
+        console.error("Supabase signOut global error:", e);
+      }
+      await this.clearLocalSessionData();
+    }
+    return { success: true };
+  },
+
+  /**
+   * Clear all local session cache, tokens, storage, cookies, and IndexedDB database.
+   */
+  async clearLocalSessionData() {
+    if (typeof window === "undefined") return;
+
+    // 1. Clear all cookies
+    try {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i];
+        const eqPos = cookie.indexOf("=");
+        const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=" + window.location.hostname;
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
+      }
+    } catch (e) {
+      console.warn("Failed to clear cookies:", e);
+    }
+
+    // 2. Clear IndexedDB
+    try {
+      const { indexedDBService } = await import("./indexedDBService");
+      await indexedDBService.clearAllData();
+    } catch (e) {
+      console.warn("Failed to clear IndexedDB data:", e);
+    }
+
+    // 3. Clear sessionStorage
+    try {
+      sessionStorage.clear();
+    } catch (e) {
+      console.warn("Failed to clear sessionStorage:", e);
+    }
+
+    // 4. Clear localStorage (preserving non-sensitive preferences)
+    try {
+      const theme = localStorage.getItem("wa_theme");
+      const lang = localStorage.getItem("language_preference");
+      const deviceId = localStorage.getItem("wa_device_id");
+      localStorage.clear();
+      if (theme) localStorage.setItem("wa_theme", theme);
+      if (lang) localStorage.setItem("language_preference", lang);
+      if (deviceId) localStorage.setItem("wa_device_id", deviceId);
+    } catch (e) {
+      console.warn("Failed to clear localStorage:", e);
     }
   },
 

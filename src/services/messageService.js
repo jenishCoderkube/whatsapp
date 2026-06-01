@@ -1,6 +1,8 @@
 import { supabase } from "../lib/supabaseClient";
 import { parseMessageText, encodeMessageText } from "../utils/messageParser";
 
+const activeStatusUpdates = new Map();
+
 export const messageService = {
   /**
    * Fetch chat window message history natively from Supabase implementing robust cursor-based pagination.
@@ -73,6 +75,9 @@ export const messageService = {
           senderName: msg.profiles?.name || "Member",
           senderAvatar: msg.profiles?.avatar,
           createdAt: msg.created_at,
+          receipts: msg.receipts || {},
+          deliveredAt: msg.delivered_at,
+          seenAt: msg.seen_at,
         };
       });
     } catch (error) {
@@ -269,6 +274,9 @@ export const messageService = {
         sender_id: newMsg.sender_id, // Normalized duplicate parity helper
         isOutgoing: true,
         createdAt: newMsg.created_at,
+        receipts: newMsg.receipts || {},
+        deliveredAt: newMsg.delivered_at,
+        seenAt: newMsg.seen_at,
       };
     } catch (error) {
       if (error.message === "OFFLINE_PENDING") throw error;
@@ -282,22 +290,43 @@ export const messageService = {
    * to guarantee no race conditions when multiple members fetch and acknowledge simultaneously.
    */
   async updateStatus(messageId, status, currentUserId) {
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
-      if (!messageId || !isUuid || !currentUserId) return;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+    if (!messageId || !isUuid || !currentUserId) return;
 
-      const { error } = await supabase.rpc("update_message_status", {
-        p_message_id: messageId,
-        p_status: status,
-        p_user_id: currentUserId
-      });
-
-      if (error) {
-        throw error;
+    const key = `${messageId}_${status}_${currentUserId}`;
+    const existing = activeStatusUpdates.get(key);
+    if (existing) {
+      if (existing instanceof Promise) {
+        return existing;
       }
-    } catch (e) {
-      console.warn("Delivery state RPC update interrupted:", e);
+      if (typeof existing === "number" && Date.now() - existing < 8000) {
+        return;
+      }
     }
+
+    const promise = (async () => {
+      try {
+        const { error } = await supabase.rpc("update_message_status", {
+          p_message_id: messageId,
+          p_status: status,
+          p_user_id: currentUserId
+        });
+
+        if (error) {
+          throw error;
+        }
+      } catch (e) {
+        console.warn("Delivery state RPC update interrupted:", e);
+      } finally {
+        activeStatusUpdates.set(key, Date.now());
+        setTimeout(() => {
+          activeStatusUpdates.delete(key);
+        }, 15000);
+      }
+    })();
+
+    activeStatusUpdates.set(key, promise);
+    return promise;
   },
 
   /**
@@ -309,58 +338,27 @@ export const messageService = {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
       if (!conversationId || !isUuid || !currentUserId) return;
 
-      // 1. Fetch group context
-      const { data: conv } = await supabase
-        .from("conversations")
-        .select("is_group, group_members_count")
-        .eq("id", conversationId)
-        .single();
-      
-      const isGroup = conv?.is_group;
-      const totalMembers = conv?.group_members_count || 2;
-      const targetCount = totalMembers - 1;
-
-      // 2. Fetch pending 'sent' messages targeting this user
-      const { data: pendingMsgs } = await supabase
+      // 1. Fetch all messages in the conversation not sent by currentUserId
+      const { data: convMsgs } = await supabase
         .from("messages")
-        .select("id, delivered_to, sender_id")
+        .select("id, receipts, sender_id")
         .eq("conversation_id", conversationId)
-        .neq("sender_id", currentUserId)
-        .eq("status", "sent");
-      
-      if (pendingMsgs && pendingMsgs.length > 0) {
-        for (const msg of pendingMsgs) {
-          const currentDeliveredTo = Array.isArray(msg.delivered_to) ? msg.delivered_to : [];
-          if (!currentDeliveredTo.includes(currentUserId)) {
-            const newList = [...currentDeliveredTo, currentUserId];
-            const isFullyDelivered = !isGroup || newList.length >= targetCount;
-            
-            await supabase
-              .from("messages")
-              .update({
-                delivered_to: newList,
-                ...(isFullyDelivered ? { status: "delivered", delivered_at: new Date().toISOString() } : {})
-              })
-              .eq("id", msg.id);
+        .neq("sender_id", currentUserId);
+
+      if (convMsgs && convMsgs.length > 0) {
+        // Filter messages that have not been delivered or read by currentUserId yet
+        const pendingMsgs = convMsgs.filter(msg => {
+          const receipts = msg.receipts || {};
+          const deliveredMap = receipts.delivered || {};
+          const readMap = receipts.read || {};
+          return !deliveredMap[currentUserId] && !readMap[currentUserId];
+        });
+
+        if (pendingMsgs.length > 0) {
+          for (const msg of pendingMsgs) {
+            await this.updateStatus(msg.id, "delivered", currentUserId);
           }
         }
-      }
-
-      // 3. Update conversation preview if needed
-      const { data: lastMsg } = await supabase
-        .from("messages")
-        .select("status, sender_id")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (lastMsg && lastMsg.status === "delivered") {
-        await supabase
-          .from("conversations")
-          .update({ last_message_status: "delivered" })
-          .eq("id", conversationId)
-          .eq("last_message_sender_id", lastMsg.sender_id);
       }
     } catch (e) {
       console.warn("Batch delivery update failed:", e);
@@ -382,21 +380,27 @@ export const messageService = {
       if (memberships && memberships.length > 0) {
         const convIds = memberships.map(m => m.conversation_id);
         
-        // Update all pending 'sent' messages targeting this user in these conversations
-        await supabase
+        // Fetch all messages in these conversations not sent by currentUserId
+        const { data: pendingMsgs } = await supabase
           .from("messages")
-          .update({ status: "delivered", delivered_at: new Date().toISOString() })
+          .select("id, receipts, sender_id")
           .in("conversation_id", convIds)
-          .neq("sender_id", currentUserId)
-          .eq("status", "sent");
+          .neq("sender_id", currentUserId);
 
-        // Sync conversation preview status fields
-        await supabase
-          .from("conversations")
-          .update({ last_message_status: "delivered" })
-          .in("id", convIds)
-          .neq("last_message_sender_id", currentUserId)
-          .eq("last_message_status", "sent");
+        if (pendingMsgs && pendingMsgs.length > 0) {
+          const messagesToDeliver = pendingMsgs.filter(msg => {
+            const receipts = msg.receipts || {};
+            const deliveredMap = receipts.delivered || {};
+            const readMap = receipts.read || {};
+            return !deliveredMap[currentUserId] && !readMap[currentUserId];
+          });
+
+          if (messagesToDeliver.length > 0) {
+            for (const msg of messagesToDeliver) {
+              await this.updateStatus(msg.id, "delivered", currentUserId);
+            }
+          }
+        }
       }
     } catch (err) {
       console.warn("Global delivery sync failure:", err);
@@ -412,55 +416,35 @@ export const messageService = {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
       if (!conversationId || !isUuid || !currentUserId) return;
 
-      // 1. Fetch conversation metadata for member count
-      const { data: conv } = await supabase
-        .from("conversations")
-        .select("is_group, group_members_count")
-        .eq("id", conversationId)
-        .single();
-      
-      const isGroup = conv?.is_group;
-      const totalMembers = conv?.group_members_count || 2;
-      const targetCount = totalMembers - 1;
-
-      // 2. Fetch unread messages targeting this user
-      const { data: unreadMsgs } = await supabase
+      // 1. Fetch all messages in the conversation not sent by currentUserId
+      const { data: convMsgs } = await supabase
         .from("messages")
-        .select("id, read_by, sender_id")
+        .select("id, receipts, sender_id")
         .eq("conversation_id", conversationId)
-        .neq("sender_id", currentUserId)
-        .neq("status", "read");
-      
-      if (unreadMsgs && unreadMsgs.length > 0) {
-        for (const msg of unreadMsgs) {
-          await this.updateStatus(msg.id, "read", currentUserId);
+        .neq("sender_id", currentUserId);
+
+      if (convMsgs && convMsgs.length > 0) {
+        // Filter messages that have not been read by currentUserId yet
+        const unreadMsgs = convMsgs.filter(msg => {
+          const receipts = msg.receipts || {};
+          const readMap = receipts.read || {};
+          return !readMap[currentUserId];
+        });
+
+        if (unreadMsgs.length > 0) {
+          for (const msg of unreadMsgs) {
+            await this.updateStatus(msg.id, "read", currentUserId);
+          }
         }
       }
 
-      // 3. Reset membership unread counter
+      // 2. Reset membership unread counter
       await supabase
         .from("conversation_members")
         .update({ unread_count: 0 })
         .eq("conversation_id", conversationId)
         .eq("user_id", currentUserId);
 
-      // 4. Update conversation preview if the last message was indeed read by everyone
-      // Note: This is an approximation for performance; in groups, the last message status only turns blue when everyone sees it.
-      const { data: lastMsg } = await supabase
-        .from("messages")
-        .select("status, sender_id")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (lastMsg && lastMsg.status === "read") {
-        await supabase
-          .from("conversations")
-          .update({ last_message_status: "read" })
-          .eq("id", conversationId)
-          .eq("last_message_sender_id", lastMsg.sender_id);
-      }
     } catch (e) {
       console.warn("Exception updating message read state flags:", e);
     }

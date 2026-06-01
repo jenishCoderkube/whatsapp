@@ -55,6 +55,9 @@ export const realtimeService = {
             senderId: row.sender_id,
             sender_id: row.sender_id,
             createdAt: row.created_at,
+            receipts: row.receipts || {},
+            deliveredAt: row.delivered_at,
+            seenAt: row.seen_at,
           };
 
           onGlobalEvent(payload.eventType, uniformMsg);

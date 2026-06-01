@@ -1131,7 +1131,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     )}
                     <div className="border-t border-wa-border my-1" />
                     <button onClick={handleDeleteForMe} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2"><Trash2 className="h-3.5 w-3.5 text-wa-muted" /><span>{t("chat.delete_for_me") || "Delete for me"}</span></button>
-                    {isMsgOutgoing && (
+                    {isMsgOutgoing && isGroup && (
                       <button onClick={handleInfoAction} className="w-full text-left px-3 py-2 hover:bg-wa-hover text-wa-text transition-colors flex items-center gap-2">
                         <svg viewBox="0 0 24 24" width="14" height="14" className="stroke-wa-muted stroke-2 fill-none inline shrink-0">
                           <circle cx="12" cy="12" r="10" />
@@ -1216,6 +1216,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
          msgA.senderAvatar === msgB.senderAvatar &&
          msgA.senderName === msgB.senderName &&
          JSON.stringify(msgA.reactions) === JSON.stringify(msgB.reactions) &&
+         JSON.stringify(msgA.receipts) === JSON.stringify(msgB.receipts) &&
          prevProps.isGroup === nextProps.isGroup &&
          prevProps.groupMembers?.length === nextProps.groupMembers?.length;
 
@@ -1267,7 +1268,7 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
       try {
         const { data, error } = await supabase
           .from("messages")
-          .select("receipts, status, delivered_at, seen_at, created_at, text, type, media_url, file_name")
+          .select("receipts, status, delivered_at, seen_at, created_at, text, type, media_url, file_name, sender_id")
           .eq("id", message.id)
           .single();
         if (error) throw error;
@@ -1318,117 +1319,119 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
   const receipts = currentMsg.receipts || {};
   const deliveredList = receipts.delivered || {};
   const readList = receipts.read || {};
+  const senderId = currentMsg.sender_id || currentMsg.senderId;
 
   // Render message preview
   const renderMsgPreview = () => {
     const previewMediaUrl = currentMsg.mediaUrl || currentMsg.media_url;
-    switch (currentMsg.type) {
-      case "image":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            {previewMediaUrl && (
-              <img src={previewMediaUrl} alt="Thumbnail" className="w-12 h-12 object-cover rounded-md" />
-            )}
-            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-              <Camera className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span>{t("chat.photo") || "Photo"}</span>
-            </span>
-          </div>
-        );
-      case "video":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <div className="relative w-12 h-12 bg-black rounded-md flex items-center justify-center shrink-0">
-              <Play className="h-4 w-4 text-white fill-white" />
-            </div>
-            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-              <Video className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span>{t("chat.video") || "Video"}</span>
-            </span>
-          </div>
-        );
-      case "voice":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-              <Mic className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span>{t("chat.voice_message") || "Voice Message"}</span>
-            </span>
-          </div>
-        );
-      case "file":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <FileText className="h-6 w-6 text-wa-primary shrink-0" />
-            <span className="text-xs text-wa-muted font-medium truncate max-w-[200px] flex items-center gap-1.5">
-              <Paperclip className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span className="truncate">{currentMsg.file_name || currentMsg.fileName || (t("chat.document") || "Document")}</span>
-            </span>
-          </div>
-        );
-      case "sticker":
-        return (
-          <div className="flex items-center justify-center p-2 rounded-lg border border-wa-border bg-transparent max-w-sm">
-            {previewMediaUrl ? (
-              <img src={previewMediaUrl} alt="Sticker" className="w-16 h-16 object-contain pointer-events-none" />
-            ) : (
-              <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-                <Palette className="h-4 w-4 shrink-0 text-wa-muted" />
-                <span>{t("chat.sticker") || "Sticker"}</span>
-              </span>
-            )}
-          </div>
-        );
-      case "gif":
-        return (
-          <div className="relative rounded-lg overflow-hidden border border-wa-border max-w-[120px] bg-black/5 flex items-center justify-center">
-            {previewMediaUrl ? (
-              <img src={previewMediaUrl} alt="GIF" className="w-full h-24 object-cover" />
-            ) : (
-              <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-                <Play className="h-4 w-4 shrink-0 text-wa-muted" />
-                <span>{t("chat.gif") || "GIF"}</span>
-              </span>
-            )}
-            <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
-              GIF
-            </div>
-          </div>
-        );
-      case "live_location":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span>{t("chat.live_location") || "Live Location"}</span>
-            </span>
-          </div>
-        );
-      case "location":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span>{t("chat.location") || "Location"}</span>
-            </span>
-          </div>
-        );
-      case "voice_call":
-        return (
-          <div className="flex items-center gap-3 bg-wa-hover p-3 rounded-lg border border-wa-border max-w-sm">
-            <span className="text-xs text-wa-muted font-medium flex items-center gap-1.5">
-              <Phone className="h-4 w-4 shrink-0 text-wa-muted" />
-              <span>{t("chat.call") || "Call"}</span>
-            </span>
-          </div>
-        );
-      default:
-        return (
-          <div className="bg-[#d9fdd3] dark:bg-[#005c4b] text-wa-text text-sm p-3.5 rounded-lg max-w-md shadow-xs border border-wa-border/20 whitespace-pre-wrap break-words leading-relaxed font-normal">
-            {currentMsg.text}
-          </div>
-        );
-    }
+    
+    return (
+      <div className="bg-wa-bubble-out text-wa-text rounded-lg rounded-tr-none px-3 py-2 shadow-xs max-w-full text-left relative">
+        <span className="absolute top-0 right-[-8px] w-0 h-0 border-solid border-t-[10px] border-r-[8px] border-t-wa-bubble-out border-r-transparent" />
+        
+        {(() => {
+          switch (currentMsg.type) {
+            case "image":
+            case "image_group": {
+              const isGroupedImage = currentMsg.type === "image_group";
+              const imageList = isGroupedImage 
+                ? (currentMsg.messages || []) 
+                : [{ id: currentMsg.id, mediaUrl: previewMediaUrl, text: currentMsg.text }];
+              return (
+                <div className="relative rounded-md mb-1 max-w-[260px] select-none">
+                  <div className={cn("grid gap-1", imageList.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
+                    {imageList.map((img, idx) => (
+                      <img 
+                        key={img.id || idx} 
+                        src={img.mediaUrl || img.media_url} 
+                        alt="Preview" 
+                        className="w-full h-24 object-cover rounded-md" 
+                      />
+                    ))}
+                  </div>
+                  {currentMsg.text && (
+                    <p className="text-xs sm:text-sm mt-1.5 break-words whitespace-pre-wrap">{currentMsg.text}</p>
+                  )}
+                </div>
+              );
+            }
+            case "video":
+              return (
+                <div className="relative rounded-md overflow-hidden mb-1 max-w-[260px]">
+                  <video src={previewMediaUrl} controls controlsList="nodownload" className="w-full max-h-40 object-cover rounded bg-black" />
+                  {currentMsg.text && (
+                    <p className="text-xs sm:text-sm mt-1.5 break-words whitespace-pre-wrap">{currentMsg.text}</p>
+                  )}
+                </div>
+              );
+            case "sticker":
+              return (
+                <div className="relative w-24 h-24 flex items-center justify-center select-none bg-transparent">
+                  <img src={previewMediaUrl} alt="Sticker" className="w-full h-full object-contain pointer-events-none" />
+                </div>
+              );
+            case "gif":
+              return (
+                <div className="relative rounded-md overflow-hidden mb-1 max-w-[200px] bg-black/5 flex flex-col justify-center">
+                  <img src={previewMediaUrl} alt="GIF" className="w-full max-h-40 object-cover rounded" />
+                  <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
+                    GIF
+                  </div>
+                  {currentMsg.text && (
+                    <p className="text-xs sm:text-sm mt-1.5 break-words whitespace-pre-wrap">{currentMsg.text}</p>
+                  )}
+                </div>
+              );
+            case "voice":
+              return (
+                <div className="flex items-center gap-2 py-1 min-w-[180px]">
+                  <div className="p-2 rounded-full bg-wa-primary/10 text-wa-primary shrink-0">
+                    <Mic className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="h-1.5 w-24 bg-wa-muted/30 rounded-full overflow-hidden">
+                      <div className="h-full w-1/3 bg-wa-primary rounded-full" />
+                    </div>
+                    <span className="text-[10px] text-wa-muted mt-1 block">Voice Message</span>
+                  </div>
+                </div>
+              );
+            case "file":
+              return (
+                <div className="flex items-center gap-3 p-2 rounded bg-black/5 border border-wa-border max-w-xs">
+                  <FileText className="h-5 w-5 text-wa-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-wa-text truncate">{currentMsg.file_name || currentMsg.fileName || currentMsg.text || "Document"}</p>
+                  </div>
+                </div>
+              );
+            case "live_location":
+            case "location":
+              return (
+                <div className="flex items-center gap-2 p-2 rounded bg-black/5 border border-wa-border max-w-xs">
+                  <MapPin className="h-5 w-5 text-wa-primary shrink-0" />
+                  <span className="text-xs text-wa-text font-medium">
+                    {currentMsg.type === "live_location" ? "Live Location" : "Location"}
+                  </span>
+                </div>
+              );
+            case "voice_call":
+              return (
+                <div className="flex items-center gap-2 p-2 rounded bg-black/5 max-w-xs">
+                  <Phone className="h-5 w-5 text-wa-primary shrink-0" />
+                  <span className="text-xs text-wa-text font-medium">Call</span>
+                </div>
+              );
+            default:
+              return (
+                <div className="text-sm whitespace-pre-wrap break-words leading-relaxed max-w-md font-normal">
+                  {currentMsg.text}
+                </div>
+              );
+          }
+        })()}
+      </div>
+    );
   };
 
   return (
@@ -1488,10 +1491,10 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
                   {t("chat.read_by") || "Read by"}
                 </span>
                 <div className="flex flex-col gap-2.5 pl-5">
-                  {members.filter(m => m.id !== currentMsg.senderId && readList[m.id]).length === 0 ? (
+                  {members.filter(m => m.id !== senderId && readList[m.id]).length === 0 ? (
                     <span className="text-xs text-wa-muted italic font-medium">{t("chat.no_one_yet") || "No one yet"}</span>
                   ) : (
-                    members.filter(m => m.id !== currentMsg.senderId && readList[m.id]).map(m => (
+                    members.filter(m => m.id !== senderId && readList[m.id]).map(m => (
                       <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-2 min-w-0">
                           <Avatar src={m.avatar} fallback={m.name[0]} size="sm" uid={m.id} />
@@ -1511,16 +1514,39 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
                   {t("chat.delivered_to") || "Delivered to"}
                 </span>
                 <div className="flex flex-col gap-2.5 pl-5">
-                  {members.filter(m => m.id !== currentMsg.senderId && deliveredList[m.id] && !readList[m.id]).length === 0 ? (
+                  {members.filter(m => m.id !== senderId && deliveredList[m.id] && !readList[m.id]).length === 0 ? (
                     <span className="text-xs text-wa-muted italic font-medium">{t("chat.no_one_yet") || "No one yet"}</span>
                   ) : (
-                    members.filter(m => m.id !== currentMsg.senderId && deliveredList[m.id] && !readList[m.id]).map(m => (
+                    members.filter(m => m.id !== senderId && deliveredList[m.id] && !readList[m.id]).map(m => (
                       <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-2 min-w-0">
                           <Avatar src={m.avatar} fallback={m.name[0]} size="sm" uid={m.id} />
                           <span className="font-semibold text-wa-text truncate max-w-[150px]">{m.name}</span>
                         </div>
                         <span className="text-wa-muted shrink-0 font-medium">{formatReceiptTime(deliveredList[m.id])}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Sent To List */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] text-wa-muted font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <Check className="h-4 w-4 text-wa-muted" />
+                  {t("chat.sent_to") || "Sent to"}
+                </span>
+                <div className="flex flex-col gap-2.5 pl-5">
+                  {members.filter(m => m.id !== senderId && !deliveredList[m.id] && !readList[m.id]).length === 0 ? (
+                    <span className="text-xs text-wa-muted italic font-medium">{t("chat.everyone_received") || "Everyone received"}</span>
+                  ) : (
+                    members.filter(m => m.id !== senderId && !deliveredList[m.id] && !readList[m.id]).map(m => (
+                      <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar src={m.avatar} fallback={m.name[0]} size="sm" uid={m.id} />
+                          <span className="font-semibold text-wa-text truncate max-w-[150px]">{m.name}</span>
+                        </div>
+                        <span className="text-wa-muted/60 shrink-0 font-medium italic">{t("chat.pending") || "Pending..."}</span>
                       </div>
                     ))
                   )}

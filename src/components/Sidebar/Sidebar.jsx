@@ -33,9 +33,16 @@ import { LockSettingsModal } from "../Lock/LockSettingsModal";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
 import { logout, updateProfile } from "../../redux/slices/authSlice";
-import { toggleTheme, setArchivedViewOpen, setWallpaperModal } from "../../redux/slices/uiSlice";
+import {
+  toggleTheme,
+  setArchivedViewOpen,
+  setWallpaperModal,
+} from "../../redux/slices/uiSlice";
 import { setStatusViewOpen } from "../../redux/slices/statusSlice";
-import { lockApp, setLockedChatsFolderUnlocked } from "../../redux/slices/lockSlice";
+import {
+  lockApp,
+  setLockedChatsFolderUnlocked,
+} from "../../redux/slices/lockSlice";
 import {
   setChats,
   appendChat,
@@ -62,7 +69,8 @@ import { formatSidebarDate } from "../../utils/dateUtils";
 
 export function Sidebar({ className }) {
   const dispatch = useAppDispatch();
-  const { t, locale, changeLanguage, availableLanguages, languageNames } = useTranslation();
+  const { t, locale, changeLanguage, availableLanguages, languageNames } =
+    useTranslation();
   const user = useAppSelector((state) => state.auth.user);
   const chats = useAppSelector((state) => state.chat.chats);
   const searchQuery = useAppSelector((state) => state.chat.searchQuery);
@@ -132,36 +140,45 @@ export function Sidebar({ className }) {
           dispatch(logout());
           dispatch(resetChats());
           dispatch(resetMessages());
+          try {
+            await authService.clearLocalSessionData();
+          } catch (e) {}
           window.location.href = "/login";
         };
 
         const handleListUpdated = (devices) => {
           if (!isSubscribed) return;
           const localId = localStorage.getItem("wa_device_id");
-          const formatted = devices.map(d => ({
+          const formatted = devices.map((d) => ({
             id: d.id,
             name: d.name,
             active: d.id === localId,
-            desc: d.id === localId
-              ? t("sidebar.active") || "Active"
-              : `Last active: ${new Date(d.lastActive).toLocaleString()} (Logged in: ${new Date(d.loginTime).toLocaleString()})`,
+            desc:
+              d.id === localId
+                ? t("sidebar.active") || "Active"
+                : `Last active: ${new Date(d.lastActive).toLocaleString()} (Logged in: ${new Date(d.loginTime).toLocaleString()})`,
             isBrowser: d.isBrowser,
             loginTime: d.loginTime,
             lastActive: d.lastActive,
             platform: d.platform,
-            browser: d.browser
+            browser: d.browser,
           }));
           setActiveDevices(formatted);
         };
 
         try {
-          const { sessionService } = await import("../../services/sessionService");
-          const { currentDeviceId: myId, activeDevices: list, loggedOut } = await sessionService.registerCurrentDevice(
+          const { sessionService } =
+            await import("../../services/sessionService");
+          const {
+            currentDeviceId: myId,
+            activeDevices: list,
+            loggedOut,
+          } = await sessionService.registerCurrentDevice(
             user.id,
             handleLocalLogout,
-            handleListUpdated
+            handleListUpdated,
           );
-          
+
           if (loggedOut) return;
 
           if (isSubscribed) {
@@ -170,9 +187,12 @@ export function Sidebar({ className }) {
           }
 
           // Update last active periodically (every 3 minutes)
-          intervalId = setInterval(() => {
-            sessionService.updateLastActive(user.id, myId);
-          }, 3 * 60 * 1000);
+          intervalId = setInterval(
+            () => {
+              sessionService.updateLastActive(user.id, myId);
+            },
+            3 * 60 * 1000,
+          );
 
           cleanupSession = sessionService;
         } catch (err) {
@@ -192,22 +212,27 @@ export function Sidebar({ className }) {
 
   const handleLogoutDevice = async (dev) => {
     const isCurrent = dev.id === currentDeviceId;
-    const confirmMsg = isCurrent 
-      ? t("sidebar.logout_device_confirm") 
-      : t("sidebar.logout_other_device_confirm", { device: dev.name }) || `Are you sure you want to log out ${dev.name}?`;
-      
+    const confirmMsg = isCurrent
+      ? t("sidebar.logout_device_confirm")
+      : t("sidebar.logout_other_device_confirm", { device: dev.name }) ||
+        `Are you sure you want to log out ${dev.name}?`;
+
     if (window.confirm(confirmMsg)) {
       try {
-        const { sessionService } = await import("../../services/sessionService");
+        const { sessionService } =
+          await import("../../services/sessionService");
         if (isCurrent) {
           await authService.logout();
           dispatch(logout());
           dispatch(resetChats());
           dispatch(resetMessages());
+          try {
+            await authService.clearLocalSessionData();
+          } catch (e) {}
           window.location.href = "/login";
         } else {
           await sessionService.logoutDevice(user.id, dev.id);
-          setActiveDevices(prev => prev.filter(d => d.id !== dev.id));
+          setActiveDevices((prev) => prev.filter((d) => d.id !== dev.id));
         }
       } catch (e) {
         console.warn("Logout device failed:", e);
@@ -216,11 +241,17 @@ export function Sidebar({ className }) {
   };
 
   const handleLogoutAllDevices = async () => {
-    if (window.confirm(t("sidebar.logout_all_devices_confirm") || "Are you sure you want to log out all other devices?")) {
+    if (
+      window.confirm(
+        t("sidebar.logout_all_devices_confirm") ||
+          "Are you sure you want to log out all other devices?",
+      )
+    ) {
       try {
-        const { sessionService } = await import("../../services/sessionService");
+        const { sessionService } =
+          await import("../../services/sessionService");
         await sessionService.logoutAllOtherDevices(user.id, currentDeviceId);
-        setActiveDevices(prev => prev.filter(d => d.active));
+        setActiveDevices((prev) => prev.filter((d) => d.active));
       } catch (e) {
         console.warn("Logout other devices failed:", e);
       }
@@ -228,17 +259,29 @@ export function Sidebar({ className }) {
   };
 
   const handleLogoutAllIncludingCurrent = async () => {
-    if (window.confirm(t("sidebar.logout_all_confirm") || "Are you sure you want to log out all devices, including this one?")) {
+    if (
+      window.confirm(
+        t("sidebar.logout_all_confirm") ||
+          "Are you sure you want to log out all devices, including this one?",
+      )
+    ) {
       try {
-        const { sessionService } = await import("../../services/sessionService");
+        const { sessionService } =
+          await import("../../services/sessionService");
         await sessionService.logoutAllDevices(user.id);
         await authService.logoutAllDevices();
       } catch (e) {
-        console.warn("Global signout request had error, forcing local cleanup:", e);
+        console.warn(
+          "Global signout request had error, forcing local cleanup:",
+          e,
+        );
       }
       dispatch(logout());
       dispatch(resetChats());
       dispatch(resetMessages());
+      try {
+        await authService.clearLocalSessionData();
+      } catch (e) {}
       window.location.href = "/login";
     }
   };
@@ -267,31 +310,37 @@ export function Sidebar({ className }) {
       if (!hasCache) {
         setIsChatsLoading(true);
       }
-      
+
       const loadChats = () => {
-        chatService.getUserChats(user.id).then((fetchedChats) => {
-          if (fetchedChats && fetchedChats.length > 0) {
-            dispatch(setChats(fetchedChats));
+        chatService
+          .getUserChats(user.id)
+          .then((fetchedChats) => {
+            if (fetchedChats && fetchedChats.length > 0) {
+              dispatch(setChats(fetchedChats));
 
-            // Cache the fresh chats in localStorage
-            if (typeof window !== "undefined") {
-              try {
-                localStorage.setItem(`wa_cached_chats_${user.id}`, JSON.stringify(fetchedChats));
-              } catch (e) {
-                console.warn("Failed to cache chats:", e);
+              // Cache the fresh chats in localStorage
+              if (typeof window !== "undefined") {
+                try {
+                  localStorage.setItem(
+                    `wa_cached_chats_${user.id}`,
+                    JSON.stringify(fetchedChats),
+                  );
+                } catch (e) {
+                  console.warn("Failed to cache chats:", e);
+                }
               }
-            }
 
-            // Batch acknowledge delivery for all active sidebar conversations at once
-            messageService.syncAllPendingDeliveries(user.id).catch((err) => {
-              console.warn("Failed syncing pending deliveries:", err);
-            });
-          }
-          setIsChatsLoading(false);
-        }).catch((err) => {
-          console.error("Failed loading user conversations:", err);
-          setIsChatsLoading(false);
-        });
+              // Batch acknowledge delivery for all active sidebar conversations at once
+              messageService.syncAllPendingDeliveries(user.id).catch((err) => {
+                console.warn("Failed syncing pending deliveries:", err);
+              });
+            }
+            setIsChatsLoading(false);
+          })
+          .catch((err) => {
+            console.error("Failed loading user conversations:", err);
+            setIsChatsLoading(false);
+          });
       };
 
       // Clean up database-level expired disappearing messages asynchronously in the background
@@ -307,7 +356,8 @@ export function Sidebar({ className }) {
       // Load drafts from IndexedDB
       const loadDrafts = async () => {
         try {
-          const { indexedDBService } = await import("../../services/indexedDBService");
+          const { indexedDBService } =
+            await import("../../services/indexedDBService");
           const allDrafts = await indexedDBService.getAllDrafts();
           const draftMap = {};
           allDrafts.forEach((d) => {
@@ -472,15 +522,17 @@ export function Sidebar({ className }) {
       realtimeService.disconnectGlobalMessages();
 
       // 4. Clear all potential sensitive cached items manually
-      if (typeof window !== "undefined") {
-        localStorage.clear();
-        sessionStorage.clear();
-      }
+      await authService.clearLocalSessionData();
+      window.location.href = "/login";
     } catch (error) {
       console.error("Logout error:", error);
       dispatch(logout());
       dispatch(resetChats());
       dispatch(resetMessages());
+      try {
+        await authService.clearLocalSessionData();
+      } catch (e) {}
+      window.location.href = "/login";
     }
   };
 
@@ -502,7 +554,8 @@ export function Sidebar({ className }) {
       onClick: () => setLanguageModalOpen(true),
     },
     {
-      label: theme === "light" ? t("sidebar.dark_theme") : t("sidebar.light_theme"),
+      label:
+        theme === "light" ? t("sidebar.dark_theme") : t("sidebar.light_theme"),
       onClick: () => dispatch(toggleTheme()),
     },
     {
@@ -695,7 +748,9 @@ export function Sidebar({ className }) {
               <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"></path>
             </svg>
           </button>
-          <span className="font-semibold text-base sm:text-lg">{t("sidebar.archived")}</span>
+          <span className="font-semibold text-base sm:text-lg">
+            {t("sidebar.archived")}
+          </span>
         </header>
 
         {/* Scrollable list of archived chats */}
@@ -736,7 +791,9 @@ export function Sidebar({ className }) {
       );
     }
 
-    const lockedChats = filteredChats.filter((chat) => lockedChatIds.includes(chat.id));
+    const lockedChats = filteredChats.filter((chat) =>
+      lockedChatIds.includes(chat.id),
+    );
 
     return (
       <aside
@@ -773,7 +830,8 @@ export function Sidebar({ className }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center text-wa-muted select-none">
               <span className="text-xs sm:text-sm font-medium">
-                {t("lock.no_locked_chats_desc") || "No locked chats. Lock a chat from its contact profile."}
+                {t("lock.no_locked_chats_desc") ||
+                  "No locked chats. Lock a chat from its contact profile."}
               </span>
             </div>
           )}
@@ -790,7 +848,7 @@ export function Sidebar({ className }) {
       )}
     >
       {/* Top native header strip */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-wa-header transition-colors duration-200 shrink-0">
+      <header className="relative z-20 flex items-center justify-between px-4 py-2.5 bg-wa-header transition-colors duration-200 shrink-0">
         <div
           onClick={() => setProfileModal(true)}
           className="cursor-pointer block"
@@ -894,9 +952,25 @@ export function Sidebar({ className }) {
         {isChatsLoading ? (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none h-full gap-4">
             <div className="animate-spin text-wa-primary flex items-center justify-center">
-              <svg className="h-9 w-9 text-wa-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                <path className="opacity-85" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              <svg
+                className="h-9 w-9 text-wa-primary"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-20"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                />
+                <path
+                  className="opacity-85"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
               </svg>
             </div>
             <span className="text-xs sm:text-sm text-wa-muted font-medium tracking-wide animate-pulse">

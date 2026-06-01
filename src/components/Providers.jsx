@@ -137,6 +137,11 @@ function AuthSessionRecoveryGate({ children }) {
           realtimeService.disconnectGlobalPresence();
           dispatch(logout());
           dispatch(clearLockSettings());
+          authService.clearLocalSessionData().then(() => {
+            if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/register") {
+              window.location.href = "/login";
+            }
+          });
         } else if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && !userRef.current) {
           const currentUser = await authService.getCurrentUser();
           if (currentUser && mounted) {

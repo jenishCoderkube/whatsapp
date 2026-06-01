@@ -78,7 +78,7 @@ export function Dropdown({
             exit={{ opacity: 0, scale: 0.95, y: openUpward ? 5 : -5 }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             className={cn(
-              "absolute z-50 w-48 rounded-sm bg-wa-modal py-2 shadow-lg border border-wa-border transition-colors",
+              "absolute z-50 w-48 rounded-sm bg-wa-modal py-2 shadow-lg border border-wa-border transition-colors pointer-events-auto",
               openUpward ? "bottom-full mb-2" : "top-full mt-2",
               align === "right" ? "right-0" : "left-0",
               className
