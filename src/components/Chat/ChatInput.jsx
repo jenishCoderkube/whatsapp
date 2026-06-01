@@ -106,6 +106,7 @@ const fetchGifs = async (query = "") => {
 };
 
 function GifPickerPanel({ onSelect }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [gifs, setGifs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -132,7 +133,7 @@ function GifPickerPanel({ onSelect }) {
       <div className="px-2 pb-2 shrink-0">
         <input
           type="text"
-          placeholder="Search GIFs via Giphy..."
+          placeholder={t("chat.search_gifs_placeholder") || "Search GIFs via Giphy..."}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full bg-wa-input text-wa-text border border-wa-border rounded-lg px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:border-wa-primary"
@@ -140,9 +141,9 @@ function GifPickerPanel({ onSelect }) {
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-2 gap-1.5 p-1 select-none custom-scrollbar">
         {loading ? (
-          <div className="col-span-2 text-center text-xs text-wa-muted py-8">Loading GIFs...</div>
+          <div className="col-span-2 text-center text-xs text-wa-muted py-8">{t("chat.loading_gifs") || "Loading GIFs..."}</div>
         ) : gifs.length === 0 ? (
-          <div className="col-span-2 text-center text-xs text-wa-muted py-8">No GIFs found</div>
+          <div className="col-span-2 text-center text-xs text-wa-muted py-8">{t("chat.no_gifs_found") || "No GIFs found"}</div>
         ) : (
           gifs.map((gif) => (
             <button
@@ -165,6 +166,7 @@ function GifPickerPanel({ onSelect }) {
 }
 
 function StickerPickerPanel({ onSelect }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("all"); 
   const [activePack, setActivePack] = useState("animals"); 
   const [recents, setRecents] = useState([]);
@@ -217,7 +219,7 @@ function StickerPickerPanel({ onSelect }) {
             activeTab === "all" ? "bg-wa-primary text-white border-wa-primary" : "bg-transparent text-wa-muted hover:text-wa-text"
           )}
         >
-          All Packs
+          {t("chat.all_packs") || "All Packs"}
         </button>
         <button
           onClick={() => setActiveTab("recent")}
@@ -226,7 +228,7 @@ function StickerPickerPanel({ onSelect }) {
             activeTab === "recent" ? "bg-wa-primary text-white border-wa-primary" : "bg-transparent text-wa-muted hover:text-wa-text"
           )}
         >
-          🕒 Recent
+          {t("chat.recent_tab") || "🕒 Recent"}
         </button>
         <button
           onClick={() => setActiveTab("favorites")}
@@ -235,7 +237,7 @@ function StickerPickerPanel({ onSelect }) {
             activeTab === "favorites" ? "bg-wa-primary text-white border-wa-primary" : "bg-transparent text-wa-muted hover:text-wa-text"
           )}
         >
-          ⭐ Favorites
+          {t("chat.favorites_tab") || "⭐ Favorites"}
         </button>
       </div>
 
@@ -285,7 +287,7 @@ function StickerPickerPanel({ onSelect }) {
 
         {activeTab === "recent" && (
           recents.length === 0 ? (
-            <div className="col-span-4 text-center text-xs text-wa-muted py-8 select-none">No recent stickers.</div>
+            <div className="col-span-4 text-center text-xs text-wa-muted py-8 select-none">{t("chat.no_recent_stickers") || "No recent stickers."}</div>
           ) : (
             recents.map((url, idx) => {
               const isStarred = favorites.includes(url);
@@ -315,7 +317,7 @@ function StickerPickerPanel({ onSelect }) {
 
         {activeTab === "favorites" && (
           favorites.length === 0 ? (
-            <div className="col-span-4 text-center text-xs text-wa-muted py-8 select-none">No favorite stickers.</div>
+            <div className="col-span-4 text-center text-xs text-wa-muted py-8 select-none">{t("chat.no_favorite_stickers") || "No favorite stickers."}</div>
           ) : (
             favorites.map((url, idx) => (
               <div

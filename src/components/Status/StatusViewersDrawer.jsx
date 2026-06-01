@@ -13,13 +13,13 @@ export function StatusViewersDrawer({ isOpen, onClose, views = [], activeStatus 
 
   // Decode status metadata to match poll vote IDs with option texts
   const getVoteLabel = (optionId) => {
-    if (!activeStatus) return "Vote";
+    if (!activeStatus) return t("status.vote") || "Vote";
     const rawContent = activeStatus.type === "text" ? activeStatus.textContent : activeStatus.caption;
     const { metadata } = statusService.decodeMetadata(rawContent);
     const pollOptions = metadata?.poll?.options;
-    if (!pollOptions) return "Voted";
+    if (!pollOptions) return t("status.voted") || "Voted";
     const found = pollOptions.find((o) => String(o.id) === String(optionId));
-    return found ? `🗳️ ${found.text}` : "Voted";
+    return found ? `🗳️ ${found.text}` : (t("status.voted") || "Voted");
   };
 
   // Advanced Analytics: chronologically sorting to tag First and Last viewers
@@ -51,7 +51,7 @@ export function StatusViewersDrawer({ isOpen, onClose, views = [], activeStatus 
               <span>{t("status.viewed_by") || "Viewed by"} ({views.length})</span>
               {views.length > 0 && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00a884]/20 text-[#00a884] font-bold uppercase tracking-wider">
-                  Live stats
+                  {t("status.live_stats") || "Live stats"}
                 </span>
               )}
             </span>
@@ -96,12 +96,12 @@ export function StatusViewersDrawer({ isOpen, onClose, views = [], activeStatus 
                             </span>
                             {isFirst && (
                               <span className="flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                <Award className="h-2.5 w-2.5" /> First
+                                <Award className="h-2.5 w-2.5" /> {t("status.first_viewer") || "First"}
                               </span>
                             )}
                             {isLast && (
                               <span className="flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                <Clock className="h-2.5 w-2.5" /> Newest
+                                <Clock className="h-2.5 w-2.5" /> {t("status.newest_viewer") || "Newest"}
                               </span>
                             )}
                           </div>
@@ -124,7 +124,7 @@ export function StatusViewersDrawer({ isOpen, onClose, views = [], activeStatus 
                           </span>
                         )}
                         {vw.reaction && (
-                          <span className="text-lg bg-[#2a3942] rounded-full p-1 leading-none shadow" title="Reaction">
+                          <span className="text-lg bg-[#2a3942] rounded-full p-1 leading-none shadow" title={t("chat.react") || "Reaction"}>
                             {vw.reaction}
                           </span>
                         )}

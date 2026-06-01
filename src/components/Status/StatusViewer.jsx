@@ -80,25 +80,25 @@ function CountdownSticker({ targetDate, title }) {
         <div className="bg-white/5 border border-white/10 rounded p-1.5 text-center min-w-[45px]">
           <div className="text-sm font-extrabold">{timeLeft.days}</div>
           <div className="text-[8px] text-white/50 uppercase font-semibold">
-            Days
+            {t("status.days") || "Days"}
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 rounded p-1.5 text-center min-w-[45px]">
           <div className="text-sm font-extrabold">{timeLeft.hours}</div>
           <div className="text-[8px] text-white/50 uppercase font-semibold">
-            Hrs
+            {t("status.hrs") || "Hrs"}
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 rounded p-1.5 text-center min-w-[45px]">
           <div className="text-sm font-extrabold">{timeLeft.mins}</div>
           <div className="text-[8px] text-white/50 uppercase font-semibold">
-            Mins
+            {t("status.mins") || "Mins"}
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 rounded p-1.5 text-center min-w-[45px]">
           <div className="text-sm font-extrabold">{timeLeft.secs}</div>
           <div className="text-[8px] text-white/50 uppercase font-semibold">
-            Secs
+            {t("status.secs") || "Secs"}
           </div>
         </div>
       </div>
@@ -415,7 +415,7 @@ export function StatusViewer({
                 onMuteUser(activeUserId);
               }}
               className="p-2 rounded-full hover:bg-white/10 text-white/80 hover:text-red-400 cursor-pointer transition-all active:scale-95 text-xs font-semibold"
-              title="Mute status updates from user"
+              title={t("status.mute_status_updates") || "Mute status updates from user"}
             >
               <VolumeX className="h-5 w-5" />
             </button>
@@ -443,7 +443,7 @@ export function StatusViewer({
                 onSetIsMuted(!isMuted);
               }}
               className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer transition-all active:scale-95"
-              title={isMuted ? "Unmute Audio" : "Mute Audio"}
+              title={isMuted ? (t("status.unmute_audio") || "Unmute Audio") : (t("status.mute_audio") || "Mute Audio")}
             >
               {isMuted ? (
                 <VolumeX className="h-5 w-5" />
@@ -457,7 +457,7 @@ export function StatusViewer({
           <button
             onClick={handlePauseToggle}
             className="p-2 rounded-full hover:bg-white/10 text-white cursor-pointer transition-all active:scale-95"
-            title={isPaused ? "Play" : "Pause"}
+            title={isPaused ? (t("status.play") || "Play") : (t("status.pause") || "Pause")}
           >
             {isPaused ? (
               <Play className="h-5 w-5" />
@@ -632,7 +632,7 @@ export function StatusViewer({
                           setShowQuickReactions(false);
                         }}
                         className="text-2xl hover:scale-130 active:scale-90 transition-all duration-100 cursor-pointer p-1"
-                        title={`React ${emoji}`}
+                        title={t("status.react_emoji", { emoji }) || `React ${emoji}`}
                       >
                         {emoji}
                       </button>
@@ -646,7 +646,7 @@ export function StatusViewer({
                         setShowFullReactionPicker(true);
                       }}
                       className="text-[#00a884] hover:scale-125 transition-all cursor-pointer p-1 font-bold text-xl ml-1 leading-none"
-                      title="More Emojis"
+                      title={t("status.more_emojis") || "More Emojis"}
                     >
                       +
                     </button>
@@ -666,7 +666,7 @@ export function StatusViewer({
                       ? "text-[#00a884]"
                       : "text-white/70 hover:text-white"
                   }`}
-                  title="Emoji Reactions"
+                  title={t("status.emoji_picker") || "Emoji Picker"}
                 >
                   <Smile className="h-5 w-5" />
                 </button>
@@ -849,9 +849,8 @@ export function StatusViewer({
 
             {isOwner ? (
               <div className="bg-black/20 rounded px-3 py-1.5 w-full text-[10px] select-none font-semibold">
-                {activeStatus?.views?.filter((v) => v.questionAnswer).length ||
-                  0}{" "}
-                responses in viewers drawer
+                {t("status.responses_in_drawer", { count: activeStatus?.views?.filter((v) => v.questionAnswer).length || 0 }) ||
+                  `${activeStatus?.views?.filter((v) => v.questionAnswer).length || 0} responses in viewers drawer`}
               </div>
             ) : (
               <form
@@ -860,7 +859,7 @@ export function StatusViewer({
               >
                 <input
                   type="text"
-                  placeholder="Answer..."
+                  placeholder={t("status.answer_placeholder") || "Answer..."}
                   value={questionAnswerInput}
                   onChange={(e) => setQuestionAnswerInput(e.target.value)}
                   onFocus={() => {

@@ -245,7 +245,7 @@ export function StatusComposerMedia({
             <button
               onClick={() => setCroppingImage({ id: activeDraft.id, previewUrl: activeDraft.previewUrl })}
               className="p-2.5 rounded-full hover:bg-white/10 text-white cursor-pointer"
-              title="Crop Image"
+              title={t("status.crop_image") || "Crop Image"}
             >
               <Crop className="h-5 w-5" />
             </button>
@@ -317,7 +317,7 @@ export function StatusComposerMedia({
           <button
             onClick={() => fileInputRef.current?.click()}
             className="h-14 w-14 rounded-lg border-2 border-dashed border-white/20 hover:border-white/40 flex items-center justify-center shrink-0 cursor-pointer transition-colors text-white/50 hover:text-white"
-            title="Add more files"
+            title={t("status.add_more_files") || "Add more files"}
           >
             <Plus className="h-6 w-6" />
           </button>
@@ -363,7 +363,7 @@ export function StatusComposerMedia({
             className={`p-1.5 rounded-full hover:bg-white/5 text-white/70 hover:text-white cursor-pointer ${
               showEmojiPicker ? "text-white" : ""
             }`}
-            title="Emoji Picker"
+            title={t("status.emoji_picker") || "Emoji Picker"}
           >
             <Smile className="h-5 w-5" />
           </button>

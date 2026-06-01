@@ -206,7 +206,7 @@ export function StatusSidebar({
                       <button
                         onClick={(e) => handleMuteToggle(group.userId, e)}
                         className="opacity-0 group-hover:opacity-100 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-wa-muted hover:text-red-400 transition-all shrink-0 cursor-pointer"
-                        title="Mute updates"
+                        title={t("status.mute_updates") || "Mute updates"}
                       >
                         <VolumeX className="h-4 w-4" />
                       </button>
@@ -248,7 +248,7 @@ export function StatusSidebar({
                       <button
                         onClick={(e) => handleMuteToggle(group.userId, e)}
                         className="opacity-0 group-hover:opacity-100 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-wa-muted hover:text-red-400 transition-all shrink-0 cursor-pointer"
-                        title="Mute updates"
+                        title={t("status.mute_updates") || "Mute updates"}
                       >
                         <VolumeX className="h-4 w-4" />
                       </button>
@@ -265,7 +265,7 @@ export function StatusSidebar({
                   onClick={() => setMutedExpanded(!mutedExpanded)}
                   className="px-4 py-3 flex items-center justify-between text-xs font-bold text-wa-muted uppercase tracking-wider hover:bg-wa-hover/30 transition-colors w-full cursor-pointer text-left"
                 >
-                  <span>Muted updates ({mutedGroupUpdates.length})</span>
+                  <span>{t("status.muted_updates_count", { count: mutedGroupUpdates.length }) || `Muted updates (${mutedGroupUpdates.length})`}</span>
                   {mutedExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
 
@@ -298,7 +298,7 @@ export function StatusSidebar({
                           <button
                             onClick={(e) => handleMuteToggle(group.userId, e)}
                             className="opacity-0 group-hover:opacity-100 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-wa-muted hover:text-wa-primary transition-all shrink-0 cursor-pointer"
-                            title="Unmute updates"
+                            title={t("status.unmute_updates") || "Unmute updates"}
                           >
                             <Volume2 className="h-4 w-4" />
                           </button>
@@ -318,9 +318,9 @@ export function StatusSidebar({
                   <div className="h-16 w-16 bg-wa-header/40 rounded-full flex items-center justify-center mb-4">
                     <CircleDashed className="h-8 w-8 text-wa-muted/40 animate-pulse" />
                   </div>
-                  <h3 className="text-sm font-medium text-wa-text mb-1">No Status Updates</h3>
+                  <h3 className="text-sm font-medium text-wa-text mb-1">{t("status.no_updates") || "No Status Updates"}</h3>
                   <p className="text-xs text-wa-muted max-w-xs leading-relaxed">
-                    Status updates from your contacts will appear here. Tap options above to add yours!
+                    {t("status.status_updates_desc") || "Status updates from your contacts will appear here. Tap options above to add yours!"}
                   </p>
                 </div>
               )}

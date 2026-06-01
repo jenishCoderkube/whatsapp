@@ -299,19 +299,19 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
             {showStickerMenu && (
               <div className="absolute right-0 top-12 bg-[#233138] border border-white/10 rounded-lg shadow-xl w-48 py-1 z-30 text-white flex flex-col text-sm">
                 <button onClick={() => initSticker("poll")} className="px-4 py-2 hover:bg-white/5 text-left flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4 text-[#00a884]" /> Poll Widget
+                  <BarChart2 className="h-4 w-4 text-[#00a884]" /> {t("status.poll_widget") || "Poll Widget"}
                 </button>
                 <button onClick={() => initSticker("question")} className="px-4 py-2 hover:bg-white/5 text-left flex items-center gap-2">
-                  <Smile className="h-4 w-4 text-[#7f66ff]" /> Question Card
+                  <Smile className="h-4 w-4 text-[#7f66ff]" /> {t("status.question_card") || "Question Card"}
                 </button>
                 <button onClick={() => initSticker("music")} className="px-4 py-2 hover:bg-white/5 text-left flex items-center gap-2">
-                  <Music className="h-4 w-4 text-[#f35369]" /> Background Music
+                  <Music className="h-4 w-4 text-[#f35369]" /> {t("status.background_music") || "Background Music"}
                 </button>
                 <button onClick={() => initSticker("countdown")} className="px-4 py-2 hover:bg-white/5 text-left flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-[#34b7f1]" /> Countdown Timer
+                  <Calendar className="h-4 w-4 text-[#34b7f1]" /> {t("status.countdown_timer") || "Countdown Timer"}
                 </button>
                 <button onClick={() => initSticker("location")} className="px-4 py-2 hover:bg-white/5 text-left flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-[#4f772d]" /> Location Tag
+                  <MapPin className="h-4 w-4 text-[#4f772d]" /> {t("status.location_tag") || "Location Tag"}
                 </button>
               </div>
             )}
@@ -387,7 +387,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
               <button
                 onClick={handleRemoveSticker}
                 className="absolute -top-3 -right-3 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-md z-10 cursor-pointer"
-                title="Remove Sticker"
+                title={t("status.remove_sticker") || "Remove Sticker"}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -401,7 +401,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
                       className="bg-transparent border-b border-white/20 focus:border-[#00a884] focus:outline-none flex-1 text-sm font-semibold py-0.5"
                       value={stickerData.question || ""}
                       onChange={(e) => setStickerData({ ...stickerData, question: e.target.value })}
-                      placeholder="Ask a question..."
+                      placeholder={t("status.ask_question_placeholder") || "Ask a question..."}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
@@ -417,7 +417,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
                             newOptions[i] = { ...opt, text: e.target.value };
                             setStickerData({ ...stickerData, options: newOptions });
                           }}
-                          placeholder={`Option ${i + 1}`}
+                          placeholder={t("status.option_count", { count: i + 1 }) || `Option ${i + 1}`}
                         />
                       </div>
                     ))}
@@ -429,7 +429,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
                         }}
                         className="text-[11px] text-[#00a884] font-semibold text-left flex items-center gap-1 mt-1 hover:underline cursor-pointer"
                       >
-                        <Plus className="h-3 w-3" /> Add option
+                        <Plus className="h-3 w-3" /> {t("status.add_option") || "Add option"}
                       </button>
                     )}
                   </div>
@@ -444,10 +444,10 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
                     className="bg-white/10 hover:bg-white/20 rounded px-3 py-1.5 text-center text-sm font-bold placeholder-white/60 focus:outline-none w-full"
                     value={stickerData.prompt || ""}
                     onChange={(e) => setStickerData({ ...stickerData, prompt: e.target.value })}
-                    placeholder="Ask me a question!"
+                    placeholder={t("status.ask_me_question_placeholder") || "Ask me a question!"}
                   />
                   <div className="bg-white text-black/60 rounded px-3 py-2 w-full mt-3 text-xs text-center select-none font-medium">
-                    Type something...
+                    {t("status.type_something") || "Type something..."}
                   </div>
                 </div>
               )}
@@ -471,20 +471,20 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
                     className="bg-transparent text-center border-b border-white/15 focus:border-[#34b7f1] focus:outline-none text-sm font-semibold w-full pb-1 mb-3"
                     value={stickerData.title || ""}
                     onChange={(e) => setStickerData({ ...stickerData, title: e.target.value })}
-                    placeholder="Countdown Title..."
+                    placeholder={t("status.countdown_title_placeholder") || "Countdown Title..."}
                   />
                   <div className="flex gap-2">
                     <div className="bg-white/5 border border-white/10 rounded p-2 text-center min-w-[50px]">
                       <div className="text-lg font-bold">24</div>
-                      <div className="text-[9px] text-white/50 uppercase">Hrs</div>
+                      <div className="text-[9px] text-white/50 uppercase">{t("status.hrs") || "Hrs"}</div>
                     </div>
                     <div className="bg-white/5 border border-white/10 rounded p-2 text-center min-w-[50px]">
                       <div className="text-lg font-bold">00</div>
-                      <div className="text-[9px] text-white/50 uppercase">Mins</div>
+                      <div className="text-[9px] text-white/50 uppercase">{t("status.mins") || "Mins"}</div>
                     </div>
                     <div className="bg-white/5 border border-white/10 rounded p-2 text-center min-w-[50px]">
                       <div className="text-lg font-bold">00</div>
-                      <div className="text-[9px] text-white/50 uppercase">Secs</div>
+                      <div className="text-[9px] text-white/50 uppercase">{t("status.secs") || "Secs"}</div>
                     </div>
                   </div>
                   <input
@@ -533,7 +533,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
         {fetchingLink && (
           <div className="mt-4 flex items-center gap-2 text-white/60 text-xs">
             <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-white"></div>
-            Loading link preview...
+            {t("chat.loading_link_preview") || "Loading link preview..."}
           </div>
         )}
 
@@ -577,7 +577,7 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
           className={`p-2.5 rounded-full hover:bg-black/10 text-white cursor-pointer ${
             showEmojiPicker ? "bg-black/20" : ""
           }`}
-          title="Add Emoji"
+          title={t("status.add_emoji") || "Add Emoji"}
         >
           <Smile className="h-6 w-6" />
         </button>

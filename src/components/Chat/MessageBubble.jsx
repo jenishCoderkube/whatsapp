@@ -1392,7 +1392,7 @@ function MessageInfoModal({ isOpen, onClose, message, isGroup, groupMembers }) {
                     <div className="h-1.5 w-24 bg-wa-muted/30 rounded-full overflow-hidden">
                       <div className="h-full w-1/3 bg-wa-primary rounded-full" />
                     </div>
-                    <span className="text-[10px] text-wa-muted mt-1 block">Voice Message</span>
+                    <span className="text-[10px] text-wa-muted mt-1 block">{t("chat.voice_message") || "Voice Message"}</span>
                   </div>
                 </div>
               );
