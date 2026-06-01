@@ -91,10 +91,8 @@ export function Sidebar({ className }) {
   const [profileModal, setProfileModal] = useState(false);
   const [linkedDevicesModalOpen, setLinkedDevicesModalOpen] = useState(false);
   const [languageModalOpen, setLanguageModalOpen] = useState(false);
-  const [activeDevices, setActiveDevices] = useState([
-    { id: "chrome", name: "Google Chrome (Windows)", active: true, desc: "Last active: Just now • Bengaluru, India", isBrowser: true },
-    { id: "iphone", name: "iPhone 15 Pro Max", active: false, desc: "Last active: Yesterday at 9:45 PM • California, US", isBrowser: false }
-  ]);
+  const [activeDevices, setActiveDevices] = useState([]);
+  const [currentDeviceId, setCurrentDeviceId] = useState("");
   const [newChatModal, setNewChatModal] = useState(false);
   const [activeTab, setActiveTab] = useState("direct"); // 'direct' | 'group'
 
@@ -117,36 +115,132 @@ export function Sidebar({ className }) {
   const [profileMessage, setProfileMessage] = useState("");
   const profileFileInputRef = useRef(null);
 
-  const handleLogoutDevice = async (dev) => {
-    if (dev.active) {
-      if (window.confirm(t("sidebar.logout_device_confirm"))) {
+  useEffect(() => {
+    if (user?.id) {
+      let isSubscribed = true;
+      let cleanupSession = null;
+      let intervalId = null;
+
+      const initSessions = async () => {
+        const handleLocalLogout = async () => {
+          if (!isSubscribed) return;
+          try {
+            await authService.logout();
+          } catch (e) {
+            console.warn("Auto logout failed:", e);
+          }
+          dispatch(logout());
+          dispatch(resetChats());
+          dispatch(resetMessages());
+          window.location.href = "/login";
+        };
+
+        const handleListUpdated = (devices) => {
+          if (!isSubscribed) return;
+          const localId = localStorage.getItem("wa_device_id");
+          const formatted = devices.map(d => ({
+            id: d.id,
+            name: d.name,
+            active: d.id === localId,
+            desc: d.id === localId
+              ? t("sidebar.active") || "Active"
+              : `Last active: ${new Date(d.lastActive).toLocaleString()} (Logged in: ${new Date(d.loginTime).toLocaleString()})`,
+            isBrowser: d.isBrowser,
+            loginTime: d.loginTime,
+            lastActive: d.lastActive,
+            platform: d.platform,
+            browser: d.browser
+          }));
+          setActiveDevices(formatted);
+        };
+
         try {
-          await authService.logout();
-        } catch (e) {
-          console.warn("Signout request had error:", e);
+          const { sessionService } = await import("../../services/sessionService");
+          const { currentDeviceId: myId, activeDevices: list, loggedOut } = await sessionService.registerCurrentDevice(
+            user.id,
+            handleLocalLogout,
+            handleListUpdated
+          );
+          
+          if (loggedOut) return;
+
+          if (isSubscribed) {
+            setCurrentDeviceId(myId);
+            handleListUpdated(list);
+          }
+
+          // Update last active periodically (every 3 minutes)
+          intervalId = setInterval(() => {
+            sessionService.updateLastActive(user.id, myId);
+          }, 3 * 60 * 1000);
+
+          cleanupSession = sessionService;
+        } catch (err) {
+          console.error("Failed to initialize active sessions:", err);
         }
-        dispatch(logout());
-        dispatch(resetChats());
-        dispatch(resetMessages());
-        window.location.href = "/login";
-      }
-    } else {
-      if (window.confirm(t("sidebar.logout_other_device_confirm", { device: dev.name }))) {
-        setActiveDevices(activeDevices.filter((d) => d.id !== dev.id));
+      };
+
+      initSessions();
+
+      return () => {
+        isSubscribed = false;
+        if (intervalId) clearInterval(intervalId);
+        if (cleanupSession) cleanupSession.unsubscribe();
+      };
+    }
+  }, [user?.id, dispatch, t]);
+
+  const handleLogoutDevice = async (dev) => {
+    const isCurrent = dev.id === currentDeviceId;
+    const confirmMsg = isCurrent 
+      ? t("sidebar.logout_device_confirm") 
+      : t("sidebar.logout_other_device_confirm", { device: dev.name }) || `Are you sure you want to log out ${dev.name}?`;
+      
+    if (window.confirm(confirmMsg)) {
+      try {
+        const { sessionService } = await import("../../services/sessionService");
+        if (isCurrent) {
+          await authService.logout();
+          dispatch(logout());
+          dispatch(resetChats());
+          dispatch(resetMessages());
+          window.location.href = "/login";
+        } else {
+          await sessionService.logoutDevice(user.id, dev.id);
+          setActiveDevices(prev => prev.filter(d => d.id !== dev.id));
+        }
+      } catch (e) {
+        console.warn("Logout device failed:", e);
       }
     }
   };
 
   const handleLogoutAllDevices = async () => {
-    try {
-      await authService.logoutAllDevices();
-    } catch (e) {
-      console.warn("Global signout request had error, forcing local cleanup:", e);
+    if (window.confirm(t("sidebar.logout_all_devices_confirm") || "Are you sure you want to log out all other devices?")) {
+      try {
+        const { sessionService } = await import("../../services/sessionService");
+        await sessionService.logoutAllOtherDevices(user.id, currentDeviceId);
+        setActiveDevices(prev => prev.filter(d => d.active));
+      } catch (e) {
+        console.warn("Logout other devices failed:", e);
+      }
     }
-    dispatch(logout());
-    dispatch(resetChats());
-    dispatch(resetMessages());
-    window.location.href = "/login";
+  };
+
+  const handleLogoutAllIncludingCurrent = async () => {
+    if (window.confirm(t("sidebar.logout_all_confirm") || "Are you sure you want to log out all devices, including this one?")) {
+      try {
+        const { sessionService } = await import("../../services/sessionService");
+        await sessionService.logoutAllDevices(user.id);
+        await authService.logoutAllDevices();
+      } catch (e) {
+        console.warn("Global signout request had error, forcing local cleanup:", e);
+      }
+      dispatch(logout());
+      dispatch(resetChats());
+      dispatch(resetMessages());
+      window.location.href = "/login";
+    }
   };
 
   // Fetch linked database conversations dynamically upon load
@@ -866,6 +960,7 @@ export function Sidebar({ className }) {
         activeDevices={activeDevices}
         handleLogoutDevice={handleLogoutDevice}
         handleLogoutAllDevices={handleLogoutAllDevices}
+        handleLogoutAllIncludingCurrent={handleLogoutAllIncludingCurrent}
       />
 
       <LanguageModal

@@ -171,12 +171,33 @@ export const realtimeService = {
       });
 
       // Handle App close / tab switch / network disconnect properly
+      let visibilityTimeout = null;
+      let isMarkedOffline = false;
+
       window.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
-          supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", currentUserId).then();
+          if (visibilityTimeout) clearTimeout(visibilityTimeout);
+          visibilityTimeout = setTimeout(() => {
+            isMarkedOffline = true;
+            supabase
+              .from("profiles")
+              .update({ last_seen: new Date().toISOString() })
+              .eq("id", currentUserId)
+              .then();
+          }, 30000); // 30 seconds debounce
         } else {
-          // Reconnect logic / return to active
-          supabase.from("profiles").update({ online: true, last_seen: new Date().toISOString() }).eq("id", currentUserId).then();
+          if (visibilityTimeout) {
+            clearTimeout(visibilityTimeout);
+            visibilityTimeout = null;
+          }
+          if (isMarkedOffline) {
+            isMarkedOffline = false;
+            supabase
+              .from("profiles")
+              .update({ online: true, last_seen: new Date().toISOString() })
+              .eq("id", currentUserId)
+              .then();
+          }
         }
       });
     }

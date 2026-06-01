@@ -137,10 +137,46 @@ export const authService = {
       } = await supabase.auth.getSession();
 
       if (session?.user?.id) {
+        const userId = session.user.id;
+
+        // Clean up linked device from metadata before signing out
+        try {
+          const currentDeviceId = localStorage.getItem("wa_device_id");
+          if (currentDeviceId) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              let linkedDevices = user.user_metadata?.linked_devices || [];
+              linkedDevices = linkedDevices.filter(d => d.id !== currentDeviceId);
+              await supabase.auth.updateUser({
+                data: { linked_devices: linkedDevices }
+              });
+
+              // Broadcast updated list to other sessions
+              const channel = supabase.channel(`auth-session:${userId}`);
+              await new Promise((resolve) => {
+                channel.subscribe(async (status) => {
+                  if (status === "SUBSCRIBED") {
+                    await channel.send({
+                      type: "broadcast",
+                      event: "session-list-updated",
+                      payload: { devices: linkedDevices }
+                    });
+                    setTimeout(resolve, 300);
+                  } else {
+                    resolve();
+                  }
+                });
+              });
+            }
+          }
+        } catch (metadataErr) {
+          console.warn("Failed to remove device from linked_devices during logout:", metadataErr);
+        }
+
         await supabase
           .from("profiles")
           .update({ online: false, last_seen: new Date().toISOString() })
-          .eq("id", session.user.id);
+          .eq("id", userId);
       }
 
       await supabase.auth.signOut();
@@ -163,13 +199,18 @@ export const authService = {
       if (session?.user?.id) {
         const userId = session.user.id;
 
-        // 1. Update online status in database profiles
+        // 1. Clear the metadata
+        await supabase.auth.updateUser({
+          data: { linked_devices: [] }
+        });
+
+        // 2. Update online status in database profiles
         await supabase
           .from("profiles")
           .update({ online: false, last_seen: new Date().toISOString() })
           .eq("id", userId);
 
-        // 2. Broadcast the realtime logout event with self: false and a 800ms socket flush delay
+        // 3. Broadcast the realtime logout event with self: false and a 800ms socket flush delay
         const channel = supabase.channel(`auth-session:${userId}`, {
           config: { broadcast: { self: false } }
         });
@@ -190,7 +231,7 @@ export const authService = {
           });
         });
 
-        // 3. Perform native global signOut to invalidate all tokens server-side
+        // 4. Perform native global signOut to invalidate all tokens server-side
         await supabase.auth.signOut({ scope: "global" });
       } else {
         await supabase.auth.signOut({ scope: "global" });

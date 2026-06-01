@@ -39,6 +39,11 @@ function AuthSessionRecoveryGate({ children }) {
   const activeCallRef = useRef(activeCall);
   const incomingCallRef = useRef(incomingCall);
   const processedCallSessionsRef = useRef(new Set());
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -132,7 +137,7 @@ function AuthSessionRecoveryGate({ children }) {
           realtimeService.disconnectGlobalPresence();
           dispatch(logout());
           dispatch(clearLockSettings());
-        } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        } else if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && !userRef.current) {
           const currentUser = await authService.getCurrentUser();
           if (currentUser && mounted) {
             dispatch(loginSuccess({ user: currentUser }));
