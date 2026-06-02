@@ -48,6 +48,8 @@
     "upload_image": "Upload profile image"
   },
   "chat": {
+    "unread_messages": "Unread Messages",
+    "new_messages": "New Messages",
     "empty_state_title": "WhatsApp Web",
     "empty_state_subtitle": "Send and receive messages without keeping your phone online.",
     "empty_state_desc": "Use WhatsApp on up to 4 linked devices and 1 phone at the same time.",

@@ -48,6 +48,8 @@
     "upload_image": "પ્રોફાઇલ છબી અપલોડ કરો"
   },
   "chat": {
+    "unread_messages": "ન વંચાયેલા સંદેશાઓ",
+    "new_messages": "નવા સંદેશા",
     "empty_state_title": "વોટ્સએપ વેબ",
     "empty_state_subtitle": "તમારા ફોનને ઓનલાઈન રાખ્યા વિના સંદેશાઓ મોકલો અને પ્રાપ્ત કરો.",
     "empty_state_desc": "એક જ સમયે 4 લિંક કરેલ ઉપકરણો અને 1 ફોન પર WhatsAppનો ઉપયોગ કરો.",

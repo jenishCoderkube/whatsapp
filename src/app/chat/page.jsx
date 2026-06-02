@@ -10,8 +10,8 @@ import { ChatInput } from "../../components/Chat/ChatInput";
 import { EmptyState } from "../../components/Chat/EmptyState";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
-import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage, updateSenderProfile } from "../../redux/slices/messageSlice";
-import { updateLastMessage, incrementUnread, setChats, updatePeerProfile, setActiveChat } from "../../redux/slices/chatSlice";
+import { setMessages, prependMessages, appendMessages, addMessage, updateMessageStatus, updateMessage, deleteMessage, updateSenderProfile, replaceOptimisticMessage } from "../../redux/slices/messageSlice";
+import { updateLastMessage, incrementUnread, setChats, updatePeerProfile, setActiveChat, setUnreadCount, syncOnlineUsers, setUserTyping } from "../../redux/slices/chatSlice";
 import { setActiveSearchPanelOpen, setMobileScreen, setWallpaperModal, setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
 import { messageService } from "../../services/messageService";
 import { chatService } from "../../services/chatService";
@@ -432,13 +432,14 @@ export default function ChatPage() {
       .catch(() => loadMessages());
   }, [activeChatId, user?.id, dispatch]);
 
-  // Unify absolute table-wide database message publication monitoring pipeline
+  // Scoped subscription to the active conversation's messages
   useEffect(() => {
-    if (!user?.id) return;
+    if (!activeChatId || !user?.id) {
+      realtimeService.unsubscribeFromActiveChat();
+      return;
+    }
 
-    messageService.syncAllPendingDeliveries(user.id);
-    
-    const handleGlobalMessage = (eventType, incomingMsg) => {
+    const handleActiveChatMessage = (eventType, incomingMsg) => {
       const isMine = incomingMsg.senderId === user.id;
       const targetChatId = incomingMsg.conversationId;
 
@@ -492,99 +493,44 @@ export default function ChatPage() {
       }
 
       if (eventType === "INSERT") {
-        if (targetChatId === activeChatIdRef.current) {
-          const processAndAdd = (profile = null) => {
-            if (!hasMoreNewerRef.current) {
-              dispatch(
-                addMessage({
-                  chatId: targetChatId,
-                  message: {
-                    ...incomingMsg,
-                    isOutgoing: isMine,
-                    senderName: isMine ? user?.name : (profile?.name || "Member"),
-                    senderAvatar: isMine ? user?.avatar : profile?.avatar,
-                  },
-                })
-              );
-            }
-
-            if (!isMine) {
-              // 1. ALWAYS send delivery acknowledgement immediately
-              if (incomingMsg.id) {
-                messageService.updateStatus(incomingMsg.id, "delivered", user.id);
-              }
-              
-              // 2. Handle read status and unread counting separately
-              if (isAtBottomRef.current) {
-                // Defer read slightly to guarantee sequential Tick -> Double Tick -> Blue Tick flow
-                setTimeout(() => {
-                  markAsReadIfAtBottom();
-                }, 500);
-              } else {
-                setLocalUnreadCount((prev) => prev + 1);
-                dispatch(incrementUnread(targetChatId));
-              }
-            }
-          };
-
-          if (!isMine && incomingMsg.senderId) {
-            let localProfile = null;
-            const activeChat = chatsRef.current.find((c) => c.id === targetChatId);
-            
-            if (activeChat) {
-              if (activeChat.isGroup) {
-                localProfile = groupMembersRef.current.find(m => m.id === incomingMsg.senderId);
-              } else {
-                localProfile = {
-                  name: activeChat.name,
-                  avatar: activeChat.avatar
-                };
-              }
-            }
-            
-            if (localProfile) {
-              processAndAdd(localProfile);
-            } else {
-              profileService.getProfileById(incomingMsg.senderId).then(processAndAdd);
-            }
-          } else {
-            processAndAdd();
+        const processAndAdd = (profile = null) => {
+          if (!hasMoreNewerRef.current) {
+            dispatch(
+              addMessage({
+                chatId: targetChatId,
+                message: {
+                  ...incomingMsg,
+                  isOutgoing: isMine,
+                  senderName: isMine ? user?.name : (profile?.name || "Member"),
+                  senderAvatar: isMine ? user?.avatar : profile?.avatar,
+                },
+              })
+            );
           }
-        } else {
+
           if (!isMine) {
-            dispatch(incrementUnread(targetChatId));
+            // ALWAYS send delivery acknowledgement immediately
             if (incomingMsg.id) {
               messageService.updateStatus(incomingMsg.id, "delivered", user.id);
             }
+            
+            // Handle read status and unread counting separately
+            if (isAtBottomRef.current) {
+              // Defer read slightly to guarantee sequential Tick -> Double Tick -> Blue Tick flow
+              setTimeout(() => {
+                markAsReadIfAtBottom();
+              }, 500);
+            } else {
+              setLocalUnreadCount((prev) => prev + 1);
+              dispatch(incrementUnread(targetChatId));
+            }
           }
-        }
-
-        let previewText = incomingMsg.text;
-        if (incomingMsg.type === "image") previewText = "Photo";
-        if (incomingMsg.type === "video") previewText = "Video";
-        if (incomingMsg.type === "file") previewText = "Document";
-        if (incomingMsg.type === "voice") previewText = "Voice Message";
-        if (incomingMsg.type === "sticker") previewText = "Sticker";
-        if (incomingMsg.type === "gif") previewText = "GIF";
-
-        const dispatchUpdate = (profile = null) => {
-          dispatch(
-            updateLastMessage({
-              chatId: targetChatId,
-              text: previewText,
-              timestamp: incomingMsg.timestamp,
-              isOutgoing: isMine,
-              status: incomingMsg.status,
-              avatar: profile?.avatar,
-              name: profile?.name,
-              isForwarded: incomingMsg.isForwarded,
-            })
-          );
         };
 
         if (!isMine && incomingMsg.senderId) {
-          const activeChat = chatsRef.current.find((c) => c.id === targetChatId);
           let localProfile = null;
+          const activeChat = chatsRef.current.find((c) => c.id === targetChatId);
+          
           if (activeChat) {
             if (activeChat.isGroup) {
               localProfile = groupMembersRef.current.find(m => m.id === incomingMsg.senderId);
@@ -595,29 +541,14 @@ export default function ChatPage() {
               };
             }
           }
-
+          
           if (localProfile) {
-            dispatchUpdate(localProfile);
-            profileService.getProfileById(incomingMsg.senderId).then((latestProfile) => {
-              if (latestProfile && (latestProfile.avatar !== localProfile.avatar || latestProfile.name !== localProfile.name)) {
-                dispatchUpdate(latestProfile);
-              }
-            });
+            processAndAdd(localProfile);
           } else {
-            profileService.getProfileById(incomingMsg.senderId).then(dispatchUpdate);
+            profileService.getProfileById(incomingMsg.senderId).then(processAndAdd);
           }
         } else {
-          dispatchUpdate(null);
-        }
-
-        if (!chatsRef.current.some((c) => c.id === targetChatId)) {
-          import("../../services/chatService").then(({ chatService }) => {
-            chatService.getUserChats(user.id).then((fetched) => {
-              if (fetched && fetched.length > 0) {
-                dispatch(setChats(fetched));
-              }
-            });
-          });
+          processAndAdd();
         }
       } else if (eventType === "UPDATE") {
         dispatch(
@@ -662,6 +593,19 @@ export default function ChatPage() {
       }
     };
 
+    realtimeService.subscribeToActiveChatMessages(activeChatId, handleActiveChatMessage);
+
+    return () => {
+      realtimeService.unsubscribeFromActiveChat();
+    };
+  }, [activeChatId, user?.id, dispatch, t]);
+
+  // Unify metadata-specific and profile update event subscription pipeline
+  useEffect(() => {
+    if (!user?.id) return;
+
+    messageService.syncAllPendingDeliveries(user.id);
+
     const handleProfileUpdate = (updatedProfile) => {
       dispatch(
         updatePeerProfile({
@@ -690,6 +634,43 @@ export default function ChatPage() {
       }
     };
 
+    const handleConversationUpdate = (eventType, updatedConv) => {
+      let previewText = updatedConv.last_message_text || "";
+      const isMine = updatedConv.last_message_sender_id === user.id;
+
+      dispatch(
+        updateLastMessage({
+          chatId: updatedConv.id,
+          text: previewText,
+          timestamp: updatedConv.last_message_timestamp,
+          isOutgoing: isMine,
+          status: updatedConv.last_message_status,
+        })
+      );
+
+      // Auto-fetch conversations if this conversation is new/not in local chats
+      if (!chatsRef.current.some((c) => c.id === updatedConv.id)) {
+        import("../../services/chatService").then(({ chatService }) => {
+          chatService.getUserChats(user.id).then((fetched) => {
+            if (fetched && fetched.length > 0) {
+              dispatch(setChats(fetched));
+            }
+          });
+        });
+      }
+    };
+
+    const handleMembershipUpdate = (eventType, membership) => {
+      if (membership) {
+        dispatch(
+          setUnreadCount({
+            chatId: membership.conversation_id,
+            count: membership.unread_count || 0,
+          })
+        );
+      }
+    };
+
     const handleOnline = async () => {
       if (isSyncingRef.current) return;
       isSyncingRef.current = true;
@@ -697,8 +678,15 @@ export default function ChatPage() {
       // Force reconnect websocket channels to ensure zero stale connection references
       realtimeService.reconnectAll(
         user.id,
-        handleGlobalMessage,
-        handleProfileUpdate
+        handleProfileUpdate,
+        (onlineMap) => {
+          dispatch(syncOnlineUsers(onlineMap));
+        },
+        (typingEvent) => {
+          dispatch(setUserTyping(typingEvent));
+        },
+        handleConversationUpdate,
+        handleMembershipUpdate
       );
 
       messageService.syncAllPendingDeliveries(user.id);
@@ -821,12 +809,26 @@ export default function ChatPage() {
 
     window.addEventListener("online", handleOnline);
 
-    realtimeService.subscribeToUserGlobalMessages(handleGlobalMessage);
     realtimeService.subscribeToProfileUpdates(handleProfileUpdate);
+    realtimeService.initializeGlobalPresence(
+      user.id,
+      (onlineMap) => {
+        dispatch(syncOnlineUsers(onlineMap));
+      },
+      (typingEvent) => {
+        dispatch(setUserTyping(typingEvent));
+      }
+    );
+    realtimeService.subscribeToUserConversations(
+      user.id,
+      handleConversationUpdate,
+      handleMembershipUpdate
+    );
 
     return () => {
-      realtimeService.disconnectGlobalMessages();
       realtimeService.disconnectProfileUpdates();
+      realtimeService.disconnectGlobalPresence();
+      realtimeService.disconnectUserConversations();
       window.removeEventListener("online", handleOnline);
     };
   }, [user?.id, dispatch]);

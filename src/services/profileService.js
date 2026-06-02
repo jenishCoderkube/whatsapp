@@ -5,18 +5,27 @@ export const profileService = {
    * Search real database user profiles by partial name or email matching dynamically.
    * Excludes the current authenticated user from returned targets natively.
    */
-  async searchProfiles(query = "", currentUserId = null) {
+  async searchProfiles(query = "", currentUserId = null, page = 0, limit = 20) {
     try {
+      const from = page * limit;
+      const to = from + limit - 1;
+
       let dbQuery = supabase
         .from("profiles")
         .select("*")
-        .limit(20);
+        .range(from, to)
+        .order("name", { ascending: true });
 
       if (query.trim()) {
-        dbQuery = dbQuery.or(`name.ilike.%${query.trim()}%,email.ilike.%${query.trim()}%`);
+        dbQuery = dbQuery.or(
+          `name.ilike.%${query.trim()}%,email.ilike.%${query.trim()}%`,
+        );
       }
 
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUserId);
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          currentUserId,
+        );
       if (currentUserId && isUuid) {
         dbQuery = dbQuery.neq("id", currentUserId);
       }
@@ -35,7 +44,10 @@ export const profileService = {
    */
   async getProfileById(userId) {
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          userId,
+        );
       if (!userId || !isUuid) return null;
 
       const { data, error } = await supabase
@@ -56,7 +68,10 @@ export const profileService = {
    */
   async updatePresence(userId, isOnline) {
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          userId,
+        );
       if (!userId || !isUuid) return;
 
       await supabase
@@ -76,7 +91,10 @@ export const profileService = {
    */
   async updateProfileData(userId, updates = {}) {
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          userId,
+        );
       if (!userId || !isUuid) return null;
 
       const { data, error } = await supabase

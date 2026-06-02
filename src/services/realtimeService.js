@@ -2,30 +2,38 @@ import { supabase } from "../lib/supabaseClient";
 import { parseMessageText } from "../utils/messageParser";
 
 let globalChannel = null;
-let globalMessagesChannel = null;
 let globalProfilesChannel = null;
+let activeChatChannel = null;
+let userConversationsChannel = null;
+let userMembershipsChannel = null;
 
 export const realtimeService = {
   /**
-   * Unified global message streaming channel listener consuming table-wide INSERT/UPDATE events
-   * natively. Optimizes websocket connections by maintaining exactly one data channel per client session,
-   * completely eliminating connection thrashing or race condition loops during rapid interface transitions.
+   * Scoped active chat messages channel subscription.
+   * Restricts updates strictly to the conversation currently in focus, avoiding table-wide RLS scans.
    */
-  subscribeToUserGlobalMessages(onGlobalEvent) {
-    if (globalMessagesChannel) return;
+  subscribeToActiveChatMessages(conversationId, onMessageEvent) {
+    this.unsubscribeFromActiveChat();
 
-    globalMessagesChannel = supabase
-      .channel("user_global_messages")
+    if (!conversationId) return;
+
+    activeChatChannel = supabase
+      .channel(`active_chat_messages_${conversationId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`
+        },
         (payload) => {
           if (payload.eventType === "DELETE") {
             const oldRow = payload.old;
             if (oldRow) {
-              onGlobalEvent("DELETE", {
+              onMessageEvent("DELETE", {
                 id: oldRow.id,
-                conversationId: oldRow.conversation_id,
+                conversationId: oldRow.conversation_id || conversationId,
               });
             }
             return;
@@ -60,21 +68,76 @@ export const realtimeService = {
             seenAt: row.seen_at,
           };
 
-          onGlobalEvent(payload.eventType, uniformMsg);
+          onMessageEvent(payload.eventType, uniformMsg);
         }
       )
       .subscribe();
   },
 
-  /**
-   * Terminate table-wide listening framework securely.
-   */
-  disconnectGlobalMessages() {
-    if (globalMessagesChannel) {
+  unsubscribeFromActiveChat() {
+    if (activeChatChannel) {
       try {
-        supabase.removeChannel(globalMessagesChannel);
+        supabase.removeChannel(activeChatChannel);
       } catch (e) {}
-      globalMessagesChannel = null;
+      activeChatChannel = null;
+    }
+  },
+
+  /**
+   * Monitor user-specific conversation changes and unread count transitions.
+   * Utilizes indexed equality filters to achieve O(1) server-side dispatching.
+   */
+  subscribeToUserConversations(userId, onConversationEvent, onMembershipEvent) {
+    if (!userId) return;
+
+    this.disconnectUserConversations();
+
+    // 1. Listen for updates to conversations the user is in (enforced via DB RLS)
+    userConversationsChannel = supabase
+      .channel(`user_conversations_${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations" },
+        (payload) => {
+          if (onConversationEvent && payload.new) {
+            onConversationEvent(payload.eventType, payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    // 2. Listen for user unread count updates in conversation_members
+    userMembershipsChannel = supabase
+      .channel(`user_memberships_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "conversation_members",
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          if (onMembershipEvent && (payload.new || payload.old)) {
+            onMembershipEvent(payload.eventType, payload.new || payload.old);
+          }
+        }
+      )
+      .subscribe();
+  },
+
+  disconnectUserConversations() {
+    if (userConversationsChannel) {
+      try {
+        supabase.removeChannel(userConversationsChannel);
+      } catch (e) {}
+      userConversationsChannel = null;
+    }
+    if (userMembershipsChannel) {
+      try {
+        supabase.removeChannel(userMembershipsChannel);
+      } catch (e) {}
+      userMembershipsChannel = null;
     }
   },
 
@@ -110,11 +173,9 @@ export const realtimeService = {
     }
   },
 
-  /**
-   * Legacy localized room listeners mapped cleanly to absolute global state pipelines to guarantee zero duplicate handling.
-   */
-  subscribeToConversationMessages() {},
-  unsubscribeFromActiveConversation() {},
+  // Legacy compatibility mapping
+  subscribeToUserGlobalMessages() {},
+  disconnectGlobalMessages() {},
 
   /**
    * Initialize Global Presence tracking and typing broadcast events across all connected apps natively.
@@ -235,19 +296,18 @@ export const realtimeService = {
   /**
    * Forcibly tear down and rebuild all active channels to sync connections after reconnect events.
    */
-  reconnectAll(currentUserId, onGlobalEvent, onProfileUpdate, onPresenceSync, onTypingReceived) {
-    this.disconnectGlobalMessages();
+  reconnectAll(currentUserId, onProfileUpdate, onPresenceSync, onTypingReceived, onConversationEvent, onMembershipEvent) {
+    this.unsubscribeFromActiveChat();
     this.disconnectProfileUpdates();
     this.disconnectGlobalPresence();
+    this.disconnectUserConversations();
 
-    if (onGlobalEvent) {
-      this.subscribeToUserGlobalMessages(onGlobalEvent);
-    }
     if (onProfileUpdate) {
       this.subscribeToProfileUpdates(onProfileUpdate);
     }
     if (currentUserId) {
       this.initializeGlobalPresence(currentUserId, onPresenceSync, onTypingReceived);
+      this.subscribeToUserConversations(currentUserId, onConversationEvent, onMembershipEvent);
     }
   }
 };

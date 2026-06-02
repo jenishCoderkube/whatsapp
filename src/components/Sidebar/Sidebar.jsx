@@ -108,6 +108,9 @@ export function Sidebar({ className }) {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchPage, setSearchPage] = useState(0);
+  const [hasMoreSearch, setHasMoreSearch] = useState(true);
+  const [isSearchingMore, setIsSearchingMore] = useState(false);
 
   // Group creation states
   const [groupName, setGroupName] = useState("");
@@ -490,14 +493,41 @@ export function Sidebar({ className }) {
     if (!newChatModal) return;
     const timer = setTimeout(() => {
       setIsSearching(true);
-      profileService.searchProfiles(userSearchQuery, user?.id).then((res) => {
+      setSearchPage(0);
+      setHasMoreSearch(true);
+      profileService.searchProfiles(userSearchQuery, user?.id, 0).then((res) => {
         setSearchResults(res);
         setIsSearching(false);
+        if (res.length < 20) {
+          setHasMoreSearch(false);
+        }
       });
     }, 300);
 
     return () => clearTimeout(timer);
   }, [userSearchQuery, user?.id, newChatModal]);
+
+  const handleLoadMoreProfiles = () => {
+    if (isSearching || isSearchingMore || !hasMoreSearch || !user?.id) return;
+    setIsSearchingMore(true);
+    const nextPage = searchPage + 1;
+    profileService.searchProfiles(userSearchQuery, user.id, nextPage).then((res) => {
+      setSearchResults((prev) => [...prev, ...res]);
+      setSearchPage(nextPage);
+      setIsSearchingMore(false);
+      if (res.length < 20) {
+        setHasMoreSearch(false);
+      }
+    }).catch(() => {
+      setIsSearchingMore(false);
+    });
+  };
+
+  const [visibleLimit, setVisibleLimit] = useState(15);
+
+  useEffect(() => {
+    setVisibleLimit(15);
+  }, [searchQuery]);
 
   const filteredChats = chats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -507,6 +537,8 @@ export function Sidebar({ className }) {
     (chat) => !chat.isArchived && !lockedChatIds.includes(chat.id),
   );
   const archivedChats = filteredChats.filter((chat) => chat.isArchived);
+
+  const renderedChats = activeChats.slice(0, visibleLimit);
 
   const handleLogout = async () => {
     try {
@@ -949,7 +981,15 @@ export function Sidebar({ className }) {
       )}
 
       {/* Scrollable contact records */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200">
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200"
+        onScroll={(e) => {
+          const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+          if (scrollHeight - scrollTop - clientHeight < 50) {
+            setVisibleLimit((prev) => prev + 15);
+          }
+        }}
+      >
         {isChatsLoading ? (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none h-full gap-4">
             <div className="animate-spin text-wa-primary flex items-center justify-center">
@@ -979,7 +1019,7 @@ export function Sidebar({ className }) {
             </span>
           </div>
         ) : activeChats.length > 0 ? (
-          activeChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
+          renderedChats.map((chat) => <ChatCard key={chat.id} chat={chat} />)
         ) : (
           <div className="p-6 text-center text-xs sm:text-sm text-wa-muted">
             {t("sidebar.no_chats", { query: searchQuery })}
@@ -1027,6 +1067,9 @@ export function Sidebar({ className }) {
         toggleMemberSelection={toggleMemberSelection}
         handleCreateGroup={handleCreateGroup}
         onlineMap={onlineMap}
+        onLoadMore={handleLoadMoreProfiles}
+        hasMore={hasMoreSearch}
+        isSearchingMore={isSearchingMore}
       />
 
       <LinkedDevicesModal

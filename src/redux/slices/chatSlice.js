@@ -197,6 +197,13 @@ const chatSlice = createSlice({
         state.activeChatId = null;
       }
     },
+    setUnreadCount(state, action) {
+      const { chatId, count } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat) {
+        chat.unreadCount = count;
+      }
+    },
     updateChatMembership(state, action) {
       const { chatId, isLeft } = action.payload;
       const chat = state.chats.find((c) => c.id === chatId);
@@ -291,6 +298,7 @@ export const {
   clearUnread,
   incrementUnread,
   removeChat,
+  setUnreadCount,
   updateChatMembership,
   updateChatAvatar,
   updateChatDisappearingDuration,

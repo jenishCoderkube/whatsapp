@@ -5,7 +5,7 @@ import { Modal } from "../ui/Modal";
 import { Avatar } from "../ui/Avatar";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { Search, Check } from "lucide-react";
+import { Search, Check, Loader2 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { useTranslation } from "../../hooks/useTranslation";
 
@@ -27,6 +27,9 @@ export function NewChatModal({
   toggleMemberSelection,
   handleCreateGroup,
   onlineMap = {},
+  onLoadMore,
+  hasMore,
+  isSearchingMore,
 }) {
   const { t } = useTranslation();
 
@@ -77,35 +80,51 @@ export function NewChatModal({
               <Search className="absolute left-3.5 top-3 h-4 w-4 text-wa-muted" />
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-1">
+            <div 
+              className="flex-1 overflow-y-auto pr-1"
+              onScroll={(e) => {
+                const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                if (scrollHeight - scrollTop - clientHeight < 20) {
+                  onLoadMore();
+                }
+              }}
+            >
               {isSearching ? (
                 <div className="py-8 text-center text-xs text-wa-muted animate-pulse">
                   {t("sidebar.searching_profiles")}
                 </div>
               ) : searchResults.length > 0 ? (
-                searchResults.map((profile) => (
-                  <div
-                    key={profile.id}
-                    onClick={() => handleStartDirectChat(profile)}
-                    className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors"
-                  >
-                    <Avatar
-                      src={profile.avatar}
-                      fallback={profile.name[0]}
-                      size="md"
-                      isOnline={!!onlineMap[profile.id]}
-                      uid={profile.id}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-wa-text truncate">
-                        {profile.name}
-                      </div>
-                      <div className="text-[11px] text-wa-muted truncate">
-                        {profile.email}
+                <>
+                  {searchResults.map((profile) => (
+                    <div
+                      key={profile.id}
+                      onClick={() => handleStartDirectChat(profile)}
+                      className="flex items-center gap-3 p-2 rounded-md hover:bg-wa-hover cursor-pointer transition-colors"
+                    >
+                      <Avatar
+                        src={profile.avatar}
+                        fallback={profile.name[0]}
+                        size="md"
+                        isOnline={!!onlineMap[profile.id]}
+                        uid={profile.id}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-wa-text truncate">
+                          {profile.name}
+                        </div>
+                        <div className="text-[11px] text-wa-muted truncate">
+                          {profile.email}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  {isSearchingMore && (
+                    <div className="py-3 flex items-center justify-center gap-2 text-xs text-wa-muted animate-pulse">
+                      <Loader2 className="h-4 w-4 animate-spin text-wa-primary" />
+                      <span>{t("common.loading") || "Loading more..."}</span>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="py-8 text-center text-xs text-wa-muted">
                   {userSearchQuery.trim()
@@ -150,43 +169,59 @@ export function NewChatModal({
               {t("sidebar.select_participants")}
             </div>
 
-            <div className="flex-1 overflow-y-auto border border-wa-border rounded-md p-1.5 mb-3 bg-wa-sidebar">
+            <div 
+              className="flex-1 overflow-y-auto border border-wa-border rounded-md p-1.5 mb-3 bg-wa-sidebar"
+              onScroll={(e) => {
+                const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                if (scrollHeight - scrollTop - clientHeight < 20) {
+                  onLoadMore();
+                }
+              }}
+            >
               {searchResults.length > 0 ? (
-                searchResults.map((profile) => {
-                  const isSelected = selectedMembers.includes(profile.id);
-                  return (
-                    <div
-                      key={profile.id}
-                      onClick={() => toggleMemberSelection(profile.id)}
-                      className={cn(
-                        "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none",
-                        isSelected && "bg-wa-active",
-                      )}
-                    >
+                <>
+                  {searchResults.map((profile) => {
+                    const isSelected = selectedMembers.includes(profile.id);
+                    return (
                       <div
+                        key={profile.id}
+                        onClick={() => toggleMemberSelection(profile.id)}
                         className={cn(
-                          "flex items-center justify-center h-4 w-4 rounded border transition-colors shrink-0",
-                          isSelected
-                            ? "bg-wa-primary border-wa-primary text-white"
-                            : "border-wa-muted",
+                          "flex items-center gap-2 p-1.5 rounded hover:bg-wa-hover cursor-pointer transition-colors select-none",
+                          isSelected && "bg-wa-active",
                         )}
                       >
-                        {isSelected && (
-                          <Check className="h-3 w-3 stroke-[3]" />
-                        )}
+                        <div
+                          className={cn(
+                            "flex items-center justify-center h-4 w-4 rounded border transition-colors shrink-0",
+                            isSelected
+                              ? "bg-wa-primary border-wa-primary text-white"
+                              : "border-wa-muted",
+                          )}
+                        >
+                          {isSelected && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
+                        </div>
+                        <Avatar
+                          src={profile.avatar}
+                          fallback={profile.name[0]}
+                          size="sm"
+                          uid={profile.id}
+                        />
+                        <span className="text-xs text-wa-text truncate flex-1">
+                          {profile.name}
+                        </span>
                       </div>
-                      <Avatar
-                        src={profile.avatar}
-                        fallback={profile.name[0]}
-                        size="sm"
-                        uid={profile.id}
-                      />
-                      <span className="text-xs text-wa-text truncate flex-1">
-                        {profile.name}
-                      </span>
+                    );
+                  })}
+                  {isSearchingMore && (
+                    <div className="py-2.5 flex items-center justify-center gap-2 text-xs text-wa-muted animate-pulse border-t border-wa-border/10 mt-1.5">
+                      <Loader2 className="h-4.5 w-4.5 animate-spin text-wa-primary" />
+                      <span>{t("common.loading") || "Loading more..."}</span>
                     </div>
-                  );
-                })
+                  )}
+                </>
               ) : (
                 <div className="py-8 text-center text-xs text-wa-muted">
                   {t("sidebar.no_peers_desc")}
