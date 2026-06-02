@@ -84,12 +84,16 @@ export const realtimeService = {
       .subscribe();
   },
 
-  unsubscribeFromActiveChat() {
+  unsubscribeFromActiveChat(permanently = false) {
     if (activeChatChannel) {
       try {
         supabase.removeChannel(activeChatChannel);
       } catch (e) {}
       activeChatChannel = null;
+    }
+    if (permanently) {
+      this.activeChatId = null;
+      this.onMessageEventCallback = null;
     }
   },
 
@@ -312,8 +316,6 @@ export const realtimeService = {
   async disconnectGlobalPresence() {
     this.onPresenceSyncCallback = null;
     this.onTypingReceivedCallback = null;
-    this.activeChatId = null;
-    this.onMessageEventCallback = null;
     if (globalChannel) {
       try {
         await globalChannel.untrack();

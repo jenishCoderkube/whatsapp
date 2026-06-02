@@ -437,7 +437,7 @@ export default function ChatPage() {
   // Scoped subscription to the active conversation's messages
   useEffect(() => {
     if (!activeChatId || !user?.id) {
-      realtimeService.unsubscribeFromActiveChat();
+      realtimeService.unsubscribeFromActiveChat(true);
       return;
     }
 
@@ -660,6 +660,14 @@ export default function ChatPage() {
           status: updatedConv.last_message_status,
         })
       );
+
+      if (!isMine && activeChatIdRef.current !== updatedConv.id) {
+        dispatch(incrementUnread(updatedConv.id));
+      }
+
+      if (!isMine) {
+        messageService.markConversationMessagesAsDelivered(updatedConv.id, user.id);
+      }
 
       // Auto-fetch conversations if this conversation is new/not in local chats
       if (!chatsRef.current.some((c) => c.id === updatedConv.id)) {
