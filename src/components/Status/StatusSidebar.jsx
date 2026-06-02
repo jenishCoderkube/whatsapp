@@ -50,6 +50,20 @@ export function StatusSidebar({
     ...viewedUpdates.filter((g) => mutedUsers.includes(g.userId)),
   ];
 
+  const hasNoStatuses = myStatuses.length === 0 && activeRecentUpdates.length === 0 && activeViewedUpdates.length === 0 && mutedGroupUpdates.length === 0;
+
+  const [visibleLimit, setVisibleLimit] = useState(10);
+
+  const renderedRecent = activeRecentUpdates.slice(0, visibleLimit);
+  const renderedViewed = activeViewedUpdates.slice(
+    0,
+    Math.max(0, visibleLimit - activeRecentUpdates.length)
+  );
+  const renderedMuted = mutedGroupUpdates.slice(
+    0,
+    Math.max(0, visibleLimit - activeRecentUpdates.length - activeViewedUpdates.length)
+  );
+
   const handleMuteToggle = (userId, e) => {
     e.stopPropagation();
     if (mutedUsers.includes(userId)) {
@@ -74,7 +88,15 @@ export function StatusSidebar({
       </header>
 
       {/* Scrollable Status Content Lists */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col">
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col"
+        onScroll={(e) => {
+          const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+          if (scrollHeight - scrollTop - clientHeight < 20) {
+            setVisibleLimit((prev) => prev + 10);
+          }
+        }}
+      >
         
         {/* MY STATUS ROW */}
         <div className="px-4 py-3.5 flex items-center justify-between border-b border-wa-border/40 bg-wa-sidebar/70">
@@ -159,7 +181,7 @@ export function StatusSidebar({
         </div>
 
         {/* LOADING SKELETON STATE */}
-        {loading ? (
+        {loading && hasNoStatuses ? (
           <div className="flex flex-col gap-1 p-2">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="px-3 py-3.5 flex items-center gap-4 animate-pulse">
@@ -175,12 +197,12 @@ export function StatusSidebar({
           <div className="flex-1 flex flex-col gap-1.5 pt-2">
             
             {/* RECENT UPDATES */}
-            {activeRecentUpdates.length > 0 && (
+            {renderedRecent.length > 0 && (
               <div className="flex flex-col">
                 <span className="px-4 py-2.5 text-xs font-bold text-wa-primary uppercase tracking-wider text-left">
                   {t("status.recent_updates") || "Recent updates"}
                 </span>
-                {activeRecentUpdates.map((group) => {
+                {renderedRecent.map((group) => {
                   const lastUpdate = group.statuses[group.statuses.length - 1];
                   return (
                     <div
@@ -217,12 +239,12 @@ export function StatusSidebar({
             )}
 
             {/* VIEWED UPDATES */}
-            {activeViewedUpdates.length > 0 && (
+            {renderedViewed.length > 0 && (
               <div className="flex flex-col mt-2">
                 <span className="px-4 py-2.5 text-xs font-bold text-wa-muted uppercase tracking-wider text-left">
                   {t("status.viewed_updates") || "Viewed updates"}
                 </span>
-                {activeViewedUpdates.map((group) => {
+                {renderedViewed.map((group) => {
                   const lastUpdate = group.statuses[group.statuses.length - 1];
                   return (
                     <div
@@ -271,7 +293,7 @@ export function StatusSidebar({
 
                 {mutedExpanded && (
                   <div className="flex flex-col">
-                    {mutedGroupUpdates.map((group) => {
+                    {renderedMuted.map((group) => {
                       const lastUpdate = group.statuses[group.statuses.length - 1];
                       return (
                         <div

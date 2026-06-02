@@ -67,6 +67,10 @@ export function StatusPanel() {
 
   // Refs
   const videoRef = useRef(null);
+  const statusesRef = useRef(statuses);
+  useEffect(() => {
+    statusesRef.current = statuses;
+  }, [statuses]);
 
   // Grouped status lists computed from fetched list
   const contactGroups = statuses.filter((g) => g.userId !== user?.id);
@@ -85,7 +89,10 @@ export function StatusPanel() {
     if (!user?.id || !statusViewOpen) return;
 
     const loadStatuses = async () => {
-      dispatch(setLoading(true));
+      // Only trigger UI loader if there is no cache in Redux
+      if (statusesRef.current.length === 0) {
+        dispatch(setLoading(true));
+      }
       try {
         const data = await statusService.fetchStatuses(user.id);
         dispatch(setStatuses(data));
@@ -277,7 +284,9 @@ export function StatusPanel() {
   };
 
   const reloadLists = async () => {
-    dispatch(setLoading(true));
+    if (statuses.length === 0) {
+      dispatch(setLoading(true));
+    }
     try {
       const data = await statusService.fetchStatuses(user.id);
       dispatch(setStatuses(data));

@@ -284,9 +284,9 @@ export const statusService = {
         await this.checkTableExists();
 
         const nowIso = new Date().toISOString();
-        const contactIds = await this.getUserContactIds(currentUserId);
 
         if (useLocalFallback) {
+          const contactIds = await this.getUserContactIds(currentUserId);
           const localStatuses = JSON.parse(
             localStorage.getItem("wa_local_statuses") || "[]",
           );
@@ -430,10 +430,79 @@ export const statusService = {
 
           return Object.values(groups);
         } else {
-          // 1. Fetch active statuses (expires_at > now)
+          // 1. Attempt high-performance database-side RPC first
+          try {
+            const { data: rpcData, error: rpcError } = await supabase.rpc(
+              "get_visible_statuses",
+              { p_user_id: currentUserId }
+            );
+
+            if (!rpcError && rpcData) {
+              const groups = {};
+              rpcData.forEach((status) => {
+                const uid = status.user_id;
+                const profile = status.profiles || {
+                  id: uid,
+                  name: "Contact",
+                  avatar: "",
+                };
+                const viewsForStatus = status.views || [];
+                const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
+
+                const mappedStatus = {
+                  id: status.id,
+                  userId: status.user_id,
+                  type: status.type,
+                  mediaUrl: status.media_url,
+                  caption: status.caption,
+                  textContent: status.text_content,
+                  bgColor: status.bg_color,
+                  textStyle: status.text_style,
+                  createdAt: status.created_at,
+                  expiresAt: status.expires_at,
+                  views: viewsForStatus,
+                  isSeen: uid === currentUserId ? false : isSeen,
+                };
+
+                if (!groups[uid]) {
+                  groups[uid] = {
+                    userId: uid,
+                    name: profile.name,
+                    avatar: profile.avatar,
+                    statuses: [],
+                    hasUnseen: false,
+                  };
+                }
+                groups[uid].statuses.push(mappedStatus);
+              });
+
+              Object.keys(groups).forEach((uid) => {
+                groups[uid].statuses.sort(
+                  (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+                );
+                if (uid !== currentUserId) {
+                  groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
+                } else {
+                  groups[uid].hasUnseen = false;
+                }
+              });
+
+              return Object.values(groups);
+            } else if (rpcError) {
+              console.warn("get_visible_statuses RPC check returned error, falling back:", rpcError);
+            }
+          } catch (rpcErr) {
+            console.warn("get_visible_statuses RPC not found, using optimized client fallback:", rpcErr);
+          }
+
+          // 2. Optimized Fallback: Fetch active statuses ONLY for contacts & self
+          const contactIds = await this.getUserContactIds(currentUserId);
+          const allowedUserIds = [currentUserId, ...contactIds];
+
           const { data: statusesData, error: statusesError } = await supabase
             .from("statuses")
             .select("*, profiles:user_id(id, name, avatar)")
+            .in("user_id", allowedUserIds)
             .gt("expires_at", nowIso)
             .order("created_at", { ascending: true });
 
@@ -459,7 +528,7 @@ export const statusService = {
             return false;
           });
 
-          // 2. Fetch views for these active statuses
+          // 3. Fetch views for these visible active statuses
           const statusIds = visibleStatuses.map((s) => s.id);
           let viewsData = [];
 
