@@ -820,7 +820,14 @@ export default function ChatPage() {
       }
     };
 
+    const handleVisibilityChangeForReconnect = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        handleOnline();
+      }
+    };
+
     window.addEventListener("online", handleOnline);
+    window.addEventListener("visibilitychange", handleVisibilityChangeForReconnect);
 
     realtimeService.subscribeToProfileUpdates(handleProfileUpdate);
     realtimeService.initializeGlobalPresence(
@@ -843,6 +850,7 @@ export default function ChatPage() {
       realtimeService.disconnectGlobalPresence();
       realtimeService.disconnectUserConversations();
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("visibilitychange", handleVisibilityChangeForReconnect);
     };
   }, [user?.id, dispatch]);
 

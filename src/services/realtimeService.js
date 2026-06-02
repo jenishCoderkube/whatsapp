@@ -8,11 +8,20 @@ let userConversationsChannel = null;
 let userMembershipsChannel = null;
 
 export const realtimeService = {
+  onPresenceSyncCallback: null,
+  onTypingReceivedCallback: null,
+
+  activeChatId: null,
+  onMessageEventCallback: null,
+
   /**
    * Scoped active chat messages channel subscription.
    * Restricts updates strictly to the conversation currently in focus, avoiding table-wide RLS scans.
    */
   subscribeToActiveChatMessages(conversationId, onMessageEvent) {
+    this.activeChatId = conversationId;
+    this.onMessageEventCallback = onMessageEvent;
+
     this.unsubscribeFromActiveChat();
 
     if (!conversationId) return;
@@ -182,8 +191,24 @@ export const realtimeService = {
    * Initialize Global Presence tracking and typing broadcast events across all connected apps natively.
    */
   initializeGlobalPresence(currentUserId, onPresenceSync, onTypingReceived) {
+    this.onPresenceSyncCallback = onPresenceSync;
+    this.onTypingReceivedCallback = onTypingReceived;
+
     if (!currentUserId) return;
-    if (globalChannel) return;
+
+    if (globalChannel) {
+      const state = globalChannel.presenceState();
+      const onlineMap = {};
+      Object.keys(state).forEach((uid) => {
+        if (state[uid] && state[uid].length > 0) {
+          onlineMap[uid] = true;
+        }
+      });
+      if (this.onPresenceSyncCallback) {
+        this.onPresenceSyncCallback(onlineMap);
+      }
+      return;
+    }
 
     globalChannel = supabase.channel("whatsapp_global_presence", {
       config: {
@@ -201,8 +226,8 @@ export const realtimeService = {
           onlineMap[uid] = true;
         }
       });
-      if (onPresenceSync) {
-        onPresenceSync(onlineMap);
+      if (this.onPresenceSyncCallback) {
+        this.onPresenceSyncCallback(onlineMap);
       }
     };
 
@@ -211,8 +236,8 @@ export const realtimeService = {
       .on("presence", { event: "join" }, updatePresence)
       .on("presence", { event: "leave" }, updatePresence)
       .on("broadcast", { event: "typing" }, (payload) => {
-        if (onTypingReceived && payload.payload) {
-          onTypingReceived(payload.payload);
+        if (this.onTypingReceivedCallback && payload.payload) {
+          this.onTypingReceivedCallback(payload.payload);
         }
       })
       .subscribe(async (status) => {
@@ -285,6 +310,10 @@ export const realtimeService = {
    * Disconnect global layer cleanly on explicit logout scenarios.
    */
   async disconnectGlobalPresence() {
+    this.onPresenceSyncCallback = null;
+    this.onTypingReceivedCallback = null;
+    this.activeChatId = null;
+    this.onMessageEventCallback = null;
     if (globalChannel) {
       try {
         await globalChannel.untrack();
@@ -309,6 +338,9 @@ export const realtimeService = {
     if (currentUserId) {
       this.initializeGlobalPresence(currentUserId, onPresenceSync, onTypingReceived);
       this.subscribeToUserConversations(currentUserId, onConversationEvent, onMembershipEvent);
+    }
+    if (this.activeChatId && this.onMessageEventCallback) {
+      this.subscribeToActiveChatMessages(this.activeChatId, this.onMessageEventCallback);
     }
   }
 };

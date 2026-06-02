@@ -43,13 +43,13 @@ export const ChatCard = React.memo(({ chat }) => {
 
   // Prioritize the designated "Last Message" preview data from the chat object itself, 
   // as it is updated first during realtime events to ensure the sidebar feels instant.
-  const isOutgoing = chat.lastMessage?.isOutgoing !== undefined
-    ? chat.lastMessage.isOutgoing
-    : latestLoadedMsg
+  const isOutgoing = latestLoadedMsg
     ? (latestLoadedMsg.sender_id || latestLoadedMsg.senderId) === currentUserId
+    : chat.lastMessage?.isOutgoing !== undefined
+    ? chat.lastMessage.isOutgoing
     : false;
 
-  const status = chat.lastMessage?.status || (latestLoadedMsg ? latestLoadedMsg.status : "sent");
+  const status = latestLoadedMsg?.status || chat.lastMessage?.status || "sent";
  
   const createdAt = chat.lastMessage?.timestamp || latestLoadedMsg?.createdAt || chat.updatedAt;
   const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);
