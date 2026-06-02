@@ -524,8 +524,7 @@ export const messageService = {
     messageId,
     currentUserId,
     emoji,
-    currentCleanText,
-    currentReactionsDict = {},
+    messageObj = {},
   ) {
     try {
       const isUuid =
@@ -533,6 +532,12 @@ export const messageService = {
           messageId,
         );
       if (!messageId || !isUuid || !currentUserId) return;
+
+      const currentCleanText = messageObj.text || "";
+      const currentReactionsDict = messageObj.reactions || {};
+      const replyTo = messageObj.replyTo || null;
+      const isForwarded = messageObj.isForwarded || false;
+      const noPreview = messageObj.noPreview || false;
 
       // Deep clone current reactions dict
       const newReactions = JSON.parse(JSON.stringify(currentReactionsDict));
@@ -562,8 +567,14 @@ export const messageService = {
         newReactions[emoji].push(currentUserId);
       }
 
-      const encodedText =
-        currentCleanText + "|||R:" + JSON.stringify(newReactions);
+      const encodedText = encodeMessageText(
+        currentCleanText,
+        replyTo,
+        isForwarded,
+        newReactions,
+        noPreview
+      );
+
       await supabase
         .from("messages")
         .update({ text: encodedText })

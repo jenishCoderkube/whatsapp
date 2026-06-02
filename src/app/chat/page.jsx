@@ -293,6 +293,8 @@ export default function ChatPage() {
             createdAt: msg.createdAt,
             timestamp: msg.timestamp,
             status: msg.status,
+            conversationId: msg.conversationId || msg.conversation_id,
+            conversation_id: msg.conversation_id || msg.conversationId,
             messages: [msg]
           };
         }
@@ -1056,6 +1058,7 @@ export default function ChatPage() {
         </div>
 
         <div
+          id="active-chat-pane"
           className={cn(
             "flex-1 flex flex-col h-full relative overflow-hidden bg-wa-bg",
             mobileScreen === "list" ? "hidden md:flex" : "flex"
@@ -1121,7 +1124,7 @@ export default function ChatPage() {
                         </span>
                       </div>
                     ) : (
-                      <MessageBubble key={item.uiId || item.id} message={item} isGroup={activeChat.isGroup} groupMembers={groupMembers} />
+                      <MessageBubble key={item.uiId || item.id} message={item} isGroup={activeChat.isGroup} groupMembers={groupMembers} chatId={activeChatId} />
                     )
                   ))}
 

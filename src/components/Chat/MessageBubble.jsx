@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "../../hooks/useTranslation";
@@ -50,7 +51,7 @@ import { useAppSelector, useAppDispatch } from "../../hooks/useRedux";
 import { messageService } from "../../services/messageService";
 import { supabase } from "../../lib/supabaseClient";
 import { setReplyingMessage, setEditingMessage } from "../../redux/slices/uiSlice";
-import { updateMessage, updateMessageStatus, replaceOptimisticMessage, deleteMessage } from "../../redux/slices/messageSlice";
+import { updateMessage, updateMessageStatus, replaceOptimisticMessage, deleteMessage, toggleMessageReaction } from "../../redux/slices/messageSlice";
 import { updateLastMessage } from "../../redux/slices/chatSlice";
 import {
   setStatusViewOpen,
@@ -76,7 +77,7 @@ const FONT_STYLES = [
   { name: "handwriting", family: "'Outfit', 'Caveat', cursive, sans-serif" },
 ];
 
-export const MessageBubble = React.memo(function MessageBubble({ message, isGroup, groupMembers = [] }) {
+export const MessageBubble = React.memo(function MessageBubble({ message, isGroup, groupMembers = [], chatId }) {
   const { t } = useTranslation();
   const {
     id,
@@ -111,7 +112,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const currentUserId = currentUser?.id;
   const theme = useAppSelector((state) => state.ui.theme);
   const storeStatuses = useAppSelector((state) => state.status.statuses);
-  const convId = message.conversation_id || message.conversationId;
+  const convId = chatId || message.conversation_id || message.conversationId;
   const messagesForChat = useAppSelector((state) => state.message.messages[convId] || []);
 
   const [showFullReactionPicker, setShowFullReactionPicker] = useState(false);
@@ -190,6 +191,7 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const [showHistoryTooltip, setShowHistoryTooltip] = useState(false);
+  const pickerRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -203,7 +205,13 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   }, [id]);
 
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (e) => {
+      if (showFullReactionPicker && pickerRef.current) {
+        if (!e.target.isConnected || pickerRef.current.contains(e.target)) {
+          return;
+        }
+      }
+
       if (dropdownConfig.isOpen) {
         setDropdownConfig((prev) => ({ ...prev, isOpen: false }));
       }
@@ -401,17 +409,45 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
   };
 
   const handleToggleReaction = async (emoji) => {
-    if (!currentUserId) return;
+    if (!currentUserId || !emoji) return;
+    
+    // Resolve target message for groups
+    const isImgGroup = type === "image_group" && message.messages && message.messages.length > 0;
+    const targetMsg = isImgGroup ? message.messages[0] : message;
+    const targetId = targetMsg.id;
+    const targetConvId = targetMsg.conversation_id || targetMsg.conversationId || convId;
+
+    // 1. Optimistic local UI update
+    dispatch(
+      toggleMessageReaction({
+        chatId: targetConvId,
+        messageId: targetId,
+        userId: currentUserId,
+        emoji,
+      })
+    );
+    setShowReactionBar(false);
+
     try {
+      // 2. Persistent server call passing target message object
       await messageService.toggleReaction(
-        id,
+        targetId,
         currentUserId,
         emoji,
-        text,
-        reactions,
+        targetMsg,
       );
-      setShowReactionBar(false);
-    } catch (err) {}
+    } catch (err) {
+      console.warn("Failed to persist emoji reaction:", err);
+      // Revert optimistic update on backend error
+      dispatch(
+        toggleMessageReaction({
+          chatId: targetConvId,
+          messageId: targetId,
+          userId: currentUserId,
+          emoji,
+        })
+      );
+    }
   };
 
   const handleRetryResend = async (e) => {
@@ -767,8 +803,33 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
     }
   };
 
-  const reactionEmojis = Object.keys(reactions).filter(
-    (k) => Array.isArray(reactions[k]) && reactions[k].length > 0,
+  const getGroupedReactions = () => {
+    if (type !== "image_group" || !message.messages) {
+      return reactions;
+    }
+    const combined = {};
+    message.messages.forEach((subMsg) => {
+      const subReactions = subMsg.reactions || {};
+      Object.keys(subReactions).forEach((emoji) => {
+        if (Array.isArray(subReactions[emoji])) {
+          if (!combined[emoji]) {
+            combined[emoji] = [];
+          }
+          subReactions[emoji].forEach((uid) => {
+            if (!combined[emoji].includes(uid)) {
+              combined[emoji].push(uid);
+            }
+          });
+        }
+      });
+    });
+    return combined;
+  };
+
+  const activeReactions = getGroupedReactions();
+
+  const reactionEmojis = Object.keys(activeReactions).filter(
+    (k) => Array.isArray(activeReactions[k]) && activeReactions[k].length > 0,
   );
 
   const handleScrollToQuotedMessage = (e) => {
@@ -825,21 +886,37 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: 10 }}
                   transition={{ duration: 0.1 }}
-                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50"
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50 animate-scale-up"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                    <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
+                  {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji, index) => (
+                    <motion.button 
+                      key={emoji} 
+                      initial={{ scale: 0, y: 5 }}
+                      animate={{ scale: 1, y: 0 }}
+                      transition={{ type: "spring", stiffness: 350, damping: 15, delay: index * 0.02 }}
+                      whileHover={{ scale: 1.35 }}
+                      whileTap={{ scale: 0.8 }}
+                      onClick={() => handleToggleReaction(emoji)} 
+                      className="text-base sm:text-lg cursor-pointer block leading-tight px-0.5 select-none outline-none border-none bg-transparent"
+                    >
+                      {emoji}
+                    </motion.button>
                   ))}
-                  <button 
+                  <motion.button 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 350, damping: 15, delay: 6 * 0.02 }}
+                    whileHover={{ scale: 1.35 }}
+                    whileTap={{ scale: 0.8 }}
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowFullReactionPicker(true);
                     }} 
-                    className="text-wa-primary hover:scale-130 transition-transform cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover"
+                    className="text-wa-primary cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover outline-none border-none bg-transparent"
                   >
                     +
-                  </button>
+                  </motion.button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1037,25 +1114,26 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
 
           {/* Reaction bar inside bubble has been removed to avoid duplicate rows */}
 
-          {showFullReactionPicker && !isDeleted && (
-            <div className={cn(
-              "fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 select-none transition-colors",
-              "sm:absolute sm:inset-auto sm:bg-transparent sm:p-0 sm:shadow-2xl sm:rounded-2xl sm:border sm:border-wa-border sm:bg-wa-modal sm:overflow-hidden sm:animate-scale-up",
-              isMsgOutgoing ? "sm:right-0" : "sm:left-0",
-              pickerDirection === "down" ? "sm:top-8 sm:bottom-auto" : "sm:bottom-8 sm:top-auto",
-            )} onClick={(e) => {
-              e.stopPropagation();
-              setShowFullReactionPicker(false);
-              setShowReactionBar(false);
-            }}>
+          {showFullReactionPicker && !isDeleted && typeof window !== "undefined" && createPortal(
+            <div 
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-[100] flex items-center justify-center p-4 select-none transition-colors"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowFullReactionPicker(false);
+                  setShowReactionBar(false);
+                }
+              }}
+            >
               <div 
-                className="bg-wa-modal rounded-2xl border border-wa-border shadow-2xl overflow-hidden w-[300px] sm:w-[280px] h-[380px] sm:h-[350px] animate-scale-up sm:animate-none"
-                onClick={(e) => e.stopPropagation()}
+                ref={pickerRef}
+                className="bg-wa-modal rounded-2xl border border-wa-border shadow-2xl overflow-hidden w-[320px] max-w-[95vw] h-[450px] max-h-[85vh] animate-scale-up"
               >
                 <EmojiPicker
                   theme={theme === "dark" ? "dark" : "light"}
                   onEmojiClick={(emojiData) => {
-                    handleToggleReaction(emojiData.emoji);
+                    if (emojiData && emojiData.emoji) {
+                      handleToggleReaction(emojiData.emoji);
+                    }
                     setShowFullReactionPicker(false);
                     setShowReactionBar(false);
                   }}
@@ -1065,22 +1143,39 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                   previewConfig={{ showPreview: false }}
                 />
               </div>
-            </div>
+            </div>,
+            document.getElementById("active-chat-pane") || document.body
           )}
 
           {reactionEmojis.length > 0 && (
-            <div className="absolute -bottom-2.5 right-2 bg-wa-sidebar border border-wa-border rounded-full px-1.5 py-0.5 flex items-center gap-1 shadow-xs z-10 scale-95 sm:scale-100">
+            <motion.div 
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.7, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 350, damping: 18 }}
+              className="absolute -bottom-2.5 right-2 bg-wa-sidebar border border-wa-border rounded-full px-1.5 py-0.5 flex items-center gap-1 shadow-xs z-10 scale-95 sm:scale-100 select-none"
+            >
               {reactionEmojis.map((emoji) => {
-                const count = reactions[emoji].length;
-                const hasReacted = reactions[emoji].includes(currentUserId);
+                const count = activeReactions[emoji].length;
+                const hasReacted = activeReactions[emoji].includes(currentUserId);
                 return (
-                  <button key={emoji} onClick={() => handleToggleReaction(emoji)} className={cn("text-xs hover:scale-110 transition-transform cursor-pointer inline-flex items-center gap-0.5 leading-none", hasReacted && "bg-wa-primary/20 rounded-full px-1 py-0.5")}>
+                  <motion.button 
+                    key={emoji} 
+                    layout
+                    whileHover={{ scale: 1.15 }}
+                    whileTap={{ scale: 0.85 }}
+                    onClick={() => handleToggleReaction(emoji)} 
+                    className={cn(
+                      "text-xs cursor-pointer inline-flex items-center gap-0.5 leading-none outline-none border-none bg-transparent py-0.5", 
+                      hasReacted && "bg-wa-primary/20 rounded-full px-1.5"
+                    )}
+                  >
                     <span>{emoji}</span>
                     {count > 1 && <span className="text-[9px] text-wa-muted font-bold">{count}</span>}
-                  </button>
+                  </motion.button>
                 );
               })}
-            </div>
+            </motion.div>
           )}
 
           {/* Chevron Dropdown Trigger & Dropdown Menu */}
@@ -1180,21 +1275,37 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: 10 }}
                   transition={{ duration: 0.1 }}
-                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50"
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-wa-header border border-wa-border rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl z-50 animate-scale-up"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                    <button key={emoji} onClick={() => handleToggleReaction(emoji)} className="text-base sm:text-lg hover:scale-130 transition-transform cursor-pointer block leading-tight px-0.5">{emoji}</button>
+                  {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji, index) => (
+                    <motion.button 
+                      key={emoji} 
+                      initial={{ scale: 0, y: 5 }}
+                      animate={{ scale: 1, y: 0 }}
+                      transition={{ type: "spring", stiffness: 350, damping: 15, delay: index * 0.02 }}
+                      whileHover={{ scale: 1.35 }}
+                      whileTap={{ scale: 0.8 }}
+                      onClick={() => handleToggleReaction(emoji)} 
+                      className="text-base sm:text-lg cursor-pointer block leading-tight px-0.5 select-none outline-none border-none bg-transparent"
+                    >
+                      {emoji}
+                    </motion.button>
                   ))}
-                  <button 
+                  <motion.button 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 350, damping: 15, delay: 6 * 0.02 }}
+                    whileHover={{ scale: 1.35 }}
+                    whileTap={{ scale: 0.8 }}
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowFullReactionPicker(true);
                     }} 
-                    className="text-wa-primary hover:scale-130 transition-transform cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover"
+                    className="text-wa-primary cursor-pointer block leading-tight px-1 font-bold text-sm sm:text-base hover:text-wa-primary-hover outline-none border-none bg-transparent"
                   >
                     +
-                  </button>
+                  </motion.button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1226,11 +1337,12 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
          JSON.stringify(msgA.reactions) === JSON.stringify(msgB.reactions) &&
          JSON.stringify(msgA.receipts) === JSON.stringify(msgB.receipts) &&
          prevProps.isGroup === nextProps.isGroup &&
-         prevProps.groupMembers?.length === nextProps.groupMembers?.length;
+         prevProps.groupMembers?.length === nextProps.groupMembers?.length &&
+         prevProps.chatId === nextProps.chatId;
 
   if (!basicMatch) return false;
 
-  // For image groups, compare nested messages list length and each nested message
+  // For image groups, compare nested messages list length and each nested message including reactions
   if (msgA.type === "image_group") {
     const listA = msgA.messages || [];
     const listB = msgB.messages || [];
@@ -1239,7 +1351,8 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
       if (listA[i].id !== listB[i].id || 
           listA[i].status !== listB[i].status || 
           listA[i].mediaUrl !== listB[i].mediaUrl ||
-          listA[i].text !== listB[i].text) {
+          listA[i].text !== listB[i].text ||
+          JSON.stringify(listA[i].reactions) !== JSON.stringify(listB[i].reactions)) {
         return false;
       }
     }

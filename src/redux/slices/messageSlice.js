@@ -163,6 +163,40 @@ const messageSlice = createSlice({
         }
       }
     },
+    toggleMessageReaction(state, action) {
+      const { chatId, messageId, userId, emoji } = action.payload;
+      const list = state.messages[chatId];
+      if (list) {
+        const msg = list.find((m) => m.id === messageId);
+        if (msg) {
+          if (!msg.reactions) {
+            msg.reactions = {};
+          }
+          const reactions = JSON.parse(JSON.stringify(msg.reactions));
+          const hasReacted = Array.isArray(reactions[emoji]) && reactions[emoji].includes(userId);
+          
+          // Remove from all existing emojis to enforce mutual exclusivity
+          Object.keys(reactions).forEach((key) => {
+            if (Array.isArray(reactions[key])) {
+              reactions[key] = reactions[key].filter((uid) => uid !== userId);
+              if (reactions[key].length === 0) {
+                delete reactions[key];
+              }
+            }
+          });
+
+          // Add if not already reacted
+          if (!hasReacted) {
+            if (!reactions[emoji]) {
+              reactions[emoji] = [];
+            }
+            reactions[emoji].push(userId);
+          }
+
+          msg.reactions = reactions;
+        }
+      }
+    },
     deleteMessage(state, action) {
       const { chatId, messageId } = action.payload;
       const list = state.messages[chatId];
@@ -195,6 +229,7 @@ export const {
   addMessage,
   updateMessageStatus,
   updateMessage,
+  toggleMessageReaction,
   deleteMessage,
   updateSenderProfile,
   resetMessages,
