@@ -1,5 +1,16 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+const getDeletedForMeIds = () => {
+  if (typeof window !== "undefined") {
+    try {
+      return JSON.parse(localStorage.getItem("wa_deleted_for_me") || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
+
 const initialState = {
   messages: {},
 };
@@ -10,10 +21,11 @@ const messageSlice = createSlice({
   reducers: {
     setMessages(state, action) {
       const { chatId, messages } = action.payload;
+      const deletedIds = getDeletedForMeIds();
       const seen = new Set();
       const unique = [];
       for (const m of messages) {
-        if (!seen.has(m.id)) {
+        if (!seen.has(m.id) && !deletedIds.includes(m.id)) {
           seen.add(m.id);
           unique.push(m);
         }
@@ -25,9 +37,11 @@ const messageSlice = createSlice({
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
+      const deletedIds = getDeletedForMeIds();
+      const filtered = messages.filter((m) => !deletedIds.includes(m.id));
       // Filter out elements already present to prevent duplicate React keys
       const existingIds = new Set(state.messages[chatId].map((m) => m.id));
-      const newUnique = messages.filter((m) => !existingIds.has(m.id));
+      const newUnique = filtered.filter((m) => !existingIds.has(m.id));
       state.messages[chatId] = [...newUnique, ...state.messages[chatId]];
     },
     appendMessages(state, action) {
@@ -35,8 +49,10 @@ const messageSlice = createSlice({
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
+      const deletedIds = getDeletedForMeIds();
+      const filtered = messages.filter((m) => !deletedIds.includes(m.id));
       const existingIds = new Set(state.messages[chatId].map((m) => m.id));
-      const newUnique = messages.filter((m) => !existingIds.has(m.id));
+      const newUnique = filtered.filter((m) => !existingIds.has(m.id));
       state.messages[chatId] = [...state.messages[chatId], ...newUnique];
     },
     replaceOptimisticMessage(state, action) {
@@ -62,6 +78,10 @@ const messageSlice = createSlice({
       const { chatId, message } = action.payload;
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
+      }
+      const deletedIds = getDeletedForMeIds();
+      if (deletedIds.includes(message.id)) {
+        return;
       }
       const list = state.messages[chatId];
       

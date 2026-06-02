@@ -495,6 +495,11 @@ export default function ChatPage() {
       }
 
       if (eventType === "INSERT") {
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("wa_last_message_override_" + targetChatId);
+          } catch (e) {}
+        }
         const processAndAdd = (profile = null) => {
           if (!hasMoreNewerRef.current) {
             dispatch(
@@ -639,6 +644,12 @@ export default function ChatPage() {
     const handleConversationUpdate = (eventType, updatedConv) => {
       let previewText = updatedConv.last_message_text || "";
       const isMine = updatedConv.last_message_sender_id === user.id;
+
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("wa_last_message_override_" + updatedConv.id);
+        } catch (e) {}
+      }
 
       dispatch(
         updateLastMessage({

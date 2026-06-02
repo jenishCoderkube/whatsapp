@@ -214,6 +214,12 @@ export const messageService = {
       if (type === "sticker") previewText = "Sticker";
       if (type === "gif") previewText = "GIF";
 
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("wa_last_message_override_" + conversationId);
+        } catch (e) {}
+      }
+
       await supabase
         .from("conversations")
         .update({

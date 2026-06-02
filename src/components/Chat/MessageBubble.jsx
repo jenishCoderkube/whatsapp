@@ -285,33 +285,55 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
         if (remaining.length > 0) {
           const newLatest = remaining[remaining.length - 1];
           let previewText = newLatest.text;
-          if (newLatest.type === "image") previewText = "Photo";
+          if (newLatest.type === "image" || newLatest.type === "image_group") previewText = "Photo";
           if (newLatest.type === "video") previewText = "Video";
           if (newLatest.type === "file") previewText = "Document";
           if (newLatest.type === "voice") previewText = "Voice Message";
           if (newLatest.type === "sticker") previewText = "Sticker";
           if (newLatest.type === "gif") previewText = "GIF";
 
+          const lastMsg = {
+            text: previewText,
+            timestamp: newLatest.timestamp || new Date(newLatest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+            isOutgoing: newLatest.senderId === currentUserId || newLatest.isOutgoing,
+            status: newLatest.status,
+            isForwarded: newLatest.isForwarded,
+            updatedAt: newLatest.createdAt,
+          };
+
           dispatch(
             updateLastMessage({
               chatId: convId,
-              text: previewText,
-              timestamp: newLatest.timestamp || new Date(newLatest.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
-              isOutgoing: newLatest.senderId === currentUserId || newLatest.isOutgoing,
-              status: newLatest.status,
-              isForwarded: newLatest.isForwarded,
+              ...lastMsg,
             })
           );
+
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("wa_last_message_override_" + convId, JSON.stringify(lastMsg));
+            } catch (e) {}
+          }
         } else {
+          const lastMsg = {
+            text: "",
+            timestamp: "",
+            isOutgoing: false,
+            status: null,
+            updatedAt: new Date(0).toISOString(),
+          };
+
           dispatch(
             updateLastMessage({
               chatId: convId,
-              text: "",
-              timestamp: "",
-              isOutgoing: false,
-              status: null,
+              ...lastMsg,
             })
           );
+
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("wa_last_message_override_" + convId, JSON.stringify(lastMsg));
+            } catch (e) {}
+          }
         }
       }
 

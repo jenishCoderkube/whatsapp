@@ -136,6 +136,28 @@ export const chatService = {
           } catch (e) {}
         }
 
+        let lastMsg = conv.last_message_text ? {
+          text: conv.last_message_text,
+          timestamp: conv.last_message_timestamp || "",
+          status: conv.last_message_status || "sent",
+          isOutgoing: conv.last_message_sender_id === userId,
+        } : null;
+
+        if (typeof window !== "undefined") {
+          try {
+            const override = localStorage.getItem("wa_last_message_override_" + conv.id);
+            if (override) {
+              const parsed = JSON.parse(override);
+              if (parsed) {
+                lastMsg = parsed.text === "" ? null : parsed;
+                if (parsed.updatedAt) {
+                  conv.updated_at = parsed.updatedAt;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
         mappedChats.push({
           id: conv.id,
           name,
@@ -146,12 +168,7 @@ export const chatService = {
           pinnedAt,
           isArchived,
           archivedAt,
-          lastMessage: conv.last_message_text ? {
-            text: conv.last_message_text,
-            timestamp: conv.last_message_timestamp || "",
-            status: conv.last_message_status || "sent",
-            isOutgoing: conv.last_message_sender_id === userId,
-          } : null,
+          lastMessage: lastMsg,
           online,
           phoneNumber,
           peerId,

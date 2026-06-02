@@ -34,6 +34,20 @@ const chatSlice = createSlice({
           if (!chat.isGroup && chat.peerId) {
             chat.online = !!state.onlineMap[chat.peerId];
           }
+          if (typeof window !== "undefined") {
+            try {
+              const override = localStorage.getItem("wa_last_message_override_" + chat.id);
+              if (override) {
+                const parsed = JSON.parse(override);
+                if (parsed) {
+                  chat.lastMessage = parsed.text === "" ? null : parsed;
+                  if (parsed.updatedAt) {
+                    chat.updatedAt = parsed.updatedAt;
+                  }
+                }
+              }
+            } catch (e) {}
+          }
           return chat;
         });
         if (
@@ -42,12 +56,28 @@ const chatSlice = createSlice({
         ) {
           state.activeChatId = null;
         }
+        // Re-sort chats list after mapping overrides
+        state.chats = sortChatsHelper(state.chats);
       }
     },
     appendChat(state, action) {
       const newChat = action.payload;
       if (!newChat.isGroup && newChat.peerId) {
         newChat.online = !!state.onlineMap[newChat.peerId];
+      }
+      if (typeof window !== "undefined") {
+        try {
+          const override = localStorage.getItem("wa_last_message_override_" + newChat.id);
+          if (override) {
+            const parsed = JSON.parse(override);
+            if (parsed) {
+              newChat.lastMessage = parsed.text === "" ? null : parsed;
+              if (parsed.updatedAt) {
+                newChat.updatedAt = parsed.updatedAt;
+              }
+            }
+          }
+        } catch (e) {}
       }
       const filtered = state.chats.filter((c) => c.id !== newChat.id);
       state.chats = sortChatsHelper([newChat, ...filtered]);
@@ -84,7 +114,9 @@ const chatSlice = createSlice({
         }
 
         chat.lastMessage = { text, timestamp, isOutgoing, status: finalStatus, isForwarded };
-        if (!isSameMessage) {
+        if (action.payload.updatedAt) {
+          chat.updatedAt = action.payload.updatedAt;
+        } else if (!isSameMessage) {
           chat.updatedAt = new Date().toISOString();
         }
 
