@@ -317,6 +317,27 @@ const chatSlice = createSlice({
       delete state.drafts[chatId];
     },
   },
+  extraReducers: (builder) => {
+    builder.addCase("message/updateMessageStatus", (state, action) => {
+      const { chatId, status } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat && chat.lastMessage) {
+        const statusWeight = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
+        const oldWeight = statusWeight[chat.lastMessage.status] || 0;
+        const newWeight = statusWeight[status] || 0;
+        if (newWeight >= oldWeight) {
+          chat.lastMessage.status = status;
+        }
+      }
+    });
+    builder.addCase("message/replaceOptimisticMessage", (state, action) => {
+      const { chatId, confirmedMessage } = action.payload;
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (chat && chat.lastMessage) {
+        chat.lastMessage.status = confirmedMessage.status || "sent";
+      }
+    });
+  },
 });
 
 export const {

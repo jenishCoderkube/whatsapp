@@ -66,6 +66,7 @@ export const realtimeService = {
             receipts: row.receipts || {},
             deliveredAt: row.delivered_at,
             seenAt: row.seen_at,
+            clientId: row.client_id,
           };
 
           onMessageEvent(payload.eventType, uniformMsg);

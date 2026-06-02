@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, CheckCheck, Ban, Pin, ChevronDown, Clock, Camera, Video, Paperclip, Mic, Palette, Play, MapPin, CornerUpRight } from "lucide-react";
+import { Check, CheckCheck, Ban, Pin, ChevronDown, Clock, Camera, Video, Paperclip, Mic, Palette, Play, MapPin, CornerUpRight, AlertCircle } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
@@ -59,6 +59,12 @@ export const ChatCard = React.memo(({ chat }) => {
     if (isDeleted) return null;
     if (isPeerTyping) return null;
     if (!isOutgoing) return null;
+    if (status === "pending") {
+      return <Clock className="h-3.5 w-3.5 text-wa-muted inline mr-1 shrink-0" />;
+    }
+    if (status === "failed") {
+      return <AlertCircle className="h-3.5 w-3.5 text-red-500 inline mr-1 shrink-0" />;
+    }
     if (status === "read") {
       return <CheckCheck className="h-3.5 w-3.5 text-[#53bdeb] inline mr-1 shrink-0" />;
     }

@@ -192,6 +192,7 @@
     "download_open_original": "Download / Open Original",
     "attachment": "Attachment",
     "edit_failed": "Failed to edit message.",
+    "edit": "Edit",
     "share_live_location_title": "Share Live Location",
     "live_location_desc": "Participants in this chat will see your location in real-time. This feature updates even when the app is in the background.",
     "live_location_stop_desc": "You can stop sharing your live location at any time directly from the message bubble or map.",

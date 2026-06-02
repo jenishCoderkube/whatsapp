@@ -95,9 +95,10 @@ const messageSlice = createSlice({
         const optIdx = list.findIndex(
           (m) =>
             m.id &&
-            m.id.startsWith("msg-temp-") &&
-            m.type === message.type &&
-            (message.fileName ? m.fileName === message.fileName : m.text === message.text)
+            (message.clientId ? m.id === message.clientId :
+             (m.id.startsWith("msg-temp-") &&
+              m.type === message.type &&
+              (message.fileName ? m.fileName === message.fileName : m.text === message.text)))
         );
 
         if (optIdx !== -1) {
