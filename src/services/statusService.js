@@ -6,6 +6,10 @@ import { messageService } from "./messageService";
 
 // Helper to determine if we should use local storage fallback
 let useLocalFallback = false;
+let hasCheckedTable = false;
+let contactsCache = null;
+let contactsCacheTime = 0;
+let pendingFetchPromise = null;
 
 export const statusService = {
   /**
@@ -44,9 +48,15 @@ export const statusService = {
    * Get all user IDs that have an existing conversation with the current user.
    */
   async getUserContactIds(currentUserId) {
-    try {
-      if (!currentUserId) return [];
+    if (!currentUserId) return [];
 
+    const now = Date.now();
+    // Cache contact IDs for 10 seconds to deduplicate rapid status loading triggers
+    if (contactsCache && now - contactsCacheTime < 10000) {
+      return contactsCache;
+    }
+
+    try {
       const { data: userConvs, error: convsError } = await supabase
         .from("conversation_members")
         .select("conversation_id")
@@ -64,7 +74,10 @@ export const statusService = {
 
       if (peersError || !peers) return [];
 
-      return [...new Set(peers.map((p) => p.user_id))];
+      const result = [...new Set(peers.map((p) => p.user_id))];
+      contactsCache = result;
+      contactsCacheTime = Date.now();
+      return result;
     } catch (e) {
       console.warn("Failed to fetch user contact IDs:", e);
       return [];
@@ -75,6 +88,7 @@ export const statusService = {
    * Resiliently check if statuses table exists, and fallback to localStorage if not.
    */
   async checkTableExists() {
+    if (hasCheckedTable) return useLocalFallback;
     try {
       const { error } = await supabase.from("statuses").select("id").limit(1);
       if (error && error.code === "PGRST205") {
@@ -85,11 +99,13 @@ export const statusService = {
       } else {
         useLocalFallback = false;
       }
+      hasCheckedTable = true;
     } catch (e) {
       useLocalFallback = true;
       console.warn(
         "Unable to connect to Supabase statuses table. Using localStorage fallback.",
       );
+      hasCheckedTable = true;
     }
     return useLocalFallback;
   },
@@ -259,290 +275,302 @@ export const statusService = {
    * Fetch active statuses, grouping them by user, and filtering out expired ones.
    */
   async fetchStatuses(currentUserId) {
-    await this.checkTableExists();
+    if (pendingFetchPromise) {
+      return pendingFetchPromise;
+    }
 
-    const nowIso = new Date().toISOString();
-    const contactIds = await this.getUserContactIds(currentUserId);
+    pendingFetchPromise = (async () => {
+      try {
+        await this.checkTableExists();
 
-    if (useLocalFallback) {
-      const localStatuses = JSON.parse(
-        localStorage.getItem("wa_local_statuses") || "[]",
-      );
-      const localViews = JSON.parse(
-        localStorage.getItem("wa_local_status_views") || "[]",
-      );
+        const nowIso = new Date().toISOString();
+        const contactIds = await this.getUserContactIds(currentUserId);
 
-      // Filter out expired statuses
-      const activeStatuses = localStatuses.filter(
-        (s) => new Date(s.expires_at) > new Date(),
-      );
-      localStorage.setItem("wa_local_statuses", JSON.stringify(activeStatuses));
-
-      const visibleStatuses = activeStatuses.filter((status) => {
-        const statusUserId = status.user_id;
-        if (statusUserId === currentUserId) return true;
-
-        const privacy = status.privacy || "contacts";
-        const privacyList = status.privacy_list || [];
-
-        if (privacy === "everyone") return true;
-        if (privacy === "contacts") return contactIds.includes(statusUserId);
-        if (privacy === "selected") return privacyList.includes(currentUserId);
-        if (privacy === "hide")
-          return (
-            contactIds.includes(statusUserId) &&
-            !privacyList.includes(currentUserId)
+        if (useLocalFallback) {
+          const localStatuses = JSON.parse(
+            localStorage.getItem("wa_local_statuses") || "[]",
+          );
+          const localViews = JSON.parse(
+            localStorage.getItem("wa_local_status_views") || "[]",
           );
 
-        return false;
-      });
+          // Filter out expired statuses
+          const activeStatuses = localStatuses.filter(
+            (s) => new Date(s.expires_at) > new Date(),
+          );
+          localStorage.setItem("wa_local_statuses", JSON.stringify(activeStatuses));
 
-      // Get user profiles
-      const uniqueUserIds = [...new Set(visibleStatuses.map((s) => s.user_id))];
-      const profilesMap = {};
+          const visibleStatuses = activeStatuses.filter((status) => {
+            const statusUserId = status.user_id;
+            if (statusUserId === currentUserId) return true;
 
-      for (const uid of uniqueUserIds) {
-        if (uid === currentUserId) {
-          const { data: currentProfile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", uid)
-            .single();
-          profilesMap[uid] = currentProfile || {
-            id: uid,
-            name: "Me",
-            avatar: "",
-          };
+            const privacy = status.privacy || "contacts";
+            const privacyList = status.privacy_list || [];
+
+            if (privacy === "everyone") return true;
+            if (privacy === "contacts") return contactIds.includes(statusUserId);
+            if (privacy === "selected") return privacyList.includes(currentUserId);
+            if (privacy === "hide")
+              return (
+                contactIds.includes(statusUserId) &&
+                !privacyList.includes(currentUserId)
+              );
+
+            return false;
+          });
+
+          // Get user profiles
+          const uniqueUserIds = [...new Set(visibleStatuses.map((s) => s.user_id))];
+          const profilesMap = {};
+
+          for (const uid of uniqueUserIds) {
+            if (uid === currentUserId) {
+              const { data: currentProfile } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", uid)
+                .single();
+              profilesMap[uid] = currentProfile || {
+                id: uid,
+                name: "Me",
+                avatar: "",
+              };
+            } else {
+              const profile = await profileService.getProfileById(uid);
+              profilesMap[uid] = profile || {
+                id: uid,
+                name: "Contact",
+                avatar: "",
+              };
+            }
+          }
+
+          // Group statuses by user
+          const groups = {};
+
+          visibleStatuses.forEach((status) => {
+            const uid = status.user_id;
+            const profile = profilesMap[uid] || {
+              id: uid,
+              name: "Contact",
+              avatar: "",
+            };
+
+            // Find views for this status, parsing votes or answers
+            const viewsForStatus = localViews
+              .filter((v) => v.status_id === status.id)
+              .map((v) => {
+                let voteOptionId = null;
+                let questionAnswer = null;
+                let cleanReplyText = v.reply_text;
+
+                if (v.reply_text && v.reply_text.startsWith("|||VOTE:")) {
+                  voteOptionId = v.reply_text.substring(8);
+                  cleanReplyText = null;
+                } else if (v.reply_text && v.reply_text.startsWith("|||ANSWER:")) {
+                  questionAnswer = v.reply_text.substring(10);
+                  cleanReplyText = null;
+                }
+
+                return {
+                  viewerId: v.viewer_id,
+                  name: v.name,
+                  avatar: v.avatar,
+                  reaction: v.reaction,
+                  replyText: cleanReplyText,
+                  voteOptionId,
+                  questionAnswer,
+                  createdAt: v.created_at,
+                };
+              });
+
+            const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
+
+            const mappedStatus = {
+              id: status.id,
+              userId: status.user_id,
+              type: status.type,
+              mediaUrl: status.media_url,
+              caption: status.caption,
+              textContent: status.text_content,
+              bgColor: status.bg_color,
+              textStyle: status.text_style,
+              createdAt: status.created_at,
+              expiresAt: status.expires_at,
+              views: viewsForStatus,
+              isSeen: uid === currentUserId ? false : isSeen, // own status doesn't have "seen" color rings for self
+            };
+
+            if (!groups[uid]) {
+              groups[uid] = {
+                userId: uid,
+                name: profile.name,
+                avatar: profile.avatar,
+                statuses: [],
+                hasUnseen: false,
+              };
+            }
+
+            groups[uid].statuses.push(mappedStatus);
+          });
+
+          // Format groups
+          Object.keys(groups).forEach((uid) => {
+            // Sort statuses inside the group chronologically (earliest first)
+            groups[uid].statuses.sort(
+              (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+            );
+
+            if (uid !== currentUserId) {
+              groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
+            } else {
+              groups[uid].hasUnseen = false;
+            }
+          });
+
+          return Object.values(groups);
         } else {
-          const profile = await profileService.getProfileById(uid);
-          profilesMap[uid] = profile || {
-            id: uid,
-            name: "Contact",
-            avatar: "",
-          };
-        }
-      }
+          // 1. Fetch active statuses (expires_at > now)
+          const { data: statusesData, error: statusesError } = await supabase
+            .from("statuses")
+            .select("*, profiles:user_id(id, name, avatar)")
+            .gt("expires_at", nowIso)
+            .order("created_at", { ascending: true });
 
-      // Group statuses by user
-      const groups = {};
+          if (statusesError) throw statusesError;
+          if (!statusesData) return [];
 
-      visibleStatuses.forEach((status) => {
-        const uid = status.user_id;
-        const profile = profilesMap[uid] || {
-          id: uid,
-          name: "Contact",
-          avatar: "",
-        };
+          const visibleStatuses = statusesData.filter((status) => {
+            const statusUserId = status.user_id;
+            if (statusUserId === currentUserId) return true;
 
-        // Find views for this status, parsing votes or answers
-        const viewsForStatus = localViews
-          .filter((v) => v.status_id === status.id)
-          .map((v) => {
+            const privacy = status.privacy || "contacts";
+            const privacyList = status.privacy_list || [];
+
+            if (privacy === "everyone") return true;
+            if (privacy === "contacts") return contactIds.includes(statusUserId);
+            if (privacy === "selected") return privacyList.includes(currentUserId);
+            if (privacy === "hide")
+              return (
+                contactIds.includes(statusUserId) &&
+                !privacyList.includes(currentUserId)
+              );
+
+            return false;
+          });
+
+          // 2. Fetch views for these active statuses
+          const statusIds = visibleStatuses.map((s) => s.id);
+          let viewsData = [];
+
+          if (statusIds.length > 0) {
+            const { data: fetchedViews, error: viewsError } = await supabase
+              .from("status_views")
+              .select("*, profiles:viewer_id(name, avatar)")
+              .in("status_id", statusIds);
+
+            if (!viewsError && fetchedViews) {
+              viewsData = fetchedViews;
+            }
+          }
+
+          // Group views by status_id
+          const viewsByStatus = {};
+          viewsData.forEach((view) => {
+            if (!viewsByStatus[view.status_id]) {
+              viewsByStatus[view.status_id] = [];
+            }
+
             let voteOptionId = null;
             let questionAnswer = null;
-            let cleanReplyText = v.reply_text;
+            let cleanReplyText = view.reply_text;
 
-            if (v.reply_text && v.reply_text.startsWith("|||VOTE:")) {
-              voteOptionId = v.reply_text.substring(8);
+            if (view.reply_text && view.reply_text.startsWith("|||VOTE:")) {
+              voteOptionId = view.reply_text.substring(8);
               cleanReplyText = null;
-            } else if (v.reply_text && v.reply_text.startsWith("|||ANSWER:")) {
-              questionAnswer = v.reply_text.substring(10);
+            } else if (
+              view.reply_text &&
+              view.reply_text.startsWith("|||ANSWER:")
+            ) {
+              questionAnswer = view.reply_text.substring(10);
               cleanReplyText = null;
             }
 
-            return {
-              viewerId: v.viewer_id,
-              name: v.name,
-              avatar: v.avatar,
-              reaction: v.reaction,
+            viewsByStatus[view.status_id].push({
+              viewerId: view.viewer_id,
+              name: view.profiles?.name || "Viewer",
+              avatar: view.profiles?.avatar,
+              reaction: view.reaction,
               replyText: cleanReplyText,
               voteOptionId,
               questionAnswer,
-              createdAt: v.created_at,
-            };
+              createdAt: view.created_at,
+            });
           });
 
-        const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
+          // Group statuses by user
+          const groups = {};
 
-        const mappedStatus = {
-          id: status.id,
-          userId: status.user_id,
-          type: status.type,
-          mediaUrl: status.media_url,
-          caption: status.caption,
-          textContent: status.text_content,
-          bgColor: status.bg_color,
-          textStyle: status.text_style,
-          createdAt: status.created_at,
-          expiresAt: status.expires_at,
-          views: viewsForStatus,
-          isSeen: uid === currentUserId ? false : isSeen, // own status doesn't have "seen" color rings for self
-        };
+          visibleStatuses.forEach((status) => {
+            const uid = status.user_id;
+            const profile = status.profiles || {
+              id: uid,
+              name: "Contact",
+              avatar: "",
+            };
+            const viewsForStatus = viewsByStatus[status.id] || [];
+            const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
 
-        if (!groups[uid]) {
-          groups[uid] = {
-            userId: uid,
-            name: profile.name,
-            avatar: profile.avatar,
-            statuses: [],
-            hasUnseen: false,
-          };
+            const mappedStatus = {
+              id: status.id,
+              userId: status.user_id,
+              type: status.type,
+              mediaUrl: status.media_url,
+              caption: status.caption,
+              textContent: status.text_content,
+              bgColor: status.bg_color,
+              textStyle: status.text_style,
+              createdAt: status.created_at,
+              expiresAt: status.expires_at,
+              views: viewsForStatus,
+              isSeen: uid === currentUserId ? false : isSeen,
+            };
+
+            if (!groups[uid]) {
+              groups[uid] = {
+                userId: uid,
+                name: profile.name,
+                avatar: profile.avatar,
+                statuses: [],
+                hasUnseen: false,
+              };
+            }
+
+            groups[uid].statuses.push(mappedStatus);
+          });
+
+          // Re-evaluate groups
+          Object.keys(groups).forEach((uid) => {
+            // Sort chronologically
+            groups[uid].statuses.sort(
+              (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+            );
+
+            if (uid !== currentUserId) {
+              groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
+            } else {
+              groups[uid].hasUnseen = false;
+            }
+          });
+
+          return Object.values(groups);
         }
-
-        groups[uid].statuses.push(mappedStatus);
-      });
-
-      // Format groups
-      Object.keys(groups).forEach((uid) => {
-        // Sort statuses inside the group chronologically (earliest first)
-        groups[uid].statuses.sort(
-          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-        );
-
-        if (uid !== currentUserId) {
-          groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
-        } else {
-          groups[uid].hasUnseen = false;
-        }
-      });
-
-      return Object.values(groups);
-    } else {
-      // 1. Fetch active statuses (expires_at > now)
-      const { data: statusesData, error: statusesError } = await supabase
-        .from("statuses")
-        .select("*, profiles:user_id(id, name, avatar)")
-        .gt("expires_at", nowIso)
-        .order("created_at", { ascending: true });
-
-      if (statusesError) throw statusesError;
-      if (!statusesData) return [];
-
-      const visibleStatuses = statusesData.filter((status) => {
-        const statusUserId = status.user_id;
-        if (statusUserId === currentUserId) return true;
-
-        const privacy = status.privacy || "contacts";
-        const privacyList = status.privacy_list || [];
-
-        if (privacy === "everyone") return true;
-        if (privacy === "contacts") return contactIds.includes(statusUserId);
-        if (privacy === "selected") return privacyList.includes(currentUserId);
-        if (privacy === "hide")
-          return (
-            contactIds.includes(statusUserId) &&
-            !privacyList.includes(currentUserId)
-          );
-
-        return false;
-      });
-
-      // 2. Fetch views for these active statuses
-      const statusIds = visibleStatuses.map((s) => s.id);
-      let viewsData = [];
-
-      if (statusIds.length > 0) {
-        const { data: fetchedViews, error: viewsError } = await supabase
-          .from("status_views")
-          .select("*, profiles:viewer_id(name, avatar)")
-          .in("status_id", statusIds);
-
-        if (!viewsError && fetchedViews) {
-          viewsData = fetchedViews;
-        }
+      } finally {
+        pendingFetchPromise = null;
       }
+    })();
 
-      // Group views by status_id
-      const viewsByStatus = {};
-      viewsData.forEach((view) => {
-        if (!viewsByStatus[view.status_id]) {
-          viewsByStatus[view.status_id] = [];
-        }
-
-        let voteOptionId = null;
-        let questionAnswer = null;
-        let cleanReplyText = view.reply_text;
-
-        if (view.reply_text && view.reply_text.startsWith("|||VOTE:")) {
-          voteOptionId = view.reply_text.substring(8);
-          cleanReplyText = null;
-        } else if (
-          view.reply_text &&
-          view.reply_text.startsWith("|||ANSWER:")
-        ) {
-          questionAnswer = view.reply_text.substring(10);
-          cleanReplyText = null;
-        }
-
-        viewsByStatus[view.status_id].push({
-          viewerId: view.viewer_id,
-          name: view.profiles?.name || "Viewer",
-          avatar: view.profiles?.avatar,
-          reaction: view.reaction,
-          replyText: cleanReplyText,
-          voteOptionId,
-          questionAnswer,
-          createdAt: view.created_at,
-        });
-      });
-
-      // Group statuses by user
-      const groups = {};
-
-      visibleStatuses.forEach((status) => {
-        const uid = status.user_id;
-        const profile = status.profiles || {
-          id: uid,
-          name: "Contact",
-          avatar: "",
-        };
-        const viewsForStatus = viewsByStatus[status.id] || [];
-        const isSeen = viewsForStatus.some((v) => v.viewerId === currentUserId);
-
-        const mappedStatus = {
-          id: status.id,
-          userId: status.user_id,
-          type: status.type,
-          mediaUrl: status.media_url,
-          caption: status.caption,
-          textContent: status.text_content,
-          bgColor: status.bg_color,
-          textStyle: status.text_style,
-          createdAt: status.created_at,
-          expiresAt: status.expires_at,
-          views: viewsForStatus,
-          isSeen: uid === currentUserId ? false : isSeen,
-        };
-
-        if (!groups[uid]) {
-          groups[uid] = {
-            userId: uid,
-            name: profile.name,
-            avatar: profile.avatar,
-            statuses: [],
-            hasUnseen: false,
-          };
-        }
-
-        groups[uid].statuses.push(mappedStatus);
-      });
-
-      // Re-evaluate groups
-      Object.keys(groups).forEach((uid) => {
-        // Sort chronologically
-        groups[uid].statuses.sort(
-          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-        );
-
-        if (uid !== currentUserId) {
-          groups[uid].hasUnseen = groups[uid].statuses.some((s) => !s.isSeen);
-        } else {
-          groups[uid].hasUnseen = false;
-        }
-      });
-
-      return Object.values(groups);
-    }
+    return pendingFetchPromise;
   },
 
   /**

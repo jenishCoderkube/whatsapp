@@ -6,7 +6,8 @@ export const lockSyncService = {
    */
   async fetchLockSettings() {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const { data: { session }, error } = await supabase.auth.getSession();
+      const user = session?.user;
       if (error || !user) return null;
       return user.user_metadata?.lock_settings || null;
     } catch (e) {

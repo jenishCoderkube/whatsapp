@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { useTranslation } from "../../hooks/useTranslation";
 import { useAppSelector } from "../../hooks/useRedux";
 import { MentionSuggestions } from "./MentionSuggestions";
+import { Loader } from "../ui/Loader";
 
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   ssr: false,
@@ -583,7 +584,8 @@ export function StatusComposerText({ onCancel, onSubmit, uploading, uploadProgre
         </button>
 
         {uploading ? (
-          <div className="flex items-center gap-3 bg-[#00a884] text-white px-5 py-2.5 rounded-full shadow-md font-medium text-sm animate-pulse">
+          <div className="flex items-center gap-3 bg-[#00a884] text-white px-5 py-2.5 rounded-full shadow-md font-medium text-sm">
+            <Loader size="sm" className="border-white" />
             <span>{t("status.uploading_percentage", { progress: uploadProgress }) || `Uploading... (${uploadProgress}%)`}</span>
           </div>
         ) : (

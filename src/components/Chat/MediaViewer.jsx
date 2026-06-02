@@ -15,6 +15,7 @@ import {
   ChevronRight,
   User,
   Calendar,
+  MoreVertical,
 } from "lucide-react";
 import { useTranslation } from "../../hooks/useTranslation";
 
@@ -26,12 +27,25 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const containerRef = useRef(null);
+  const moreMenuRef = useRef(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Close more menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showMoreMenu && moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showMoreMenu]);
 
   // Sync index when initialIndex changes
   useEffect(() => {
@@ -43,6 +57,7 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
     setScale(1);
     setRotation(0);
     setIsImageLoaded(false);
+    setShowMoreMenu(false);
   }, [currentIndex]);
 
   const activeMedia = mediaList[currentIndex];
@@ -163,18 +178,18 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
                 <User className="h-5 w-5 text-neutral-300" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-neutral-100 truncate flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-neutral-100 truncate flex items-center gap-1.5 whitespace-nowrap">
                   {activeMedia.isForwarded && (
-                    <span className="text-[10px] bg-white/10 text-neutral-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-normal">
+                    <span className="text-[10px] bg-white/10 text-neutral-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-normal whitespace-nowrap">
                       <svg viewBox="0 0 24 24" width="10" height="10" className="fill-neutral-300 inline shrink-0 rotate-[-45deg]">
                         <path d="M15 5l-1.41 1.41L18.17 11H2V13h16.17l-4.59 4.59L15 19l7-7-7-7z" />
                       </svg>
                       {t("chat.forwarded")}
                     </span>
                   )}
-                  <span>{activeMedia.senderName || t("chat.shared_image") || "Shared Photo"}</span>
+                  <span className="truncate">{activeMedia.senderName || t("chat.shared_image") || "Shared Photo"}</span>
                 </p>
-                <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+                <div className="flex items-center gap-1.5 text-xs text-neutral-400 whitespace-nowrap">
                   <Calendar className="h-3.5 w-3.5" />
                   <span>{displayTime}</span>
                 </div>
@@ -193,7 +208,7 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
               <button
                 onClick={handleZoomOut}
                 disabled={scale <= 1}
-                className="p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+                className="hidden sm:inline-flex p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
                 title={t("chat.zoom_out") || "Zoom Out"}
               >
                 <ZoomOut className="h-5 w-5" />
@@ -201,14 +216,14 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
               <button
                 onClick={handleZoomIn}
                 disabled={scale >= 4}
-                className="p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+                className="hidden sm:inline-flex p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
                 title={t("chat.zoom_in") || "Zoom In"}
               >
                 <ZoomIn className="h-5 w-5" />
               </button>
               <button
                 onClick={handleRotate}
-                className="p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                className="hidden sm:inline-flex p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
                 title={t("chat.rotate") || "Rotate"}
               >
                 <RotateCw className="h-5 w-5" />
@@ -222,12 +237,80 @@ export function MediaViewer({ isOpen, onClose, mediaList = [], initialIndex = 0 
               </button>
               <button
                 onClick={toggleFullscreen}
-                className="p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                className="hidden sm:inline-flex p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
                 title={isFullscreen ? t("chat.exit_fullscreen") || "Exit Fullscreen" : t("chat.fullscreen") || "Fullscreen"}
               >
                 {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
               </button>
-              <div className="w-[1px] h-6 bg-white/15 mx-1" />
+
+              {/* More Actions Dropdown (Mobile only) */}
+              <div className="relative sm:hidden" ref={moreMenuRef}>
+                <button
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  className="p-2 rounded-full hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                  title="More options"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </button>
+
+                {showMoreMenu && (
+                  <div className="absolute right-0 top-10 w-48 bg-neutral-900 border border-white/10 rounded-lg shadow-xl py-1 z-30 text-neutral-200 text-sm">
+                    <button
+                      onClick={() => {
+                        handleZoomIn();
+                        setShowMoreMenu(false);
+                      }}
+                      disabled={scale >= 4}
+                      className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent"
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                      <span>{t("chat.zoom_in") || "Zoom In"}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleZoomOut();
+                        setShowMoreMenu(false);
+                      }}
+                      disabled={scale <= 1}
+                      className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent"
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                      <span>{t("chat.zoom_out") || "Zoom Out"}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleRotate();
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-white/5"
+                    >
+                      <RotateCw className="h-4 w-4" />
+                      <span>{t("chat.rotate") || "Rotate"}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        toggleFullscreen();
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-white/5"
+                    >
+                      {isFullscreen ? (
+                        <>
+                          <Minimize2 className="h-4 w-4" />
+                          <span>{t("chat.exit_fullscreen") || "Exit Fullscreen"}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 className="h-4 w-4" />
+                          <span>{t("chat.fullscreen") || "Fullscreen"}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden sm:block w-[1px] h-6 bg-white/15 mx-1" />
               <button
                 onClick={onClose}
                 className="p-2 rounded-full bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white transition-all cursor-pointer"

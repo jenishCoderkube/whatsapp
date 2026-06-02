@@ -11,7 +11,7 @@ const getSavedState = () => {
   return {};
 };
 
-const saveStateToStorage = (state) => {
+const saveStateToStorage = (state, syncToSupabase = true) => {
   if (typeof window === "undefined") return;
   try {
     const currentState = current(state);
@@ -26,14 +26,17 @@ const saveStateToStorage = (state) => {
     };
     localStorage.setItem("wa_lock_settings", JSON.stringify(dataToSave));
 
-    // Asynchronously update settings in Supabase Auth user metadata
-    import("../../services/lockSyncService")
-      .then(({ lockSyncService }) => {
-        lockSyncService.saveLockSettings(dataToSave);
-      })
-      .catch((err) => {
-        console.warn("Supabase lock sync background import error:", err);
-      });
+    if (syncToSupabase) {
+      // Exclude runtime local activity metadata from Supabase user_metadata
+      const { lastUnlockedTime, ...databaseSettings } = dataToSave;
+      import("../../services/lockSyncService")
+        .then(({ lockSyncService }) => {
+          lockSyncService.saveLockSettings(databaseSettings);
+        })
+        .catch((err) => {
+          console.warn("Supabase lock sync background import error:", err);
+        });
+    }
   } catch (e) {
     console.error("Failed to save lock settings:", e);
   }
@@ -102,13 +105,13 @@ const lockSlice = createSlice({
         state.lastUnlockedTime = null;
         state.authorizedChatIds = [];
         state.isLockedChatsFolderUnlocked = false;
-        saveStateToStorage(state);
+        saveStateToStorage(state, false);
       }
     },
     unlockApp(state) {
       state.isAppLocked = false;
       state.lastUnlockedTime = Date.now();
-      saveStateToStorage(state);
+      saveStateToStorage(state, false);
     },
     lockChat(state, action) {
       const chatId = action.payload;
@@ -135,7 +138,7 @@ const lockSlice = createSlice({
     updateLastUnlockedTime(state) {
       if (state.isAppLockEnabled && !state.isAppLocked) {
         state.lastUnlockedTime = Date.now();
-        saveStateToStorage(state);
+        saveStateToStorage(state, false);
       }
     },
     setLockSettingsFromSupabase(state, action) {

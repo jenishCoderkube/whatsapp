@@ -5,6 +5,7 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Avatar } from "../ui/Avatar";
+import { Loader } from "../ui/Loader";
 import { useAppSelector } from "../../hooks/useRedux";
 import { profileService } from "../../services/profileService";
 import { Check, Search, X } from "lucide-react";
@@ -157,7 +158,9 @@ export function StatusPrivacyModal({ isOpen, onClose, currentPrivacy, currentPri
             {/* Profiles list */}
             <div className="flex flex-col gap-1 max-h-[30vh] overflow-y-auto">
               {loading ? (
-                <div className="text-center py-4 text-xs text-wa-muted">{t("status.loading_contacts") || "Loading contacts..."}</div>
+                <div className="flex justify-center items-center py-4">
+                  <Loader size="sm" />
+                </div>
               ) : profiles.length > 0 ? (
                 profiles.map((prof) => {
                   const isSelected = selectedUsers.includes(prof.id);

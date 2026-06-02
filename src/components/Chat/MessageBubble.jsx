@@ -968,6 +968,14 @@ export const MessageBubble = React.memo(function MessageBubble({ message, isGrou
                     >
                       {message.replyTo.statusTextContent}
                     </div>
+                  ) : message.replyTo.type === "video" ? (
+                    <video 
+                      src={message.replyTo.mediaUrl || message.replyTo.statusMediaUrl} 
+                      className="w-8 h-8 rounded object-cover border border-white/10"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
                   ) : (
                     <img 
                       src={message.replyTo.mediaUrl || message.replyTo.statusMediaUrl} 

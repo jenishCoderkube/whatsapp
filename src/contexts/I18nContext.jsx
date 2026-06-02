@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useState, useEffect, useContext } from "react";
+import React, { createContext, useState, useEffect, useContext, useCallback, useMemo } from "react";
 import enTranslations from "../locales/en.json";
 import hiTranslations from "../locales/hi.json";
 import guTranslations from "../locales/gu.json";
@@ -40,7 +40,7 @@ export function I18nProvider({ children }) {
     }
   }, [locale]);
 
-  const changeLanguage = (langCode) => {
+  const changeLanguage = useCallback((langCode) => {
     if (translations[langCode]) {
       setLocale(langCode);
       if (typeof window !== "undefined") {
@@ -49,9 +49,9 @@ export function I18nProvider({ children }) {
     } else {
       console.warn(`Translation for language code "${langCode}" is not available.`);
     }
-  };
+  }, []);
 
-  const t = (key, variables = {}) => {
+  const t = useCallback((key, variables = {}) => {
     const keys = key.split(".");
     let value = translations[locale];
 
@@ -92,15 +92,15 @@ export function I18nProvider({ children }) {
     }
 
     return value;
-  };
+  }, [locale]);
 
-  const value = {
+  const value = useMemo(() => ({
     locale,
     t,
     changeLanguage,
     availableLanguages: Object.keys(translations),
     languageNames,
-  };
+  }), [locale, t, changeLanguage]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

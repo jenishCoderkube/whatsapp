@@ -14,6 +14,7 @@ import {
   updateStatusReactionLocal,
   setPrivacySettings,
   muteUser,
+  setLoading,
 } from "../../redux/slices/statusSlice";
 import { statusService } from "../../services/statusService";
 
@@ -24,9 +25,10 @@ import { StatusComposerMedia } from "./StatusComposerMedia";
 import { StatusViewer } from "./StatusViewer";
 import { StatusEmptyState } from "./StatusEmptyState";
 import { StatusPrivacyModal } from "./StatusPrivacyModal";
+import { Loader } from "../ui/Loader";
 import { cn } from "../../utils/cn";
 import { useTranslation } from "../../hooks/useTranslation";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 export function StatusPanel() {
   const dispatch = useAppDispatch();
@@ -39,6 +41,7 @@ export function StatusPanel() {
   const myStatuses = useAppSelector((state) => state.status.myStatuses) || [];
   const activeUserId = useAppSelector((state) => state.status.activeUserId);
   const activeStatusIndex = useAppSelector((state) => state.status.activeStatusIndex);
+  const loading = useAppSelector((state) => state.status.loading);
   const uploading = useAppSelector((state) => state.status.uploading);
   const uploadProgress = useAppSelector((state) => state.status.uploadProgress);
   const privacy = useAppSelector((state) => state.status.privacy);
@@ -82,6 +85,7 @@ export function StatusPanel() {
     if (!user?.id || !statusViewOpen) return;
 
     const loadStatuses = async () => {
+      dispatch(setLoading(true));
       try {
         const data = await statusService.fetchStatuses(user.id);
         dispatch(setStatuses(data));
@@ -95,6 +99,8 @@ export function StatusPanel() {
         }
       } catch (err) {
         console.warn("Failed loading status list:", err);
+      } finally {
+        dispatch(setLoading(false));
       }
     };
 
@@ -185,6 +191,7 @@ export function StatusPanel() {
       return;
     }
 
+    dispatch(setActiveUser(null));
     setSelectedMediaFiles(validFiles);
     setComposingType("media");
   };
@@ -270,11 +277,18 @@ export function StatusPanel() {
   };
 
   const reloadLists = async () => {
-    const data = await statusService.fetchStatuses(user.id);
-    dispatch(setStatuses(data));
-    const myGroup = data.find((g) => g.userId === user.id);
-    if (myGroup) {
-      dispatch(setMyStatuses(myGroup.statuses));
+    dispatch(setLoading(true));
+    try {
+      const data = await statusService.fetchStatuses(user.id);
+      dispatch(setStatuses(data));
+      const myGroup = data.find((g) => g.userId === user.id);
+      if (myGroup) {
+        dispatch(setMyStatuses(myGroup.statuses));
+      }
+    } catch (e) {
+      console.warn("Failed reloading status list:", e);
+    } finally {
+      dispatch(setLoading(false));
     }
   };
 
@@ -499,7 +513,10 @@ export function StatusPanel() {
           onSelectMyStatus={() => dispatch(setActiveUser(user.id))}
           onSelectGroup={(uid) => dispatch(setActiveUser(uid))}
           onOpenPrivacy={() => setPrivacyModalOpen(true)}
-          onTriggerTextComposer={() => setComposingType("text")}
+          onTriggerTextComposer={() => {
+            dispatch(setActiveUser(null));
+            setComposingType("text");
+          }}
           onTriggerMediaSelect={handleMediaSelect}
           className={showViewer ? "hidden md:flex" : "flex"}
         />
@@ -511,27 +528,26 @@ export function StatusPanel() {
         )}>
           <div id="status-canvas-container" className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence mode="wait">
-              {composingType === "text" && (
+              {composingType === "text" ? (
                 <StatusComposerText
+                  key="status-composer-text"
                   onCancel={handleCancelComposition}
                   onSubmit={handleTextStatusSubmit}
                   uploading={uploading}
                   uploadProgress={uploadProgress}
                 />
-              )}
-
-              {composingType === "media" && (
+              ) : composingType === "media" ? (
                 <StatusComposerMedia
+                  key="status-composer-media"
                   mediaFiles={selectedMediaFiles}
                   onCancel={handleCancelComposition}
                   onSubmit={handleMediaStatusSubmit}
                   uploading={uploading}
                   uploadProgress={uploadProgress}
                 />
-              )}
-
-              {activeUserId && activeStatus && (
+              ) : activeUserId && activeStatus ? (
                 <StatusViewer
+                  key={`status-viewer-${activeUserId}-${activeStatus.id}`}
                   activeUserId={activeUserId}
                   activeGroup={activeGroup}
                   activeStatusIndex={activeStatusIndex}
@@ -557,10 +573,20 @@ export function StatusPanel() {
                   onSeek={handleSeek}
                   onJumpToStatus={handleJumpToStatus}
                 />
-              )}
-
-              {!activeUserId && !composingType && (
-                <StatusEmptyState />
+              ) : (
+                loading ? (
+                  <motion.div
+                    key="status-loading"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center justify-center p-8"
+                  >
+                    <Loader size="lg" />
+                  </motion.div>
+                ) : (
+                  <StatusEmptyState key="status-empty-state" />
+                )
               )}
             </AnimatePresence>
           </div>

@@ -61,9 +61,10 @@ export const sessionService = {
   // Get all active sessions stored in Supabase Auth user_metadata
   async getActiveSessions() {
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) return [];
     return user.user_metadata?.linked_devices || [];
   },
@@ -82,9 +83,10 @@ export const sessionService = {
 
     // 1. Fetch latest user metadata from Supabase
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) {
       return { currentDeviceId, activeDevices: [] };
     }
@@ -211,9 +213,10 @@ export const sessionService = {
     if (!userId || !currentDeviceId) return;
 
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) return;
 
     let linkedDevices = user.user_metadata?.linked_devices || [];
@@ -249,9 +252,10 @@ export const sessionService = {
 
     // 1. Fetch latest metadata
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) return;
 
     let linkedDevices = user.user_metadata?.linked_devices || [];
@@ -284,9 +288,10 @@ export const sessionService = {
 
     // 1. Fetch latest metadata
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (error || !user) return;
 
     let linkedDevices = user.user_metadata?.linked_devices || [];
