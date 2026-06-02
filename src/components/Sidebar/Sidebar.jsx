@@ -448,13 +448,12 @@ export function Sidebar({ className }) {
               }
 
               // Update last message preview and status (ticks) if changed
-              if (
-                updatedConv.last_message_text !== existing.lastMessage?.text ||
-                updatedConv.last_message_status !==
-                  existing.lastMessage?.status ||
-                updatedConv.last_message_timestamp !==
-                  existing.lastMessage?.timestamp
-              ) {
+              const textChanged = updatedConv.last_message_text !== existing.lastMessage?.text;
+              const timestampChanged = updatedConv.last_message_timestamp !== existing.lastMessage?.timestamp;
+              const statusChanged = updatedConv.last_message_status !== existing.lastMessage?.status;
+
+              if (textChanged || timestampChanged) {
+                // New message arrived — full update with re-sort
                 dispatch(
                   updateLastMessage({
                     chatId: updatedConv.id,
@@ -462,6 +461,19 @@ export function Sidebar({ className }) {
                     timestamp: updatedConv.last_message_timestamp,
                     isOutgoing: updatedConv.last_message_sender_id === user.id,
                     status: updatedConv.last_message_status,
+                  }),
+                );
+              } else if (statusChanged) {
+                // Status-only change (sent → delivered → read) — update status in-place without re-sort
+                const isMine = updatedConv.last_message_sender_id === user.id;
+                dispatch(
+                  updateLastMessage({
+                    chatId: updatedConv.id,
+                    text: existing.lastMessage?.text,
+                    timestamp: existing.lastMessage?.timestamp,
+                    isOutgoing: isMine,
+                    status: updatedConv.last_message_status,
+                    updatedAt: existing.updatedAt, // preserve existing updatedAt to prevent re-sort
                   }),
                 );
               }

@@ -295,7 +295,16 @@ const chatSlice = createSlice({
         if (!chat.isGroup && chat.peerId === peerId) {
           if (name && chat.name !== name) chat.name = name;
           if (avatar && chat.avatar !== avatar) chat.avatar = avatar;
-          if (online !== undefined && chat.online !== online) chat.online = online;
+          
+          if (online !== undefined) {
+            // Prioritize active presence tracking map over database values.
+            // If the presence map is empty (e.g., initial startup), fallback to the database online status.
+            const isOnlineNow = online ? (Object.keys(state.onlineMap).length === 0 || !!state.onlineMap[peerId]) : false;
+            if (chat.online !== isOnlineNow) {
+              chat.online = isOnlineNow;
+            }
+          }
+          
           if (lastSeen !== undefined && chat.lastSeen !== lastSeen) chat.lastSeen = lastSeen;
         }
       });

@@ -683,12 +683,26 @@ export default function ChatPage() {
 
     const handleMembershipUpdate = (eventType, membership) => {
       if (membership) {
-        dispatch(
-          setUnreadCount({
-            chatId: membership.conversation_id,
-            count: membership.unread_count || 0,
-          })
-        );
+        const dbCount = membership.unread_count || 0;
+        const chatId = membership.conversation_id;
+        
+        // Only accept DB unread counts that are >= the current local count.
+        // This prevents race conditions where the membership UPDATE event fires 
+        // before the sender's unread_count increment has committed, which would
+        // reset the locally-incremented count back to the stale DB value.
+        // Exception: If dbCount is 0, it means messages were explicitly marked as read,
+        // so always accept that.
+        const localChat = chatsRef.current.find(c => c.id === chatId);
+        const localCount = localChat?.unreadCount || 0;
+        
+        if (dbCount === 0 || dbCount >= localCount) {
+          dispatch(
+            setUnreadCount({
+              chatId,
+              count: dbCount,
+            })
+          );
+        }
       }
     };
 

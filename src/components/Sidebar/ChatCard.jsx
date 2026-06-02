@@ -41,15 +41,23 @@ export const ChatCard = React.memo(({ chat }) => {
   const isDeleted = chat.lastMessage?.text === "This message was deleted" || 
                     (latestLoadedMsg && (latestLoadedMsg.type === "deleted" || latestLoadedMsg.text === "This message was deleted"));
 
-  // Prioritize the designated "Last Message" preview data from the chat object itself, 
-  // as it is updated first during realtime events to ensure the sidebar feels instant.
-  const isOutgoing = latestLoadedMsg
+  // Determine whether the true latest message is the loaded Redux message or the sidebar chat.lastMessage preview.
+  // chat.lastMessage is updated immediately by realtime events, while latestLoadedMsg (from Redux message store)
+  // can be stale for non-active chats whose message subscription is not running.
+  const chatLastMsg = chat.lastMessage;
+  const latestIsNewer = latestLoadedMsg && chatLastMsg?.timestamp
+    ? (latestLoadedMsg.createdAt || latestLoadedMsg.timestamp || "") >= (chatLastMsg.timestamp || "")
+    : !!latestLoadedMsg;
+
+  const isOutgoing = latestIsNewer && latestLoadedMsg
     ? (latestLoadedMsg.sender_id || latestLoadedMsg.senderId) === currentUserId
-    : chat.lastMessage?.isOutgoing !== undefined
-    ? chat.lastMessage.isOutgoing
+    : chatLastMsg?.isOutgoing !== undefined
+    ? chatLastMsg.isOutgoing
     : false;
 
-  const status = latestLoadedMsg?.status || chat.lastMessage?.status || "sent";
+  const status = latestIsNewer && latestLoadedMsg?.status
+    ? latestLoadedMsg.status 
+    : chatLastMsg?.status || "sent";
  
   const createdAt = chat.lastMessage?.timestamp || latestLoadedMsg?.createdAt || chat.updatedAt;
   const displayTimestamp = formatSidebarDate(createdAt || chat.lastMessage?.timestamp);

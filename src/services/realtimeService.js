@@ -34,7 +34,7 @@ export const realtimeService = {
           event: "*",
           schema: "public",
           table: "messages",
-          filter: `conversation_id=eq.${conversationId}`
+          filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
           if (payload.eventType === "DELETE") {
@@ -50,7 +50,12 @@ export const realtimeService = {
           if (!payload.new) return;
           const row = payload.new;
 
-          const { text: cleanText, reactions, replyTo, isForwarded } = parseMessageText(row.text || "");
+          const {
+            text: cleanText,
+            reactions,
+            replyTo,
+            isForwarded,
+          } = parseMessageText(row.text || "");
 
           const uniformMsg = {
             id: row.id,
@@ -62,7 +67,13 @@ export const realtimeService = {
             isForwarded: row.is_forwarded || isForwarded,
             editedAt: row.edited_at,
             editHistory: row.edit_history,
-            timestamp: row.timestamp_string || new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+            timestamp:
+              row.timestamp_string ||
+              new Date(row.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              }),
             status: row.status || "sent",
             type: row.type || "text",
             mediaUrl: row.media_url,
@@ -79,7 +90,7 @@ export const realtimeService = {
           };
 
           onMessageEvent(payload.eventType, uniformMsg);
-        }
+        },
       )
       .subscribe();
   },
@@ -116,7 +127,7 @@ export const realtimeService = {
           if (onConversationEvent && payload.new) {
             onConversationEvent(payload.eventType, payload.new);
           }
-        }
+        },
       )
       .subscribe();
 
@@ -129,13 +140,13 @@ export const realtimeService = {
           event: "*",
           schema: "public",
           table: "conversation_members",
-          filter: `user_id=eq.${userId}`
+          filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           if (onMembershipEvent && (payload.new || payload.old)) {
             onMembershipEvent(payload.eventType, payload.new || payload.old);
           }
-        }
+        },
       )
       .subscribe();
   },
@@ -159,7 +170,15 @@ export const realtimeService = {
    * Listen for user profile updates globally in real-time.
    */
   subscribeToProfileUpdates(onProfileUpdate) {
-    if (globalProfilesChannel) return;
+    if (globalProfilesChannel && globalProfilesChannel.state === "joined")
+      return;
+
+    if (globalProfilesChannel) {
+      try {
+        supabase.removeChannel(globalProfilesChannel);
+      } catch (e) {}
+      globalProfilesChannel = null;
+    }
 
     globalProfilesChannel = supabase
       .channel("user_global_profiles")
@@ -170,9 +189,22 @@ export const realtimeService = {
           if (payload.new) {
             onProfileUpdate(payload.new);
           }
-        }
+        },
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log(
+          `Global Profiles channel status changed to: ${status}`,
+          err || "",
+        );
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(
+            `Profiles channel subscription failed: ${status}. Forcing socket connect...`,
+          );
+          if (supabase.realtime) {
+            supabase.realtime.connect();
+          }
+        }
+      });
   },
 
   /**
@@ -200,7 +232,15 @@ export const realtimeService = {
 
     if (!currentUserId) return;
 
-    if (globalChannel) {
+    // Explicitly force underlying socket connection if disconnected
+    if (supabase.realtime && !supabase.realtime.isConnected()) {
+      console.log(
+        "Supabase Realtime socket is disconnected, forcing connect...",
+      );
+      supabase.realtime.connect();
+    }
+
+    if (globalChannel && globalChannel.state === "joined") {
       const state = globalChannel.presenceState();
       const onlineMap = {};
       Object.keys(state).forEach((uid) => {
@@ -212,6 +252,13 @@ export const realtimeService = {
         this.onPresenceSyncCallback(onlineMap);
       }
       return;
+    }
+
+    if (globalChannel) {
+      try {
+        supabase.removeChannel(globalChannel);
+      } catch (e) {}
+      globalChannel = null;
     }
 
     globalChannel = supabase.channel("whatsapp_global_presence", {
@@ -244,25 +291,94 @@ export const realtimeService = {
           this.onTypingReceivedCallback(payload.payload);
         }
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status, err) => {
+        console.log(
+          `Global Presence channel status changed to: ${status}`,
+          err || "",
+        );
         if (status === "SUBSCRIBED") {
           await globalChannel.track({
             online_at: new Date().toISOString(),
             user_id: currentUserId,
           });
           // Synchronize database timestamp on fresh connection
-          supabase.from("profiles").update({ online: true, last_seen: new Date().toISOString() }).eq("id", currentUserId).then();
+          supabase
+            .from("profiles")
+            .update({ online: true, last_seen: new Date().toISOString() })
+            .eq("id", currentUserId)
+            .then();
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(
+            `Presence subscription failed: ${status}. Forcing socket connect...`,
+          );
+          if (supabase.realtime) {
+            supabase.realtime.connect();
+          }
         }
       });
 
     // Cleanup disconnected users properly when tab or browser closes and handle background states
     if (typeof window !== "undefined" && !window.__wa_presence_cleanup_bound) {
       window.__wa_presence_cleanup_bound = true;
+
       window.addEventListener("beforeunload", () => {
         if (globalChannel) {
           globalChannel.untrack().catch(() => {});
         }
+
+        // Force database status to offline immediately on browser/tab close
+        const supabaseUrl =
+          supabase.supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseAnonKey =
+          supabase.supabaseKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseAnonKey) {
+          const url = `${supabaseUrl}/rest/v1/profiles?id=eq.${currentUserId}`;
+
+          let authHeader = `Bearer ${supabaseAnonKey}`;
+          try {
+            const storageKey =
+              supabase.auth.storageKey ||
+              `sb-${supabaseUrl.split(".")[0].split("//")[1]}-auth-token`;
+            const sessionData = localStorage.getItem(storageKey);
+            if (sessionData) {
+              const parsed = JSON.parse(sessionData);
+              if (parsed && parsed.access_token) {
+                authHeader = `Bearer ${parsed.access_token}`;
+              }
+            }
+          } catch (e) {
+            console.warn(
+              "Failed to retrieve auth token for keepalive fetch:",
+              e,
+            );
+          }
+
+          fetch(url, {
+            method: "PATCH",
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+              online: false,
+              last_seen: new Date().toISOString(),
+            }),
+            keepalive: true,
+          }).catch(() => {});
+        }
       });
+
+      // Bind window focus & online state to ensure immediate reconnect
+      const handleSystemReconnect = () => {
+        if (supabase.realtime && !supabase.realtime.isConnected()) {
+          console.log("Window focused or online: forcing socket connect...");
+          supabase.realtime.connect();
+        }
+      };
+      window.addEventListener("online", handleSystemReconnect);
+      window.addEventListener("focus", handleSystemReconnect);
 
       // Handle App close / tab switch / network disconnect properly
       let visibilityTimeout = null;
@@ -273,11 +389,16 @@ export const realtimeService = {
           if (visibilityTimeout) clearTimeout(visibilityTimeout);
           visibilityTimeout = setTimeout(() => {
             isMarkedOffline = true;
+            // Update database profile
             supabase
               .from("profiles")
-              .update({ last_seen: new Date().toISOString() })
+              .update({ online: false, last_seen: new Date().toISOString() })
               .eq("id", currentUserId)
               .then();
+
+            if (globalChannel) {
+              globalChannel.untrack().catch(() => {});
+            }
           }, 30000); // 30 seconds debounce
         } else {
           if (visibilityTimeout) {
@@ -286,11 +407,21 @@ export const realtimeService = {
           }
           if (isMarkedOffline) {
             isMarkedOffline = false;
+            // Update database profile
             supabase
               .from("profiles")
               .update({ online: true, last_seen: new Date().toISOString() })
               .eq("id", currentUserId)
               .then();
+
+            if (globalChannel && globalChannel.state === "joined") {
+              globalChannel
+                .track({
+                  online_at: new Date().toISOString(),
+                  user_id: currentUserId,
+                })
+                .catch(() => {});
+            }
           }
         }
       });
@@ -328,7 +459,14 @@ export const realtimeService = {
   /**
    * Forcibly tear down and rebuild all active channels to sync connections after reconnect events.
    */
-  reconnectAll(currentUserId, onProfileUpdate, onPresenceSync, onTypingReceived, onConversationEvent, onMembershipEvent) {
+  reconnectAll(
+    currentUserId,
+    onProfileUpdate,
+    onPresenceSync,
+    onTypingReceived,
+    onConversationEvent,
+    onMembershipEvent,
+  ) {
     this.unsubscribeFromActiveChat();
     this.disconnectProfileUpdates();
     this.disconnectGlobalPresence();
@@ -338,11 +476,22 @@ export const realtimeService = {
       this.subscribeToProfileUpdates(onProfileUpdate);
     }
     if (currentUserId) {
-      this.initializeGlobalPresence(currentUserId, onPresenceSync, onTypingReceived);
-      this.subscribeToUserConversations(currentUserId, onConversationEvent, onMembershipEvent);
+      this.initializeGlobalPresence(
+        currentUserId,
+        onPresenceSync,
+        onTypingReceived,
+      );
+      this.subscribeToUserConversations(
+        currentUserId,
+        onConversationEvent,
+        onMembershipEvent,
+      );
     }
     if (this.activeChatId && this.onMessageEventCallback) {
-      this.subscribeToActiveChatMessages(this.activeChatId, this.onMessageEventCallback);
+      this.subscribeToActiveChatMessages(
+        this.activeChatId,
+        this.onMessageEventCallback,
+      );
     }
-  }
+  },
 };
