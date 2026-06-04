@@ -615,6 +615,17 @@ export default function ChatPage() {
     messageService.syncAllPendingDeliveries(user.id);
 
     const handleProfileUpdate = (updatedProfile) => {
+      if (!updatedProfile || !updatedProfile.id) return;
+
+      const isMe = updatedProfile.id === user.id;
+      const isPeer = chatsRef.current.some((c) => !c.isGroup && c.peerId === updatedProfile.id);
+      const isGrpMem = groupMembersRef.current.some((m) => m.id === updatedProfile.id);
+
+      // Filter out updates for users who are not currently relevant to prevent performance degradation
+      if (!isMe && !isPeer && !isGrpMem) {
+        return;
+      }
+
       dispatch(
         updatePeerProfile({
           peerId: updatedProfile.id,

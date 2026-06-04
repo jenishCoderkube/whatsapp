@@ -295,6 +295,11 @@ export const messageService = {
    * Hardened for groups: Transitions are strictly managed by an atomic Postgres RPC
    * to guarantee no race conditions when multiple members fetch and acknowledge simultaneously.
    */
+  /**
+   * Update message read/delivered verification status checkmarks.
+   * Hardened for groups: Transitions are strictly managed by an atomic Postgres RPC
+   * to guarantee no race conditions when multiple members fetch and acknowledge simultaneously.
+   */
   async updateStatus(messageId, status, currentUserId) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
     if (!messageId || !isUuid || !currentUserId) return;
@@ -336,6 +341,35 @@ export const messageService = {
   },
 
   /**
+   * Bulk update status for multiple messages.
+   * Leverages the high-performance bulk_update_message_status RPC and falls back
+   * to sequential updates if the bulk RPC is not defined on the database.
+   */
+  async updateStatusBulk(messageIds, status, currentUserId) {
+    if (!messageIds || messageIds.length === 0 || !currentUserId) return;
+
+    const uniqueIds = [...new Set(messageIds)];
+
+    try {
+      const { error } = await supabase.rpc("bulk_update_message_status", {
+        p_message_ids: uniqueIds,
+        p_status: status,
+        p_user_id: currentUserId
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (e) {
+      console.warn("Bulk status updates failed (fallback to sequential):", e);
+      // Backwards compatibility fallback in case the database migration is not yet run
+      await Promise.all(
+        uniqueIds.map(id => this.updateStatus(id, status, currentUserId).catch(() => {}))
+      );
+    }
+  },
+
+  /**
    * Batch mark messages in a conversation as delivered.
    * Useful for syncing offline-received messages when app initializes or room opens.
    */
@@ -362,9 +396,8 @@ export const messageService = {
         });
 
         if (pendingMsgs.length > 0) {
-          for (const msg of pendingMsgs) {
-            await this.updateStatus(msg.id, "delivered", currentUserId);
-          }
+          const ids = pendingMsgs.map(m => m.id);
+          await this.updateStatusBulk(ids, "delivered", currentUserId);
         }
       }
     } catch (e) {
@@ -404,9 +437,8 @@ export const messageService = {
           });
 
           if (messagesToDeliver.length > 0) {
-            for (const msg of messagesToDeliver) {
-              await this.updateStatus(msg.id, "delivered", currentUserId);
-            }
+            const ids = messagesToDeliver.map(m => m.id);
+            await this.updateStatusBulk(ids, "delivered", currentUserId);
           }
         }
       }
@@ -441,9 +473,8 @@ export const messageService = {
         });
 
         if (unreadMsgs.length > 0) {
-          for (const msg of unreadMsgs) {
-            await this.updateStatus(msg.id, "read", currentUserId);
-          }
+          const ids = unreadMsgs.map(m => m.id);
+          await this.updateStatusBulk(ids, "read", currentUserId);
         }
       }
 
