@@ -422,10 +422,11 @@ export default function ChatPage() {
       messageService.fetchMessages(activeChatId, null, 30, user.id).then((fetched) => {
         if (fetched && fetched.length > 0) {
           dispatch(setMessages({ chatId: activeChatId, messages: fetched }));
-          messageService.markConversationMessagesAsDelivered(activeChatId, user.id);
         } else {
           setHasMore(false);
         }
+        messageService.markConversationMessagesAsDelivered(activeChatId, user.id);
+        messageService.markConversationMessagesAsRead(activeChatId, user.id);
       });
     };
 
@@ -651,6 +652,11 @@ export default function ChatPage() {
         } catch (e) {}
       }
 
+      const existingChat = chatsRef.current.find((c) => c.id === updatedConv.id);
+      const isNewMessage = existingChat && 
+                           updatedConv.updated_at && 
+                           updatedConv.updated_at !== existingChat.updatedAt;
+
       dispatch(
         updateLastMessage({
           chatId: updatedConv.id,
@@ -658,14 +664,15 @@ export default function ChatPage() {
           timestamp: updatedConv.last_message_timestamp,
           isOutgoing: isMine,
           status: updatedConv.last_message_status,
+          updatedAt: updatedConv.updated_at,
         })
       );
 
-      if (!isMine && activeChatIdRef.current !== updatedConv.id) {
+      if (isNewMessage && !isMine && activeChatIdRef.current !== updatedConv.id) {
         dispatch(incrementUnread(updatedConv.id));
       }
 
-      if (!isMine) {
+      if (!isMine && updatedConv.last_message_status === "sent") {
         messageService.markConversationMessagesAsDelivered(updatedConv.id, user.id);
       }
 
@@ -842,14 +849,7 @@ export default function ChatPage() {
       }
     };
 
-    const handleVisibilityChangeForReconnect = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        handleOnline();
-      }
-    };
-
     window.addEventListener("online", handleOnline);
-    window.addEventListener("visibilitychange", handleVisibilityChangeForReconnect);
 
     realtimeService.subscribeToProfileUpdates(handleProfileUpdate);
     realtimeService.initializeGlobalPresence(
@@ -872,7 +872,6 @@ export default function ChatPage() {
       realtimeService.disconnectGlobalPresence();
       realtimeService.disconnectUserConversations();
       window.removeEventListener("online", handleOnline);
-      window.removeEventListener("visibilitychange", handleVisibilityChangeForReconnect);
     };
   }, [user?.id, dispatch]);
 

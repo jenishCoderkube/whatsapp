@@ -349,7 +349,8 @@ export const messageService = {
         .from("messages")
         .select("id, receipts, sender_id")
         .eq("conversation_id", conversationId)
-        .neq("sender_id", currentUserId);
+        .neq("sender_id", currentUserId)
+        .neq("status", "read");
 
       if (convMsgs && convMsgs.length > 0) {
         // Filter messages that have not been delivered or read by currentUserId yet
@@ -391,7 +392,8 @@ export const messageService = {
           .from("messages")
           .select("id, receipts, sender_id")
           .in("conversation_id", convIds)
-          .neq("sender_id", currentUserId);
+          .neq("sender_id", currentUserId)
+          .neq("status", "read");
 
         if (pendingMsgs && pendingMsgs.length > 0) {
           const messagesToDeliver = pendingMsgs.filter(msg => {
@@ -427,7 +429,8 @@ export const messageService = {
         .from("messages")
         .select("id, receipts, sender_id")
         .eq("conversation_id", conversationId)
-        .neq("sender_id", currentUserId);
+        .neq("sender_id", currentUserId)
+        .neq("status", "read");
 
       if (convMsgs && convMsgs.length > 0) {
         // Filter messages that have not been read by currentUserId yet
