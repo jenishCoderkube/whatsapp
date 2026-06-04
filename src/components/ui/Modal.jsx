@@ -28,7 +28,7 @@ export function Modal({ isOpen, onClose, title, children, className }) {
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-hidden">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -43,11 +43,11 @@ export function Modal({ isOpen, onClose, title, children, className }) {
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
               className={cn(
-                "relative z-50 w-full max-w-md rounded-md bg-wa-modal p-6 shadow-xl border border-wa-border transition-colors duration-200 my-8",
+                "relative z-50 w-full max-w-md rounded-md bg-wa-modal p-6 shadow-xl border border-wa-border transition-colors duration-200 my-0 flex flex-col max-h-[calc(100vh-2rem)] overflow-hidden",
                 className
               )}
             >
-              <div className="flex items-center justify-between border-b border-wa-border pb-3 mb-4">
+              <div className="flex items-center justify-between border-b border-wa-border pb-3 mb-4 shrink-0">
                 <h3 className="text-base font-medium text-wa-text">{title}</h3>
                 <button
                   onClick={onClose}
@@ -56,7 +56,7 @@ export function Modal({ isOpen, onClose, title, children, className }) {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div>{children}</div>
+              <div className="flex-1 min-h-0 flex flex-col">{children}</div>
             </motion.div>
           </div>
         </div>
