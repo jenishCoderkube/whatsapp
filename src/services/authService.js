@@ -170,6 +170,56 @@ export const authService = {
   },
 
   /**
+   * Request password reset email (sends both link and OTP depending on Supabase config).
+   */
+  async sendPasswordReset(email) {
+    try {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error("Password reset request failed:", error);
+      return { data: null, error: error.message || "Failed to send reset request." };
+    }
+  },
+
+  /**
+   * Verify recovery OTP code.
+   */
+  async verifyRecoveryOTP({ email, token }) {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "recovery",
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error("OTP verification failed:", error);
+      return { data: null, error: error.message || "Verification code is invalid or expired." };
+    }
+  },
+
+  /**
+   * Update the user's password.
+   */
+  async updatePassword(newPassword) {
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error("Password update failed:", error);
+      return { data: null, error: error.message || "Failed to update password." };
+    }
+  },
+
+  /**
    * Terminate dynamic user session securely.
    */
   async logout() {

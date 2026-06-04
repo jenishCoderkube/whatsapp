@@ -46,7 +46,20 @@
     "uploading_image": "છબી અપલોડ કરી રહ્યું છે...",
     "change_photo": "પ્રોફાઇલ ફોટો બદલો",
     "upload_image": "પ્રોફાઇલ છબી અપલોડ કરો",
-    "or_continue_with": "અથવા આનાથી આગળ વધો"
+    "or_continue_with": "અથવા આનાથી આગળ વધો",
+    "forgot_password_title": "પાસવર્ડ રીસેટ કરો",
+    "forgot_password_subtitle": "પુનઃપ્રાપ્તિ કોડ અથવા રીસેટ લિંક મેળવવા માટે તમારો ઇમેઇલ દાખલ કરો.",
+    "send_reset_btn": "પુનઃપ્રાપ્તિ કોડ અને લિંક મોકલો",
+    "enter_otp_subtitle": "અમે {email} પર 6-અંકનો પુનઃપ્રાપ્તિ કોડ મોકલ્યો છે. ચકાસવા માટે તેને નીચે દાખલ કરો.",
+    "otp_label": "ચકાસણી કોડ",
+    "verify_otp_btn": "કોડ ચકાસો",
+    "new_password_title": "નવો પાસવર્ડ સેટ કરો",
+    "new_password_subtitle": "તમારા એકાઉન્ટને સુરક્ષિત કરવા માટે એક મજબૂત પાસવર્ડ પસંદ કરો.",
+    "new_password_label": "નવો પાસવર્ડ",
+    "confirm_new_password_label": "નવા પાસવર્ડની પુષ્ટિ કરો",
+    "update_password_btn": "પાસવર્ડ અપડેટ કરો",
+    "reset_success": "તમારો પાસવર્ડ સફળતાપૂર્વક અપડેટ કરવામાં આવ્યો છે. લોગિન પર રીડાયરેક્ટ કરી રહ્યું છે...",
+    "back_to_login": "લોગિન પર પાછા જાઓ"
   },
   "chat": {
     "unread_messages": "ન વંચાયેલા સંદેશાઓ",

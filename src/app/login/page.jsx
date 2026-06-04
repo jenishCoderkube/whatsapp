@@ -146,10 +146,7 @@ export default function LoginPage() {
                   {t("auth.password_label")}
                 </label>
                 <Link
-                  href="/login"
-                  onClick={() =>
-                    alert("Simulated Password Reset sent to email.")
-                  }
+                  href="/forgot-password"
                   className="text-xs text-wa-primary hover:underline"
                 >
                   {t("auth.forgot_password")}
