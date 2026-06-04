@@ -3,6 +3,48 @@ import { storageService } from "./storageService";
 
 export const authService = {
   /**
+   * Triggers Google OAuth sign-in flow.
+   */
+  async signInWithGoogle() {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/chat`,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error("Google OAuth initialisation failed:", error);
+      return { data: null, error: error.message || "Google Login failed." };
+    }
+  },
+
+  /**
+   * Triggers GitHub OAuth sign-in flow.
+   */
+  async signInWithGitHub() {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: {
+          redirectTo: `${window.location.origin}/chat`,
+        },
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error("GitHub OAuth initialisation failed:", error);
+      return { data: null, error: error.message || "GitHub Login failed." };
+    }
+  },
+
+  /**
    * Register a new user natively via Supabase Authentication and dynamically
    * instantiate their synchronized row inside the `profiles` table.
    */

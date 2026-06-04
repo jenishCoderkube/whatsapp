@@ -45,7 +45,8 @@
     "accept_terms_error": "You must accept the Terms of Service to register.",
     "uploading_image": "Uploading image...",
     "change_photo": "Change profile photo",
-    "upload_image": "Upload profile image"
+    "upload_image": "Upload profile image",
+    "or_continue_with": "Or continue with"
   },
   "chat": {
     "unread_messages": "Unread Messages",
