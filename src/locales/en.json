@@ -62,6 +62,12 @@
     "back_to_login": "Back to login"
   },
   "chat": {
+    "blocked_contact_composer_hint": "You blocked this contact.",
+    "block_contact": "Block Contact",
+    "unblock_contact": "Unblock Contact",
+    "delete_chat": "Delete Chat",
+    "unblocking": "Unblocking...",
+    "tap_to_unblock": "Tap to unblock.",
     "unread_messages": "Unread Messages",
     "new_messages": "New Messages",
     "empty_state_title": "WhatsApp Web",
@@ -466,7 +472,8 @@
     "last_active": "Last active",
     "chat_wallpaper": "Chat Wallpaper",
     "screen_lock_settings": "Screen Lock Settings",
-    "lock_screen_now": "Lock Screen Now"
+    "lock_screen_now": "Lock Screen Now",
+    "blocked_users": "Blocked Contacts"
   },
   "lock": {
     "app_locked_title": "WhatsApp is locked",

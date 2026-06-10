@@ -6,7 +6,16 @@ import { ThemeProvider } from "./ui/ThemeProvider";
 import { I18nProvider, useTranslation } from "../contexts/I18nContext";
 import { useAppDispatch, useAppSelector } from "../hooks/useRedux";
 import { loginSuccess, logout } from "../redux/slices/authSlice";
-import { setUserTyping, syncOnlineUsers } from "../redux/slices/chatSlice";
+import {
+  setUserTyping,
+  syncOnlineUsers,
+  setBlockedUsers,
+  setBlockedByUsers,
+  addBlockedUser,
+  removeBlockedUser,
+  addBlockedByUser,
+  removeBlockedByUser,
+} from "../redux/slices/chatSlice";
 import { setGlobalWallpaperState } from "../redux/slices/uiSlice";
 import { clearLockSettings, setLockSettingsFromSupabase } from "../redux/slices/lockSlice";
 import { authService } from "../services/authService";
@@ -35,6 +44,13 @@ function AuthSessionRecoveryGate({ children }) {
   const incomingCall = useAppSelector((state) => state.call.incomingCall);
   const [isMounted, setIsMounted] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
+
+  const blockedUsers = useAppSelector((state) => state.chat.blockedUsers || []);
+  const blockedUsersRef = useRef(blockedUsers);
+
+  useEffect(() => {
+    blockedUsersRef.current = blockedUsers;
+  }, [blockedUsers]);
 
   const activeCallRef = useRef(activeCall);
   const incomingCallRef = useRef(incomingCall);
@@ -190,6 +206,59 @@ function AuthSessionRecoveryGate({ children }) {
     };
   }, [user?.id, isHydrating, dispatch]);
 
+  // Load initial blocked lists and subscribe to updates
+  useEffect(() => {
+    if (!user?.id || isHydrating) return;
+
+    let blockedSub = null;
+
+    const initBlockedState = async () => {
+      try {
+        const { blockService } = await import("../services/blockService");
+        
+        // Fetch blocker list
+        const blockedUsersList = await blockService.getBlockedUsers(user.id);
+        dispatch(setBlockedUsers(blockedUsersList.map(u => u.id)));
+
+        // Fetch blocked-by list
+        const blockedByList = await blockService.getBlockedByUsers(user.id);
+        dispatch(setBlockedByUsers(blockedByList));
+
+        // Start realtime subscription
+        blockedSub = blockService.subscribeToBlockedChanges(user.id, (payload) => {
+          const { eventType, new: newRow, old: oldRow } = payload;
+          if (eventType === "INSERT") {
+            if (newRow.blocker_id === user.id) {
+              dispatch(addBlockedUser(newRow.blocked_id));
+            }
+            if (newRow.blocked_id === user.id) {
+              dispatch(addBlockedByUser(newRow.blocker_id));
+            }
+          } else if (eventType === "DELETE") {
+            if (oldRow.blocker_id === user.id) {
+              dispatch(removeBlockedUser(oldRow.blocked_id));
+            }
+            if (oldRow.blocked_id === user.id) {
+              dispatch(removeBlockedByUser(oldRow.blocker_id));
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Failed to initialize blocked users list:", err);
+      }
+    };
+
+    initBlockedState();
+
+    return () => {
+      if (blockedSub) {
+        import("../lib/supabaseClient").then(({ supabase }) => {
+          supabase.removeChannel(blockedSub);
+        });
+      }
+    };
+  }, [user?.id, isHydrating, dispatch]);
+
   // Root Level calling signaling coordination
   useEffect(() => {
     if (!user?.id || isHydrating) return;
@@ -279,6 +348,12 @@ function AuthSessionRecoveryGate({ children }) {
 
           if (isStale || isAlreadyProcessed) {
             console.log("[Call] Ignoring stale or already processed call invite:", data.id, "age:", inviteAge);
+            return;
+          }
+
+          if (blockedUsersRef.current.includes(data.caller.id)) {
+            console.log("[Call] Silently ignoring invite from blocked user:", data.caller.id);
+            signalingService.sendEnd(data.caller.id, { reason: "busy", sessionId: data.id });
             return;
           }
 

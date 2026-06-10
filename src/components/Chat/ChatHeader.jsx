@@ -16,6 +16,7 @@ import {
   Download,
   X,
   Clock,
+  Ban,
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
@@ -34,6 +35,8 @@ import {
   deleteDraft,
   updateChatAvatar,
   updateChatDisappearingDuration,
+  addBlockedUser,
+  removeBlockedUser,
 } from "../../redux/slices/chatSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
@@ -134,6 +137,36 @@ export function ChatHeader() {
   const [infoModal, setInfoModal] = useState(false);
   const [lightboxMedia, setLightboxMedia] = useState(null);
 
+  const blockedUsers = useAppSelector((state) => state.chat.blockedUsers || []);
+  const blockedByUsers = useAppSelector((state) => state.chat.blockedByUsers || []);
+  const isBlockedByMe = activeChat && !activeChat.isGroup && blockedUsers.includes(activeChat.peerId);
+  const isBlockedByThem = activeChat && !activeChat.isGroup && blockedByUsers.includes(activeChat.peerId);
+  const isPeerBlocked = isBlockedByMe || isBlockedByThem;
+
+  const [isBlockingPending, setIsBlockingPending] = useState(false);
+
+  const handleBlockToggleClick = async () => {
+    if (!activeChat || activeChat.isGroup || !currentUserId || !activeChat.peerId) return;
+    setIsBlockingPending(true);
+    try {
+      const { blockService } = await import("../../services/blockService");
+      if (isBlockedByMe) {
+        await blockService.unblockUser(currentUserId, activeChat.peerId);
+        dispatch(removeBlockedUser(activeChat.peerId));
+      } else {
+        if (window.confirm(`Are you sure you want to block ${activeChat.name}?`)) {
+          await blockService.blockUser(currentUserId, activeChat.peerId);
+          dispatch(addBlockedUser(activeChat.peerId));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to toggle block status:", err);
+      alert("An error occurred while updating block settings. Please try again.");
+    } finally {
+      setIsBlockingPending(false);
+    }
+  };
+
   // Chat Lock States & Dialogs
   const {
     lockedChatIds,
@@ -220,6 +253,14 @@ export function ChatHeader() {
 
   const handleVoiceCallTrigger = () => {
     if (activeChat && !activeChat.isGroup) {
+      if (isBlockedByMe) {
+        alert("Unblock contact to place a call.");
+        return;
+      }
+      if (isBlockedByThem) {
+        alert("Contact is currently unavailable.");
+        return;
+      }
       startCall(
         {
           id: activeChat.peerId,
@@ -235,6 +276,14 @@ export function ChatHeader() {
 
   const handleVideoCallTrigger = () => {
     if (activeChat && !activeChat.isGroup) {
+      if (isBlockedByMe) {
+        alert("Unblock contact to place a call.");
+        return;
+      }
+      if (isBlockedByThem) {
+        alert("Contact is currently unavailable.");
+        return;
+      }
       startCall(
         {
           id: activeChat.peerId,
@@ -461,6 +510,7 @@ export function ChatHeader() {
           : activeChat.groupMembersCount || 0;
       return t("chat.participants_count", { count }) || `${count} participants`;
     }
+    if (isPeerBlocked) return "";
     if (activeChat.online) return t("chat.online") || "Online";
     if (activeChat.lastSeen) return formatLastSeen(activeChat.lastSeen);
     return activeChat.phoneNumber;
@@ -493,6 +543,11 @@ export function ChatHeader() {
       });
     }
   } else {
+    headerOptions.push({
+      label: isBlockedByMe ? (t("chat.unblock_contact") || "Unblock Contact") : (t("chat.block_contact") || "Block Contact"),
+      danger: !isBlockedByMe,
+      onClick: handleBlockToggleClick,
+    });
     headerOptions.push({
       label: t("chat.delete_chat") || "Delete Chat",
       danger: true,
@@ -550,7 +605,7 @@ export function ChatHeader() {
 
         <div
           onClick={() => setInfoModal(true)}
-          className="flex-1 min-w-0 cursor-pointer overflow-hidden"
+          className="flex-1 min-w-0 cursor-pointer overflow-hidden flex flex-col justify-center"
         >
           <MarqueeText
             text={activeChat.name}
@@ -561,12 +616,12 @@ export function ChatHeader() {
               text={typingText}
               className="text-xs text-wa-primary font-medium italic animate-pulse"
             />
-          ) : (
+          ) : renderSubtitle() ? (
             <MarqueeText
               text={renderSubtitle()}
               className="text-xs text-wa-muted capitalize-first"
             />
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -925,8 +980,38 @@ export function ChatHeader() {
                     {t("chat.personal_status") || "Personal Status"}
                   </span>
                   <p className="text-sm text-wa-text leading-relaxed">
-                    {activeChat.status || (t("chat.available") || "Available")}
+                    {isPeerBlocked ? "" : (activeChat.status || (t("chat.available") || "Available"))}
                   </p>
+                </div>
+
+                <div className="bg-wa-header/30 p-4 rounded-xl border border-wa-border/50 shrink-0 flex flex-col gap-2">
+                  <span className="text-xs text-wa-muted uppercase font-bold tracking-widest block">
+                    Privacy Settings
+                  </span>
+                  <button
+                    onClick={handleBlockToggleClick}
+                    disabled={isBlockingPending}
+                    className={cn(
+                      "w-full py-2.5 rounded-xl text-xs sm:text-sm font-bold border transition-all duration-200 cursor-pointer flex items-center justify-center gap-2",
+                      isBlockedByMe 
+                        ? "text-[#00a884] bg-[#00a884]/10 border-[#00a884]/20 hover:bg-[#00a884]/20" 
+                        : "text-red-500 bg-red-500/10 border-red-500/20 hover:bg-red-500/20"
+                    )}
+                  >
+                    {isBlockingPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isBlockedByMe ? (
+                      <>
+                        <Check className="h-4 w-4 shrink-0" />
+                        <span>{`Unblock ${activeChat.name}`}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Ban className="h-4 w-4 shrink-0" />
+                        <span>{`Block ${activeChat.name}`}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
                 <div className="bg-wa-header/30 p-4 rounded-xl border border-wa-border/50 shrink-0">

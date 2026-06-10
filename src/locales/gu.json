@@ -62,6 +62,12 @@
     "back_to_login": "લોગિન પર પાછા જાઓ"
   },
   "chat": {
+    "blocked_contact_composer_hint": "તમે આ સંપર્કને બ્લોક કર્યો છે.",
+    "block_contact": "સંપર્ક બ્લોક કરો",
+    "unblock_contact": "સંપર્ક અનબ્લોક કરો",
+    "delete_chat": "ચેટ કાઢી નાખો",
+    "unblocking": "અનબ્લોક થઈ રહ્યું છે...",
+    "tap_to_unblock": "અનબ્લોક કરવા માટે ટેપ કરો.",
     "unread_messages": "ન વંચાયેલા સંદેશાઓ",
     "new_messages": "નવા સંદેશા",
     "empty_state_title": "વોટ્સએપ વેબ",
@@ -445,7 +451,8 @@
     "last_active": "છેલ્લે સક્રિય",
     "chat_wallpaper": "ચેટ વૉલપેપર",
     "screen_lock_settings": "સ્ક્રીન લૉક સેટિંગ્સ",
-    "lock_screen_now": "હમણાં જ સ્ક્રીન લૉક કરો"
+    "lock_screen_now": "હમણાં જ સ્ક્રીન લૉક કરો",
+    "blocked_users": "બ્લોક કરેલા સંપર્કો"
   },
   "lock": {
     "app_locked_title": "વોટ્સએપ લોક છે",

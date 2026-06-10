@@ -22,6 +22,8 @@ const initialState = {
   typingMap: {}, // { [chatId]: { [userId]: boolean } }
   onlineMap: {}, // { [userId]: boolean }
   drafts: {}, // { [chatId]: { text, replyTo, files } }
+  blockedUsers: [], // Array of UUIDs blocked by the current user
+  blockedByUsers: [], // Array of UUIDs who blocked the current user
 };
 
 const chatSlice = createSlice({
@@ -309,10 +311,38 @@ const chatSlice = createSlice({
         }
       });
     },
+    deleteDraft(state, action) {
+      const chatId = action.payload;
+      delete state.drafts[chatId];
+    },
+    setBlockedUsers(state, action) {
+      state.blockedUsers = action.payload || [];
+    },
+    setBlockedByUsers(state, action) {
+      state.blockedByUsers = action.payload || [];
+    },
+    addBlockedUser(state, action) {
+      if (!state.blockedUsers.includes(action.payload)) {
+        state.blockedUsers.push(action.payload);
+      }
+    },
+    removeBlockedUser(state, action) {
+      state.blockedUsers = state.blockedUsers.filter((id) => id !== action.payload);
+    },
+    addBlockedByUser(state, action) {
+      if (!state.blockedByUsers.includes(action.payload)) {
+        state.blockedByUsers.push(action.payload);
+      }
+    },
+    removeBlockedByUser(state, action) {
+      state.blockedByUsers = state.blockedByUsers.filter((id) => id !== action.payload);
+    },
     resetChats(state) {
       state.chats = [];
       state.activeChatId = null;
       state.searchQuery = "";
+      state.blockedUsers = [];
+      state.blockedByUsers = [];
     },
     setDrafts(state, action) {
       state.drafts = action.payload || {};
@@ -372,6 +402,12 @@ export const {
   setDrafts,
   setDraft,
   deleteDraft,
+  setBlockedUsers,
+  setBlockedByUsers,
+  addBlockedUser,
+  removeBlockedUser,
+  addBlockedByUser,
+  removeBlockedByUser,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

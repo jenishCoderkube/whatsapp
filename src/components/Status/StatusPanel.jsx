@@ -39,6 +39,8 @@ export function StatusPanel() {
   const statusViewOpen = useAppSelector((state) => state.status.statusViewOpen);
   const statuses = useAppSelector((state) => state.status.statuses) || [];
   const myStatuses = useAppSelector((state) => state.status.myStatuses) || [];
+  const blockedUsers = useAppSelector((state) => state.chat.blockedUsers || []);
+  const blockedByUsers = useAppSelector((state) => state.chat.blockedByUsers || []);
   const activeUserId = useAppSelector((state) => state.status.activeUserId);
   const activeStatusIndex = useAppSelector((state) => state.status.activeStatusIndex);
   const loading = useAppSelector((state) => state.status.loading);
@@ -73,7 +75,11 @@ export function StatusPanel() {
   }, [statuses]);
 
   // Grouped status lists computed from fetched list
-  const contactGroups = statuses.filter((g) => g.userId !== user?.id);
+  const contactGroups = statuses.filter((g) => 
+    g.userId !== user?.id &&
+    !blockedUsers.includes(g.userId) &&
+    !blockedByUsers.includes(g.userId)
+  );
   const recentUpdates = contactGroups.filter((g) => g.hasUnseen);
   const viewedUpdates = contactGroups.filter((g) => !g.hasUnseen);
 

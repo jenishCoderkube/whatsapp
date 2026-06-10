@@ -20,6 +20,8 @@ import {
   Play,
   MessageSquare,
   Phone,
+  Loader2,
+  Ban,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
@@ -521,6 +523,29 @@ export function ChatInput() {
     state.chat.chats.find((c) => c.id === activeChatId),
   );
 
+  const blockedUsers = useAppSelector((state) => state.chat.blockedUsers || []);
+  const blockedByUsers = useAppSelector((state) => state.chat.blockedByUsers || []);
+  const isBlockedByMe = activeChat && !activeChat.isGroup && blockedUsers.includes(activeChat.peerId);
+  const isBlockedByThem = activeChat && !activeChat.isGroup && blockedByUsers.includes(activeChat.peerId);
+  const isPeerBlocked = isBlockedByMe || isBlockedByThem;
+
+  const [isUnblocking, setIsUnblocking] = useState(false);
+  const handleUnblockClick = async () => {
+    if (!activeChat || !user?.id || !activeChat.peerId) return;
+    setIsUnblocking(true);
+    try {
+      const { blockService } = await import("../../services/blockService");
+      const { removeBlockedUser } = await import("../../redux/slices/chatSlice");
+      await blockService.unblockUser(user.id, activeChat.peerId);
+      dispatch(removeBlockedUser(activeChat.peerId));
+    } catch (err) {
+      console.error("Failed to unblock contact:", err);
+      alert("Failed to unblock contact. Please try again.");
+    } finally {
+      setIsUnblocking(false);
+    }
+  };
+
   const [messageText, setMessageText] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -640,6 +665,7 @@ export function ChatInput() {
         duration: durationStr,
         timestampString: timeString,
         clientId: tempId,
+        isBlockedByThem,
       });
 
       dispatch(
@@ -844,7 +870,7 @@ export function ChatInput() {
 
   // Handle keystroke typing broadcast triggers
   useEffect(() => {
-    if (!activeChatId || !user?.id) return;
+    if (!activeChatId || !user?.id || isPeerBlocked) return;
 
     if (messageText.trim()) {
       realtimeService.broadcastTypingEvent(
@@ -875,7 +901,7 @@ export function ChatInput() {
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [messageText, activeChatId, user?.id]);
+  }, [messageText, activeChatId, user?.id, isPeerBlocked]);
 
   // Clean error toasts
   useEffect(() => {
@@ -1085,6 +1111,7 @@ export function ChatInput() {
         timestampString: timeString,
         clientId: tempId,
         replyTo: activeReplyPayload,
+        isBlockedByThem,
       });
 
       dispatch(
@@ -1166,6 +1193,7 @@ export function ChatInput() {
         timestampString: timeString,
         clientId: tempId,
         replyTo: activeReplyPayload,
+        isBlockedByThem,
       });
 
       dispatch(
@@ -1237,12 +1265,14 @@ export function ChatInput() {
     // Clear draft immediately upon sending
     indexedDBService.removeDraft(activeChatId);
     dispatch(deleteDraft(activeChatId));
-    realtimeService.broadcastTypingEvent(
-      activeChatId,
-      user.id,
-      false,
-      user.name,
-    );
+    if (!isPeerBlocked) {
+      realtimeService.broadcastTypingEvent(
+        activeChatId,
+        user.id,
+        false,
+        user.name,
+      );
+    }
 
     // Capture reply message payload and clear state instantly
     const activeReplyPayload = replyingMessage ? {
@@ -1353,6 +1383,7 @@ export function ChatInput() {
           timestampString: timeString,
           replyTo: activeReplyPayload,
           clientId: tempId,
+          isBlockedByThem,
         });
 
         dispatch(
@@ -1435,6 +1466,7 @@ export function ChatInput() {
           replyTo: activeReplyPayload,
           noPreview: noPreview,
           clientId: tempId,
+          isBlockedByThem,
         });
 
         dispatch(
@@ -1649,6 +1681,35 @@ export function ChatInput() {
   };
 
   const isLeft = activeChat?.isLeft;
+
+  if (isBlockedByMe) {
+    return (
+      <footer className="relative flex items-center justify-center px-4 py-5 bg-wa-header border-t border-wa-border select-none z-20 w-full shrink-0 text-center">
+        <button
+          onClick={handleUnblockClick}
+          disabled={isUnblocking}
+          className="text-sm font-medium text-wa-muted hover:text-wa-primary transition-colors cursor-pointer flex items-center gap-1.5 justify-center"
+        >
+          {isUnblocking ? (
+            <Loader2 className="h-4 w-4 animate-spin text-wa-primary" />
+          ) : (
+            <Ban className="h-4 w-4 text-wa-muted" />
+          )}
+          <span>
+            {isUnblocking
+              ? (t("chat.unblocking") || "Unblocking...")
+              : `${t("chat.blocked_contact_composer_hint") || "You blocked this contact."} `
+            }
+          </span>
+          {!isUnblocking && (
+            <span className="text-wa-primary hover:underline font-semibold ml-1">
+              {t("chat.tap_to_unblock") || "Tap to unblock."}
+            </span>
+          )}
+        </button>
+      </footer>
+    );
+  }
 
   if (isLeft) {
     return (

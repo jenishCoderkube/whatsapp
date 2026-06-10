@@ -107,6 +107,7 @@ export const messageService = {
     isForwarded = false,
     noPreview = false,
     clientId = null,
+    isBlockedByThem = undefined,
   }) {
     try {
       const isUuid =
@@ -214,45 +215,85 @@ export const messageService = {
       if (type === "sticker") previewText = "Sticker";
       if (type === "gif") previewText = "GIF";
 
-      if (typeof window !== "undefined") {
+      let recipientBlockedSender = isBlockedByThem;
+      if (recipientBlockedSender === undefined) {
         try {
-          localStorage.removeItem("wa_last_message_override_" + conversationId);
-        } catch (e) {}
+          const { data: peerMembers } = await supabase
+            .from("conversation_members")
+            .select("user_id")
+            .eq("conversation_id", conversationId)
+            .neq("user_id", senderId);
+          if (peerMembers && peerMembers.length === 1) {
+            const peerId = peerMembers[0].user_id;
+            const { data: blockCheck } = await supabase
+              .from("blocked_users")
+              .select("blocker_id")
+              .eq("blocker_id", peerId)
+              .eq("blocked_id", senderId)
+              .maybeSingle();
+            recipientBlockedSender = !!blockCheck;
+          } else {
+            recipientBlockedSender = false;
+          }
+        } catch (e) {
+          console.warn("Failed to check blocker status:", e);
+          recipientBlockedSender = false;
+        }
       }
 
-      await supabase
-        .from("conversations")
-        .update({
-          last_message_text: previewText,
-          last_message_timestamp: insertPayload.timestamp_string,
-          last_message_status: "sent",
-          last_message_sender_id: senderId,
-          updated_at: new Date().toISOString(),
-         })
-        .eq("id", conversationId);
-
-      // Increment unread_count in database for all other conversation members to guarantee true persistence across refresh boundaries
-      try {
-        const { data: peerMembers } = await supabase
-          .from("conversation_members")
-          .select("user_id, unread_count")
-          .eq("conversation_id", conversationId)
-          .neq("user_id", senderId);
-
-        if (peerMembers && peerMembers.length > 0) {
-          for (const member of peerMembers) {
-            await supabase
-              .from("conversation_members")
-              .update({ unread_count: (member.unread_count || 0) + 1 })
-              .eq("conversation_id", conversationId)
-              .eq("user_id", member.user_id);
-          }
+      if (recipientBlockedSender) {
+        if (typeof window !== "undefined") {
+          try {
+            const lastMsg = {
+              text: previewText,
+              timestamp: insertPayload.timestamp_string,
+              isOutgoing: true,
+              status: "sent",
+              updatedAt: new Date().toISOString(),
+            };
+            localStorage.setItem("wa_last_message_override_" + conversationId, JSON.stringify(lastMsg));
+          } catch (e) {}
         }
-      } catch (err) {
-        console.warn(
-          "Could not increment remote peer database unread count:",
-          err,
-        );
+      } else {
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("wa_last_message_override_" + conversationId);
+          } catch (e) {}
+        }
+
+        await supabase
+          .from("conversations")
+          .update({
+            last_message_text: previewText,
+            last_message_timestamp: insertPayload.timestamp_string,
+            last_message_status: "sent",
+            last_message_sender_id: senderId,
+            updated_at: new Date().toISOString(),
+           })
+          .eq("id", conversationId);
+
+        try {
+          const { data: peerMembers } = await supabase
+            .from("conversation_members")
+            .select("user_id, unread_count")
+            .eq("conversation_id", conversationId)
+            .neq("user_id", senderId);
+
+          if (peerMembers && peerMembers.length > 0) {
+            for (const member of peerMembers) {
+              await supabase
+                .from("conversation_members")
+                .update({ unread_count: (member.unread_count || 0) + 1 })
+                .eq("conversation_id", conversationId)
+                .eq("user_id", member.user_id);
+            }
+          }
+        } catch (err) {
+          console.warn(
+            "Could not increment remote peer database unread count:",
+            err,
+          );
+        }
       }
 
       const { text: cleanText, reactions, replyTo: parsedReplyTo, isForwarded: parsedIsForward, noPreview: parsedNoPreview } = parseMessageText(newMsg.text || "");

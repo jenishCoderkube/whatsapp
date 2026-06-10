@@ -28,6 +28,7 @@ import { ProfileModal } from "./ProfileModal";
 import { NewChatModal } from "./NewChatModal";
 import { LinkedDevicesModal } from "./LinkedDevicesModal";
 import { LanguageModal } from "./LanguageModal";
+import { BlockedUsersModal } from "./BlockedUsersModal";
 import { LockScreen } from "../Lock/LockScreen";
 import { LockSettingsModal } from "../Lock/LockSettingsModal";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
@@ -99,6 +100,7 @@ export function Sidebar({ className }) {
   const [profileModal, setProfileModal] = useState(false);
   const [linkedDevicesModalOpen, setLinkedDevicesModalOpen] = useState(false);
   const [languageModalOpen, setLanguageModalOpen] = useState(false);
+  const [blockedUsersModalOpen, setBlockedUsersModalOpen] = useState(false);
   const [activeDevices, setActiveDevices] = useState([]);
   const [currentDeviceId, setCurrentDeviceId] = useState("");
   const [newChatModal, setNewChatModal] = useState(false);
@@ -585,6 +587,10 @@ export function Sidebar({ className }) {
     {
       label: t("sidebar.profile_info"),
       onClick: () => setProfileModal(true),
+    },
+    {
+      label: t("sidebar.blocked_users") || "Blocked Contacts",
+      onClick: () => setBlockedUsersModalOpen(true),
     },
     {
       label: t("sidebar.chat_wallpaper") || "Chat Wallpaper",
@@ -1100,6 +1106,11 @@ export function Sidebar({ className }) {
         locale={locale}
         languageNames={languageNames}
         changeLanguage={changeLanguage}
+      />
+
+      <BlockedUsersModal
+        isOpen={blockedUsersModalOpen}
+        onClose={() => setBlockedUsersModalOpen(false)}
       />
 
       <LockSettingsModal

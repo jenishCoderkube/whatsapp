@@ -2,10 +2,15 @@
 
 import React, { useState, useEffect } from "react";
 import { cn } from "../../utils/cn";
+import { useAppSelector } from "../../hooks/useRedux";
 
 export const Avatar = React.forwardRef(
   ({ src, alt = "", size = "md", className, isOnline = false, fallback = "?", uid }, ref) => {
     const [hasError, setHasError] = useState(false);
+
+    const blockedUsers = useAppSelector((state) => state.chat.blockedUsers || []);
+    const blockedByUsers = useAppSelector((state) => state.chat.blockedByUsers || []);
+    const isBlocked = uid && (blockedUsers.includes(uid) || blockedByUsers.includes(uid));
 
     useEffect(() => {
       setHasError(false);
@@ -19,7 +24,8 @@ export const Avatar = React.forwardRef(
       xxl: "h-24 w-24 text-3xl",
     };
 
-    const displayFallback = !src || hasError;
+    const displayFallback = !src || hasError || isBlocked;
+    const displayOnline = isOnline && !isBlocked;
 
     const getAvatarColor = (str) => {
       if (!str) return null;
@@ -57,7 +63,7 @@ export const Avatar = React.forwardRef(
             <span className="absolute uppercase select-none">{fallback}</span>
           )}
         </div>
-        {isOnline ? (
+        {displayOnline ? (
           <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-wa-online ring-2 ring-wa-sidebar transition-colors" />
         ) : null}
       </div>

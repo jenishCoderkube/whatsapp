@@ -62,6 +62,12 @@
     "back_to_login": "लॉगिन पर वापस जाएं"
   },
   "chat": {
+    "blocked_contact_composer_hint": "आपने इस संपर्क को ब्लॉक कर दिया है।",
+    "block_contact": "संपर्क ब्लॉक करें",
+    "unblock_contact": "संपर्क अनब्लॉक करें",
+    "delete_chat": "चैट हटाएं",
+    "unblocking": "अनब्लॉक किया जा रहा है...",
+    "tap_to_unblock": "अनब्लॉक करने के लिए टैप करें।",
     "unread_messages": "बिना पढ़े गए संदेश",
     "new_messages": "नए संदेश",
     "empty_state_title": "व्हाट्सएप वेब",
@@ -445,7 +451,8 @@
     "last_active": "अंतिम सक्रिय",
     "chat_wallpaper": "चैट वॉलपेपर",
     "screen_lock_settings": "स्क्रीन लॉक सेटिंग्स",
-    "lock_screen_now": "अभी स्क्रीन लॉक करें"
+    "lock_screen_now": "अभी स्क्रीन लॉक करें",
+    "blocked_users": "ब्लॉक किए गए संपर्क"
   },
   "lock": {
     "app_locked_title": "व्हाट्सएप लॉक है",
