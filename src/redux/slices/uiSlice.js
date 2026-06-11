@@ -14,6 +14,7 @@ const initialState = {
   chatWallpapers: {}, // per-chat wallpaper config map { [chatId]: wallpaperValue }
   wallpaperModalOpen: false, // wallpaper settings panel visibility
   wallpaperTargetChatId: null, // target chat UUID for wallpapers, null for global/default setting
+  settingsViewOpen: false, // settings dashboard visibility
 };
 
 const uiSlice = createSlice({
@@ -88,6 +89,9 @@ const uiSlice = createSlice({
       state.wallpaperModalOpen = open;
       state.wallpaperTargetChatId = targetChatId || null;
     },
+    setSettingsViewOpen(state, action) {
+      state.settingsViewOpen = action.payload;
+    },
   },
 });
 
@@ -105,6 +109,7 @@ export const {
   setGlobalWallpaperState,
   setChatWallpaperState,
   setWallpaperModal,
+  setSettingsViewOpen,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

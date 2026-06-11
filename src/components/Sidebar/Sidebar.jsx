@@ -18,26 +18,16 @@ import {
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Dropdown } from "../ui/Dropdown";
-import { Modal } from "../ui/Modal";
-import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { SearchBar } from "./SearchBar";
 import { ChatCard } from "./ChatCard";
-import { ProfileModal } from "./ProfileModal";
 import { NewChatModal } from "./NewChatModal";
-import { LinkedDevicesModal } from "./LinkedDevicesModal";
-import { LanguageModal } from "./LanguageModal";
-import { BlockedUsersModal } from "./BlockedUsersModal";
 import { LockScreen } from "../Lock/LockScreen";
-import { LockSettingsModal } from "../Lock/LockSettingsModal";
 import { useAppDispatch, useAppSelector } from "../../hooks/useRedux";
 import { useTranslation } from "../../hooks/useTranslation";
-import { logout, updateProfile } from "../../redux/slices/authSlice";
 import {
-  toggleTheme,
   setArchivedViewOpen,
-  setWallpaperModal,
+  setSettingsViewOpen,
 } from "../../redux/slices/uiSlice";
 import { setStatusViewOpen } from "../../redux/slices/statusSlice";
 import {
@@ -60,9 +50,7 @@ import {
 import { resetMessages } from "../../redux/slices/messageSlice";
 import { chatService } from "../../services/chatService";
 import { profileService } from "../../services/profileService";
-import { authService } from "../../services/authService";
 import { messageService } from "../../services/messageService";
-import { realtimeService } from "../../services/realtimeService";
 import { storageService } from "../../services/storageService";
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "../../utils/cn";
@@ -88,7 +76,6 @@ export function Sidebar({ className }) {
     lockType,
   } = useAppSelector((state) => state.lock);
 
-  const [lockSettingsOpen, setLockSettingsOpen] = useState(false);
   const [lockedChatsOpen, setLockedChatsOpen] = useState(false);
 
   const chatsRef = useRef(chats);
@@ -97,12 +84,6 @@ export function Sidebar({ className }) {
   }, [chats]);
 
   const [isChatsLoading, setIsChatsLoading] = useState(true);
-  const [profileModal, setProfileModal] = useState(false);
-  const [linkedDevicesModalOpen, setLinkedDevicesModalOpen] = useState(false);
-  const [languageModalOpen, setLanguageModalOpen] = useState(false);
-  const [blockedUsersModalOpen, setBlockedUsersModalOpen] = useState(false);
-  const [activeDevices, setActiveDevices] = useState([]);
-  const [currentDeviceId, setCurrentDeviceId] = useState("");
   const [newChatModal, setNewChatModal] = useState(false);
   const [activeTab, setActiveTab] = useState("direct"); // 'direct' | 'group'
 
@@ -118,178 +99,6 @@ export function Sidebar({ className }) {
   const [groupName, setGroupName] = useState("");
   const [groupAvatar, setGroupAvatar] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
-
-  // Profile editable setting states
-  const [editingName, setEditingName] = useState(false);
-  const [tempName, setTempName] = useState("");
-  const [editingStatus, setEditingStatus] = useState(false);
-  const [tempStatus, setTempStatus] = useState("");
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const [profileMessage, setProfileMessage] = useState("");
-  const profileFileInputRef = useRef(null);
-
-  useEffect(() => {
-    if (user?.id) {
-      let isSubscribed = true;
-      let cleanupSession = null;
-      let intervalId = null;
-
-      const initSessions = async () => {
-        const handleLocalLogout = async () => {
-          if (!isSubscribed) return;
-          try {
-            await authService.logout();
-          } catch (e) {
-            console.warn("Auto logout failed:", e);
-          }
-          dispatch(logout());
-          dispatch(resetChats());
-          dispatch(resetMessages());
-          try {
-            await authService.clearLocalSessionData();
-          } catch (e) {}
-          window.location.href = "/login";
-        };
-
-        const handleListUpdated = (devices) => {
-          if (!isSubscribed) return;
-          const localId = localStorage.getItem("wa_device_id");
-          const formatted = devices.map((d) => ({
-            id: d.id,
-            name: d.name,
-            active: d.id === localId,
-            desc:
-              d.id === localId
-                ? t("sidebar.active") || "Active"
-                : `Last active: ${new Date(d.lastActive).toLocaleString()} (Logged in: ${new Date(d.loginTime).toLocaleString()})`,
-            isBrowser: d.isBrowser,
-            loginTime: d.loginTime,
-            lastActive: d.lastActive,
-            platform: d.platform,
-            browser: d.browser,
-          }));
-          setActiveDevices(formatted);
-        };
-
-        try {
-          const { sessionService } =
-            await import("../../services/sessionService");
-          const {
-            currentDeviceId: myId,
-            activeDevices: list,
-            loggedOut,
-          } = await sessionService.registerCurrentDevice(
-            user.id,
-            handleLocalLogout,
-            handleListUpdated,
-          );
-
-          if (loggedOut) return;
-
-          if (isSubscribed) {
-            setCurrentDeviceId(myId);
-            handleListUpdated(list);
-          }
-
-          // Update last active periodically (every 3 minutes)
-          intervalId = setInterval(
-            () => {
-              sessionService.updateLastActive(user.id, myId);
-            },
-            3 * 60 * 1000,
-          );
-
-          cleanupSession = sessionService;
-        } catch (err) {
-          console.error("Failed to initialize active sessions:", err);
-        }
-      };
-
-      initSessions();
-
-      return () => {
-        isSubscribed = false;
-        if (intervalId) clearInterval(intervalId);
-        if (cleanupSession) cleanupSession.unsubscribe();
-      };
-    }
-  }, [user?.id, dispatch, t]);
-
-  const handleLogoutDevice = async (dev) => {
-    const isCurrent = dev.id === currentDeviceId;
-    const confirmMsg = isCurrent
-      ? t("sidebar.logout_device_confirm")
-      : t("sidebar.logout_other_device_confirm", { device: dev.name }) ||
-        `Are you sure you want to log out ${dev.name}?`;
-
-    if (window.confirm(confirmMsg)) {
-      try {
-        const { sessionService } =
-          await import("../../services/sessionService");
-        if (isCurrent) {
-          await authService.logout();
-          dispatch(logout());
-          dispatch(resetChats());
-          dispatch(resetMessages());
-          try {
-            await authService.clearLocalSessionData();
-          } catch (e) {}
-          window.location.href = "/login";
-        } else {
-          await sessionService.logoutDevice(user.id, dev.id);
-          setActiveDevices((prev) => prev.filter((d) => d.id !== dev.id));
-        }
-      } catch (e) {
-        console.warn("Logout device failed:", e);
-      }
-    }
-  };
-
-  const handleLogoutAllDevices = async () => {
-    if (
-      window.confirm(
-        t("sidebar.logout_all_devices_confirm") ||
-          "Are you sure you want to log out all other devices?",
-      )
-    ) {
-      try {
-        const { sessionService } =
-          await import("../../services/sessionService");
-        await sessionService.logoutAllOtherDevices(user.id, currentDeviceId);
-        setActiveDevices((prev) => prev.filter((d) => d.active));
-      } catch (e) {
-        console.warn("Logout other devices failed:", e);
-      }
-    }
-  };
-
-  const handleLogoutAllIncludingCurrent = async () => {
-    if (
-      window.confirm(
-        t("sidebar.logout_all_confirm") ||
-          "Are you sure you want to log out all devices, including this one?",
-      )
-    ) {
-      try {
-        const { sessionService } =
-          await import("../../services/sessionService");
-        await sessionService.logoutAllDevices(user.id);
-        await authService.logoutAllDevices();
-      } catch (e) {
-        console.warn(
-          "Global signout request had error, forcing local cleanup:",
-          e,
-        );
-      }
-      dispatch(logout());
-      dispatch(resetChats());
-      dispatch(resetMessages());
-      try {
-        await authService.clearLocalSessionData();
-      } catch (e) {}
-      window.location.href = "/login";
-    }
-  };
 
   // Fetch linked database conversations dynamically upon load
   useEffect(() => {
@@ -450,9 +259,14 @@ export function Sidebar({ className }) {
               }
 
               // Update last message preview and status (ticks) if changed
-              const textChanged = updatedConv.last_message_text !== existing.lastMessage?.text;
-              const timestampChanged = updatedConv.last_message_timestamp !== existing.lastMessage?.timestamp;
-              const statusChanged = updatedConv.last_message_status !== existing.lastMessage?.status;
+              const textChanged =
+                updatedConv.last_message_text !== existing.lastMessage?.text;
+              const timestampChanged =
+                updatedConv.last_message_timestamp !==
+                existing.lastMessage?.timestamp;
+              const statusChanged =
+                updatedConv.last_message_status !==
+                existing.lastMessage?.status;
 
               if (textChanged || timestampChanged) {
                 // New message arrived — full update with re-sort
@@ -491,17 +305,6 @@ export function Sidebar({ className }) {
     }
   }, [user?.id, dispatch]);
 
-  // Sync temp profile attributes upon mounting configuration overlays
-  useEffect(() => {
-    if (profileModal && user) {
-      setTempName(user.name || "");
-      setTempStatus(user.status || "Available");
-      setEditingName(false);
-      setEditingStatus(false);
-      setProfileMessage("");
-    }
-  }, [profileModal, user]);
-
   // Handle debounced platform user profile searching
   useEffect(() => {
     if (!newChatModal) return;
@@ -509,13 +312,15 @@ export function Sidebar({ className }) {
       setIsSearching(true);
       setSearchPage(0);
       setHasMoreSearch(true);
-      profileService.searchProfiles(userSearchQuery, user?.id, 0).then((res) => {
-        setSearchResults(res);
-        setIsSearching(false);
-        if (res.length < 20) {
-          setHasMoreSearch(false);
-        }
-      });
+      profileService
+        .searchProfiles(userSearchQuery, user?.id, 0)
+        .then((res) => {
+          setSearchResults(res);
+          setIsSearching(false);
+          if (res.length < 20) {
+            setHasMoreSearch(false);
+          }
+        });
     }, 300);
 
     return () => clearTimeout(timer);
@@ -525,16 +330,19 @@ export function Sidebar({ className }) {
     if (isSearching || isSearchingMore || !hasMoreSearch || !user?.id) return;
     setIsSearchingMore(true);
     const nextPage = searchPage + 1;
-    profileService.searchProfiles(userSearchQuery, user.id, nextPage).then((res) => {
-      setSearchResults((prev) => [...prev, ...res]);
-      setSearchPage(nextPage);
-      setIsSearchingMore(false);
-      if (res.length < 20) {
-        setHasMoreSearch(false);
-      }
-    }).catch(() => {
-      setIsSearchingMore(false);
-    });
+    profileService
+      .searchProfiles(userSearchQuery, user.id, nextPage)
+      .then((res) => {
+        setSearchResults((prev) => [...prev, ...res]);
+        setSearchPage(nextPage);
+        setIsSearchingMore(false);
+        if (res.length < 20) {
+          setHasMoreSearch(false);
+        }
+      })
+      .catch(() => {
+        setIsSearchingMore(false);
+      });
   };
 
   const [visibleLimit, setVisibleLimit] = useState(15);
@@ -553,74 +361,17 @@ export function Sidebar({ className }) {
   const archivedChats = filteredChats.filter((chat) => chat.isArchived);
 
   const renderedChats = activeChats.slice(0, visibleLimit);
-
-  const handleLogout = async () => {
-    try {
-      // 1. Terminate Supabase session and update online status to false
-      await authService.logout();
-
-      // 2. Clear all Redux slices to prevent stale data upon next login or refresh
-      dispatch(logout());
-      dispatch(resetChats());
-      dispatch(resetMessages());
-
-      // 3. Absolute cleanup of real-time listeners
-      realtimeService.disconnectGlobalPresence();
-      realtimeService.disconnectGlobalMessages();
-
-      // 4. Clear all potential sensitive cached items manually
-      await authService.clearLocalSessionData();
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Logout error:", error);
-      dispatch(logout());
-      dispatch(resetChats());
-      dispatch(resetMessages());
-      try {
-        await authService.clearLocalSessionData();
-      } catch (e) {}
-      window.location.href = "/login";
-    }
-  };
-
   const dropdownItems = [
     {
-      label: t("sidebar.profile_info"),
-      onClick: () => setProfileModal(true),
-    },
-    {
-      label: t("sidebar.blocked_users") || "Blocked Contacts",
-      onClick: () => setBlockedUsersModalOpen(true),
-    },
-    {
-      label: t("sidebar.chat_wallpaper") || "Chat Wallpaper",
-      onClick: () => dispatch(setWallpaperModal({ open: true })),
-    },
-    {
-      label: t("sidebar.linked_devices"),
-      onClick: () => setLinkedDevicesModalOpen(true),
-    },
-    {
-      label: t("sidebar.language_settings"),
-      onClick: () => setLanguageModalOpen(true),
-    },
-    {
-      label:
-        theme === "light" ? t("sidebar.dark_theme") : t("sidebar.light_theme"),
-      onClick: () => dispatch(toggleTheme()),
-    },
-    {
-      label: t("sidebar.screen_lock_settings") || "Screen Lock Settings",
-      onClick: () => setLockSettingsOpen(true),
+      label: t("sidebar.settings") || "Settings",
+      onClick: () => {
+        console.log("Settings dropdown option clicked");
+        dispatch(setSettingsViewOpen(true));
+      },
     },
     {
       label: t("sidebar.lock_screen_now") || "Lock Screen Now",
       onClick: () => dispatch(lockApp()),
-    },
-    {
-      label: t("sidebar.logout"),
-      danger: true,
-      onClick: handleLogout,
     },
   ];
 
@@ -678,102 +429,6 @@ export function Sidebar({ className }) {
       "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80",
     ];
     setGroupAvatar(icons[Math.floor(Math.random() * icons.length)]);
-  };
-
-  // Profile Customization pipelines
-  const handleSaveName = async () => {
-    if (!user?.id || !tempName.trim()) return;
-    setIsUpdatingProfile(true);
-    setProfileMessage("");
-    try {
-      const updated = await profileService.updateProfileData(user.id, {
-        name: tempName.trim(),
-      });
-      if (updated) {
-        dispatch(updateProfile({ name: updated.name }));
-        setEditingName(false);
-        setProfileMessage("Username updated successfully.");
-      }
-    } catch (err) {
-      setProfileMessage("Failed to update username.");
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
-
-  const handleSaveStatus = async () => {
-    if (!user?.id || !tempStatus.trim()) return;
-    setIsUpdatingProfile(true);
-    setProfileMessage("");
-    try {
-      const updated = await profileService.updateProfileData(user.id, {
-        status: tempStatus.trim(),
-      });
-      if (updated) {
-        dispatch(updateProfile({ status: updated.status }));
-        setEditingStatus(false);
-        setProfileMessage("About description updated successfully.");
-      }
-    } catch (err) {
-      setProfileMessage("Failed to update about section.");
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
-
-  const handleProfileAvatarSelectChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !user?.id) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      setProfileMessage("Maximum image size is 5MB.");
-      return;
-    }
-
-    setIsUpdatingProfile(true);
-    setProfileMessage("");
-
-    try {
-      const uploadedAbsoluteUrl = await storageService.uploadFile(
-        file,
-        "avatars",
-      );
-      if (uploadedAbsoluteUrl) {
-        const updated = await profileService.updateProfileData(user.id, {
-          avatar: uploadedAbsoluteUrl,
-        });
-        if (updated) {
-          dispatch(updateProfile({ avatar: updated.avatar }));
-          setProfileMessage("Profile photo updated successfully.");
-        }
-      }
-    } catch (err) {
-      setProfileMessage("Failed to upload profile picture.");
-    } finally {
-      setIsUpdatingProfile(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleRemoveAvatarImage = async () => {
-    if (!user?.id) return;
-    setIsUpdatingProfile(true);
-    setProfileMessage("");
-    try {
-      const fallbackUrl =
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80";
-      const updated = await profileService.updateProfileData(user.id, {
-        avatar: fallbackUrl,
-      });
-      if (updated) {
-        dispatch(updateProfile({ avatar: updated.avatar }));
-        setProfileMessage("Profile photo removed.");
-      }
-    } catch (err) {
-      setProfileMessage("Failed to delete custom image.");
-    } finally {
-      setIsUpdatingProfile(false);
-    }
   };
 
   if (archivedViewOpen) {
@@ -901,7 +556,7 @@ export function Sidebar({ className }) {
       {/* Top native header strip */}
       <header className="relative z-20 flex items-center justify-between px-4 py-2.5 bg-wa-header transition-colors duration-200 shrink-0">
         <div
-          onClick={() => setProfileModal(true)}
+          onClick={() => dispatch(setSettingsViewOpen(true))}
           className="cursor-pointer block"
           title="View Profile"
         >
@@ -999,7 +654,7 @@ export function Sidebar({ className }) {
       )}
 
       {/* Scrollable contact records */}
-      <div 
+      <div
         className="flex-1 overflow-y-auto overflow-x-hidden bg-wa-sidebar transition-colors duration-200"
         onScroll={(e) => {
           const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -1045,28 +700,6 @@ export function Sidebar({ className }) {
         )}
       </div>
 
-      {/* Profile Settings Engine Modal */}
-      <ProfileModal
-        isOpen={profileModal}
-        onClose={() => setProfileModal(false)}
-        user={user}
-        profileMessage={profileMessage}
-        isUpdatingProfile={isUpdatingProfile}
-        editingName={editingName}
-        setEditingName={setEditingName}
-        tempName={tempName}
-        setTempName={setTempName}
-        editingStatus={editingStatus}
-        setEditingStatus={setEditingStatus}
-        tempStatus={tempStatus}
-        setTempStatus={setTempStatus}
-        handleProfileAvatarSelectChange={handleProfileAvatarSelectChange}
-        handleRemoveAvatarImage={handleRemoveAvatarImage}
-        handleSaveName={handleSaveName}
-        handleSaveStatus={handleSaveStatus}
-        profileFileInputRef={profileFileInputRef}
-      />
-
       <NewChatModal
         isOpen={newChatModal}
         onClose={() => setNewChatModal(false)}
@@ -1088,34 +721,6 @@ export function Sidebar({ className }) {
         onLoadMore={handleLoadMoreProfiles}
         hasMore={hasMoreSearch}
         isSearchingMore={isSearchingMore}
-      />
-
-      <LinkedDevicesModal
-        isOpen={linkedDevicesModalOpen}
-        onClose={() => setLinkedDevicesModalOpen(false)}
-        activeDevices={activeDevices}
-        handleLogoutDevice={handleLogoutDevice}
-        handleLogoutAllDevices={handleLogoutAllDevices}
-        handleLogoutAllIncludingCurrent={handleLogoutAllIncludingCurrent}
-      />
-
-      <LanguageModal
-        isOpen={languageModalOpen}
-        onClose={() => setLanguageModalOpen(false)}
-        availableLanguages={availableLanguages}
-        locale={locale}
-        languageNames={languageNames}
-        changeLanguage={changeLanguage}
-      />
-
-      <BlockedUsersModal
-        isOpen={blockedUsersModalOpen}
-        onClose={() => setBlockedUsersModalOpen(false)}
-      />
-
-      <LockSettingsModal
-        isOpen={lockSettingsOpen}
-        onClose={() => setLockSettingsOpen(false)}
       />
     </aside>
   );

@@ -25,6 +25,7 @@ import { MessageSearchPanel } from "../../components/Chat/MessageSearchPanel";
 import { StatusPanel } from "../../components/Status/StatusPanel";
 import { WallpaperModal } from "../../components/Chat/WallpaperModal";
 import { LockScreen } from "../../components/Lock/LockScreen";
+import { SettingsPanel } from "../../components/Settings/SettingsPanel";
 import { initializeLock, unlockApp, lockApp, updateLastUnlockedTime, authorizeChat } from "../../redux/slices/lockSlice";
 
 export default function ChatPage() {
@@ -40,6 +41,8 @@ export default function ChatPage() {
   const activeSearchPanelOpen = useAppSelector((state) => state.ui.activeSearchPanelOpen);
   const statusViewOpen = useAppSelector((state) => state.status.statusViewOpen);
   const globalWallpaper = useAppSelector((state) => state.ui.globalWallpaper);
+  const settingsViewOpen = useAppSelector((state) => state.ui.settingsViewOpen);
+  console.log("ChatPage settingsViewOpen status:", settingsViewOpen);
 
   // Screen/Chat Lock States
   const {
@@ -1228,6 +1231,8 @@ export default function ChatPage() {
         )}
 
         {statusViewOpen && <StatusPanel />}
+
+        {settingsViewOpen && <SettingsPanel />}
 
         <WallpaperModal />
 
