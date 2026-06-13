@@ -217,7 +217,10 @@ export function SettingsPanel() {
             </span>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl w-full mx-auto select-none custom-scrollbar">
+          <div className={cn(
+            "flex-1 overflow-y-auto p-4 sm:p-6 w-full mx-auto select-none custom-scrollbar transition-all duration-300",
+            activeCategory === "chats" ? "max-w-5xl" : "max-w-4xl"
+          )}>
             {renderDetailPane()}
           </div>
         </main>
